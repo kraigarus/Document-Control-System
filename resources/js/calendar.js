@@ -194,68 +194,78 @@ function renderCal() {
 function openDayModal(iso) {
     const holiday = PH_HOLIDAYS[iso];
     const evList = getEventsByDay(iso);
+    const formattedDate = formatDisplayDate(iso);
 
     const rows = evList.length
-        ? evList
-              .map(
-                  (ev) => `
-            <div class="ev-item" style="border-left:4px solid ${escapeHtml(ev.color)};">
-                <div class="ev-head">
-                    <div style="flex:1;">
-                        <div class="ev-item-title">${escapeHtml(ev.title)}</div>
-                        <div class="ev-item-meta">
-                            <i class="fa-regular fa-clock" style="margin-right:4px;"></i>
-                            ${escapeHtml(ev.startTime)} — ${escapeHtml(ev.endTime)}
+        ? evList.map((ev) => `
+            <div class="ev-card">
+                <div class="ev-card-color" style="background: ${escapeHtml(ev.color)};"></div>
+                <div class="ev-card-body">
+                    <div class="ev-card-top">
+                        <div class="ev-card-title">${escapeHtml(ev.title)}</div>
+                        <div class="ev-card-btns">
+                            <button class="ev-card-btn" onclick="openEditModal(${ev.id})" title="Edit">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                            <button class="ev-card-btn ev-card-btn-danger" onclick="deleteEvent(${ev.id}, '${iso}')" title="Delete">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
                         </div>
                     </div>
-                    <div class="ev-actions">
-                        <button class="btn-ghost btn-xs" onclick="openEditModal(${ev.id})">
-                            <i class="fa-solid fa-pen"></i>
-                        </button>
-                        <button class="btn-danger btn-xs" onclick="deleteEvent(${ev.id}, '${iso}')">
-                            <i class="fa-solid fa-trash-can"></i>
-                        </button>
+                    <div class="ev-card-time">
+                        <i class="fa-regular fa-clock"></i>
+                        ${formatTime12(ev.startTime)} — ${formatTime12(ev.endTime)}
                     </div>
+                    ${ev.description ? `<div class="ev-card-notes">${escapeHtml(ev.description)}</div>` : ""}
                 </div>
-                ${ev.description ? `<div class="ev-item-desc">${escapeHtml(ev.description)}</div>` : ""}
             </div>
-        `
-              )
-              .join("")
-        : `<div class="empty-state">
-                <i class="fa-regular fa-calendar" style="font-size:1.8rem; opacity:0.2; margin-bottom:8px;"></i>
-                <p>No events scheduled for this date</p>
+        `).join("")
+        : `<div class="ev-empty">
+                <i class="fa-regular fa-calendar"></i>
+                <span>No events scheduled</span>
            </div>`;
 
     const holidayBanner = holiday
-        ? `<div class="hol-banner"><i class="fa-solid fa-flag" style="margin-right:6px;"></i>${escapeHtml(holiday)}</div>`
+        ? `<div class="ev-holiday"><i class="fa-solid fa-umbrella-beach"></i>${escapeHtml(holiday)}</div>`
         : "";
 
     openModal(`
-        <div class="modal-hdr">
-            <div class="modal-hdr-text">
-                <div class="modal-icon-wrap add">
+        <div class="ev-modal">
+            <div class="ev-modal-top">
+                <div class="ev-modal-icon is-view">
                     <i class="fa-regular fa-calendar"></i>
                 </div>
-                <div>
-                    <h3>${escapeHtml(formatDisplayDate(iso))}</h3>
-                    <p class="modal-sub">${evList.length} event${evList.length !== 1 ? "s" : ""} scheduled</p>
-                </div>
+                <button class="ev-modal-close" onclick="closeModal()" aria-label="Close">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
             </div>
-            <button class="modal-close" onclick="closeModal()" aria-label="Close">
-                <i class="fa-solid fa-xmark"></i>
-            </button>
-        </div>
-        ${holidayBanner}
-        <div class="event-list">${rows}</div>
-        <div class="modal-foot">
-            <button onclick="openAddModal('${iso}')" class="btn-save">
-                <i class="fa-solid fa-plus"></i> Add Event
-            </button>
+
+            <h3 class="ev-modal-title">${formattedDate}</h3>
+            <p class="ev-modal-desc">${evList.length} event${evList.length !== 1 ? "s" : ""} scheduled</p>
+
+            ${holidayBanner}
+
+            <div class="ev-card-list">${rows}</div>
+
+            <div class="ev-actions-row">
+                <button onclick="openAddModal('${iso}')" class="ev-btn ev-btn-primary" style="width:100%;">
+                    <i class="fa-solid fa-plus"></i> Add Event
+                </button>
+            </div>
         </div>
     `);
 }
 
+function formatTime12(time24) {
+    if (!time24) return "";
+    const [h, m] = time24.split(":").map(Number);
+    const period = h >= 12 ? "PM" : "AM";
+    const hour = h % 12 || 12;
+    return `${hour}:${String(m).padStart(2, "0")} ${period}`;
+}
+
+// Add to exports
+window.formatTime12 = formatTime12;
 
 function formatDisplayDate(iso) {
     const d = new Date(iso + "T00:00:00");
@@ -268,17 +278,53 @@ window.formatDisplayDate = formatDisplayDate;
 
 
 function openAddModal(iso) {
-  openEventFormModal({
-    mode: "add",
-    iso,
-    data: {
-      title: "",
-      date: iso || todayISO(),
-      startTime: "09:00",
-      endTime: "10:00",
-      description: ""
+    const targetDate = iso || todayISO();
+    const isToday = targetDate === todayISO();
+
+    let suggestedStart = "09:00";
+    let suggestedEnd = "10:00";
+
+    if (isToday) {
+        const now = new Date();
+        let h = now.getHours();
+        let m = Math.ceil(now.getMinutes() / 15) * 15;
+
+        if (m >= 60) {
+            h += 1;
+            m = 0;
+        }
+        if (h >= 24) {
+            h = 23;
+            m = 45;
+        }
+
+        suggestedStart = pad(h) + ":" + pad(m);
+
+        let endH = h;
+        let endM = m + 30;
+        if (endM >= 60) {
+            endH += 1;
+            endM -= 60;
+        }
+        if (endH >= 24) {
+            endH = 23;
+            endM = 59;
+        }
+
+        suggestedEnd = pad(endH) + ":" + pad(endM);
     }
-  });
+
+    openEventFormModal({
+        mode: "add",
+        iso: targetDate,
+        data: {
+            title: "",
+            date: targetDate,
+            startTime: suggestedStart,
+            endTime: suggestedEnd,
+            description: ""
+        }
+    });
 }
 
 function openEditModal(id) {
@@ -303,84 +349,64 @@ function openEventFormModal({ mode, iso, data, eventId }) {
         description: data?.description || ""
     };
 
+    const formattedDate = formatDisplayDate(safeData.date);
+
     openModal(`
-        <div class="modal-hdr">
-            <div class="modal-hdr-text">
-                <div class="modal-icon-wrap ${isEdit ? "edit" : "add"}">
-                    <i class="fa-solid ${isEdit ? "fa-pen-to-square" : "fa-calendar-plus"}"></i>
+        <div class="ev-modal">
+            <div class="ev-modal-top">
+                <div class="ev-modal-icon ${isEdit ? "is-edit" : "is-add"}">
+                    <i class="fa-solid ${isEdit ? "fa-pen" : "fa-plus"}"></i>
                 </div>
-                <div>
-                    <h3>${isEdit ? "Edit Event" : "New Event"}</h3>
-                    <p class="modal-sub">${isEdit ? "Update the details below" : "Schedule a new event on your calendar"}</p>
-                </div>
+                <button class="ev-modal-close" onclick="closeModal()" aria-label="Close">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
             </div>
-            <button class="modal-close" onclick="closeModal()" aria-label="Close">
-                <i class="fa-solid fa-xmark"></i>
-            </button>
+
+            <h3 class="ev-modal-title">${isEdit ? "Edit Event" : "New Event"}</h3>
+            <p class="ev-modal-desc">${formattedDate}</p>
+
+            <form id="eventForm" onsubmit="event.preventDefault(); ${isEdit ? `updateEvent(${eventId})` : "saveCalendarEvent()"}">
+
+                <div class="ev-field">
+                    <label class="ev-label">Title</label>
+                    <input id="evTitle" class="ev-input" placeholder="What's the event?" value="${escapeHtml(safeData.title)}" required autocomplete="off">
+                </div>
+
+                <div class="ev-field">
+                    <label class="ev-label">Date</label>
+                    <input id="evDate" type="date" class="ev-input" value="${escapeHtml(safeData.date)}" required>
+                </div>
+
+                <div class="ev-time-row">
+                    <div class="ev-field ev-field-half">
+                        <label class="ev-label">Start</label>
+                        <input id="evStart" type="time" class="ev-input" value="${escapeHtml(safeData.startTime)}" required>
+                    </div>
+                    <div class="ev-field ev-field-half">
+                        <label class="ev-label">End</label>
+                        <input id="evEnd" type="time" class="ev-input" value="${escapeHtml(safeData.endTime)}" required>
+                    </div>
+                </div>
+
+                <div class="ev-field">
+                    <label class="ev-label">
+                        Notes
+                        <span class="ev-optional">Optional</span>
+                    </label>
+                    <textarea id="evDesc" class="ev-textarea" rows="2" placeholder="Add details...">${escapeHtml(safeData.description)}</textarea>
+                </div>
+
+                <div class="ev-actions-row">
+                    <button type="button" class="ev-btn ev-btn-ghost" onclick="openDayModal('${escapeHtml(safeData.date)}')">
+                        Cancel
+                    </button>
+                    <button type="submit" class="ev-btn ev-btn-primary">
+                        <i class="fa-solid ${isEdit ? "fa-check" : "fa-plus"}"></i>
+                        ${isEdit ? "Save" : "Create"}
+                    </button>
+                </div>
+            </form>
         </div>
-
-        <form id="eventForm" onsubmit="event.preventDefault(); ${isEdit ? `updateEvent(${eventId})` : "saveCalendarEvent()"}">
-            <div class="form-section">
-                <label class="field">
-                    <span>Event Title</span>
-                    <div class="input-with-icon">
-                        <i class="fa-solid fa-heading"></i>
-                        <input id="evTitle" placeholder="e.g. Document Review Meeting" value="${escapeHtml(safeData.title)}" required>
-                    </div>
-                </label>
-            </div>
-
-            <div class="form-section">
-                <span class="form-section-label">Date & Time</span>
-                <div class="form-row">
-                    <label class="field">
-                        <span>Date</span>
-                        <div class="input-with-icon">
-                            <i class="fa-regular fa-calendar"></i>
-                            <input id="evDate" type="date" value="${escapeHtml(safeData.date)}" required>
-                        </div>
-                    </label>
-                </div>
-                <div class="form-row time-row">
-                    <label class="field">
-                        <span>Start</span>
-                        <div class="input-with-icon">
-                            <i class="fa-regular fa-clock"></i>
-                            <input id="evStart" type="time" value="${escapeHtml(safeData.startTime)}" required>
-                        </div>
-                    </label>
-                    <div class="time-separator">
-                        <span>to</span>
-                    </div>
-                    <label class="field">
-                        <span>End</span>
-                        <div class="input-with-icon">
-                            <i class="fa-regular fa-clock"></i>
-                            <input id="evEnd" type="time" value="${escapeHtml(safeData.endTime)}" required>
-                        </div>
-                    </label>
-                </div>
-            </div>
-
-            <div class="form-section">
-                <label class="field">
-                    <span>Notes <span class="optional-tag">Optional</span></span>
-                    <div class="textarea-wrap">
-                        <textarea id="evDesc" rows="2" placeholder="Any additional details...">${escapeHtml(safeData.description)}</textarea>
-                    </div>
-                </label>
-            </div>
-
-            <div class="modal-foot">
-                <button type="button" class="btn-ghost" onclick="openDayModal('${escapeHtml(safeData.date)}')">
-                    <i class="fa-solid fa-arrow-left"></i> Back
-                </button>
-                <button type="submit" class="btn-save">
-                    <i class="fa-solid ${isEdit ? "fa-check" : "fa-plus"}"></i>
-                    ${isEdit ? "Save Changes" : "Create Event"}
-                </button>
-            </div>
-        </form>
     `);
 }
 

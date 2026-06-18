@@ -175,10 +175,7 @@
             <!-- Upcoming Events Widget -->
             <div class="widget upcoming-widget white-card">
                 <div class="widget-header">
-                    <div>
-                        <h3>Upcoming</h3>
-                        <span class="widget-sub">Today & Tomorrow</span>
-                    </div>
+                    <h3>Upcoming</h3>
                     <span class="badge" id="upcomingCount">0</span>
                 </div>
                 <div class="upcoming-list" id="upcomingList">
