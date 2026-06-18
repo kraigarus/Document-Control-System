@@ -1,0 +1,97 @@
+/* resources/css/portal.css */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+body {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* TOP BAR */
+.top-bar {
+  background: linear-gradient(to right, #f6b100, #ffcc33);
+  color: #000;
+  text-align: center;
+  padding: 10px;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+/* MAIN BACKGROUND */
+.portal-container {
+  flex: 1;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* DARK BLUE OVERLAY */
+.overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 40, 90, 0.55);
+}
+
+/* CENTER CONTENT */
+.content-wrapper {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+}
+
+/* LOGO */
+.logo-main img {
+  width: 120px;
+  margin-bottom: 10px;
+}
+
+/* WELCOME TEXT */
+.welcome-text {
+  color: white;
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+
+/* BUTTON CONTAINER */
+.menu-container {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  align-items: center;
+}
+
+/* GLASS BUTTON STYLE */
+.menu-btn {
+  width: 320px;
+  padding: 14px;
+  text-decoration: none;
+  color: white;
+  font-size: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid rgba(120, 200, 255, 0.6);
+  border-radius: 10px;
+  backdrop-filter: blur(6px);
+  transition: 0.3s;
+}
+
+.menu-btn:hover {
+  transform: scale(1.03);
+  border-color: #59c5ff;
+  box-shadow: 0 0 15px rgba(0, 180, 255, 0.4);
+}
+
+/* FOOTER */
+.footer-bar {
+  background: #59c5ff;
+  text-align: center;
+  font-size: 11px;
+  padding: 6px;
+  font-weight: bold;
+}
