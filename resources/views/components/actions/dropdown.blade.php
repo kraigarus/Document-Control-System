@@ -1,4 +1,4 @@
-@vite(['resources/css/header.css'])
+@vite(['resources/css/dcs/header.css'])
 <div class="actions-container" id="actionsContainer">
     <button class="action_button" id="actionsBtn" onclick="toggleDropdown(event)">
         <span>ACTIONS</span>

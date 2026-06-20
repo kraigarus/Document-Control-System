@@ -1,5 +1,4 @@
-<!-- sidebar.blade.php -->
-@vite(['resources/css/sidebar.css', 'resources/js/sidebar.js'])
+@vite(['resources/css/dcs/sidebar.css', 'resources/js/dcs/sidebar.js'])
 
 <nav class="side-nav" id="sideNav">
     <div class="collapse-btn" id="collapseBtn" role="button" tabindex="0" aria-expanded="true">

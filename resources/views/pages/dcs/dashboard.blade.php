@@ -7,12 +7,11 @@
     <title>CSPC - Document Control System</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     @vite([
-        'resources/css/dashboard.css', 
-        'resources/js/dashboard.js', 
-        'resources/js/calendar.js'
+        'resources/css/dcs/dashboard.css', 
+        'resources/js/dcs/dashboard.js', 
+        'resources/js/dcs/calendar.js'
     ])
 </head>
-
 <body>
 
 @include('partials.header')

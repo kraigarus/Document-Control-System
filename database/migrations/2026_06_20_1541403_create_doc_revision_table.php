@@ -1,0 +1,30 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('doc_revision', function (Blueprint $table) {
+            $table->id('revision_id');
+            $table->foreignId('dcn_id')->nullable()
+                  ->constrained('document_change_notice', 'dcn_id')
+                  ->cascadeOnDelete();
+            $table->string('title')->nullable();
+            $table->string('document_no', 100)->nullable();
+            $table->date('effectivity_date')->nullable();
+            $table->integer('revision_no')->nullable();
+            $table->string('scanned_copy')->nullable();
+            $table->text('brief_purpose')->nullable();
+            $table->timestamp('created_at')->nullable();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('doc_revision');
+    }
+};

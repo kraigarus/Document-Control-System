@@ -104,7 +104,9 @@ body {
     font-weight: 500;
 }
 
-.header-date i { color: var(--dash-accent); }
+.header-date i { 
+    color: var(--dash-accent);
+}
 
 /* ─── Grid Layout ─── */
 .dashboard-content-wrapper {

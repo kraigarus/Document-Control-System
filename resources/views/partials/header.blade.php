@@ -1,4 +1,4 @@
-@vite(['resources/css/header.css', 'resources/js/header.js'])
+@vite(['resources/css/dcs/header.css', 'resources/js/dcs/header.js'])
 <header class="top-nav">
     <div class="header-left">
         <div class="logo-container">
