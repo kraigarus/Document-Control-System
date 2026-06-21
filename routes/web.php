@@ -15,6 +15,21 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [LoginController::class, 'login']);
 });
 
+Route::middleware('auth')->group(function () {
+    Route::get('/api/offices', fn () => \App\Models\Office::where('status', 'active')->orderBy('office_name')->get());
+    Route::get('/api/doc-types', fn () => \App\Models\DocType::orderBy('doc_type_id')->get());
+    Route::get('/api/version-types', fn () => \App\Models\VersionType::all());
+    Route::get('/api/approval-bodies', fn () => \App\Models\ApprovalBody::all());
+    Route::get('/api/checklist-types', fn () => \App\Models\ChecklistType::orderBy('checklist_id')->get());
+    Route::get('/api/checklist-versions/{versionId}', function ($versionId) {
+        return \App\Models\ChecklistVersion::where('checklist_version.version_id', $versionId)
+            ->join('checklist_types', 'checklist_version.checklist_id', '=', 'checklist_types.checklist_id')
+            ->select('checklist_types.checklist_id', 'checklist_types.checklist_name')
+            ->orderBy('checklist_types.checklist_id')
+            ->get();
+    });
+});
+
 // Logout (POST only, auth required)
 Route::post('/logout', [LoginController::class, 'logout'])
     ->name('logout')
@@ -26,7 +41,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->name('dashboard');
 
     // Register
-    Route::get('/register', [RegisterController::class, 'index'])->name('register');
+    Route::get('/register', [RegisterController::class, 'index'])->name('register.create');
     Route::post('/register', [RegisterController::class, 'store'])->name('register.store');
 
     // Register revised
@@ -36,5 +51,8 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::get('/register/update', [RegisterController::class, 'update'])->name('register.update');
 });
 
+
+
 // Catch-all: redirect unknown routes to portal
 Route::fallback(fn () => redirect('/login'));
+

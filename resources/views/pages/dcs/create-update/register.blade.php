@@ -22,9 +22,6 @@
             <p class="reg-breadcrumb">Document Control System / Registration</p>
             <h1 class="reg-title">Register Document</h1>
         </div>
-        <button type="submit" form="masterForm" class="reg-submit-btn">
-            <i class="fa-solid fa-floppy-disk"></i> Save Document
-        </button>
     </div>
 
     <form id="masterForm" enctype="multipart/form-data" method="POST" action="{{ route('register.store') }}">
@@ -72,10 +69,83 @@
             </div>
         </section>
 
+        <!-- ═══ SECTION SYLLABI ═══ -->
+        <section class="reg-card" id="section-syllabi" style="display: none;">
+            <div class="reg-card-header">
+                <span>Syllabi</span>
+            </div>
+            <div class="reg-card-body">
+                <div class="reg-table-wrap">
+                    <table class="reg-table">
+                        <thead>
+                            <tr>
+                                <th>Course Name</th>
+                                <th>Syllabi Availability</th>
+                                <th>No. of Pages</th>
+                                <th>DRF Availability</th>
+                                <th>DRF No.</th>
+                                <th>DRF Date</th>
+                                <th>DRF Received Date</th>
+                                <th>Scanned DRF</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="syllabiTableBody">
+                            <tr>
+                                <td>
+                                    <input type="text" name="syllabiCourseName[]" placeholder="Enter course name">
+                                </td>
+                                <td>
+                                    <select name="syllabiAvailability[]">
+                                        <option value="" disabled selected>Select</option>
+                                        <option value="available">Available</option>
+                                        <option value="not_available">Not Available</option>
+                                    </select>
+                                </td>
+                                <td>
+                                    <input type="number" name="syllabiNoPages[]" min="0" placeholder="0">
+                                </td>
+                                <td>
+                                    <select name="syllabiDrfAvailability[]">
+                                        <option value="" disabled selected>Select</option>
+                                        <option value="available">Available</option>
+                                        <option value="not_available">Not Available</option>
+                                    </select>
+                                </td>
+                                <td>
+                                    <input type="text" name="syllabiDrfNo[]" placeholder="DRF-001">
+                                </td>
+                                <td>
+                                    <input type="date" name="syllabiDrfDate[]">
+                                </td>
+                                <td>
+                                    <input type="date" name="syllabiDrfReceived[]">
+                                </td>
+                                <td>
+                                    <label class="reg-upload-cell">
+                                        <input type="file" name="syllabiScannedDrf[]" accept=".pdf,.jpg,.png">
+                                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                                        <span>No file chosen</span>
+                                    </label>
+                                </td>
+                                <td>
+                                    <button type="button" class="reg-row-del" onclick="this.closest('tr').remove()">
+                                        <i class="fa-solid fa-trash-can"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <button type="button" class="reg-add-row" onclick="addSyllabiRow()">
+                    <i class="fa-solid fa-plus"></i> Add Row
+                </button>
+            </div>
+        </section>
+
         <!-- ═══ SECTION 1 — DRF ═══ -->
         <section class="reg-card" id="section-1" style="display: none;">
             <div class="reg-card-header">
-                <i class="fa-solid fa-file-lines"></i>
                 <span>Document Request Form</span>
             </div>
             <div class="reg-card-body">
@@ -122,7 +192,6 @@
         <!-- ═══ SECTION 2 — DCN ═══ -->
         <section class="reg-card" id="section-2" style="display: none;">
             <div class="reg-card-header">
-                <i class="fa-solid fa-file-pen"></i>
                 <span>Document Change Notice</span>
             </div>
             <div class="reg-card-body">
@@ -202,7 +271,6 @@
         <!-- ═══ SECTION 3 — MASTERLIST ═══ -->
         <section class="reg-card" id="section-3" style="display: none;">
             <div class="reg-card-header">
-                <i class="fa-solid fa-book"></i>
                 <span>Masterlist Registration</span>
             </div>
             <div class="reg-card-body">
@@ -290,7 +358,6 @@
         <!-- ═══ APPROVAL DETAILS ═══ -->
         <section class="reg-card" id="section-approval" style="display: none;">
             <div class="reg-card-header">
-                <i class="fa-solid fa-stamp"></i>
                 <span>Approval Details</span>
             </div>
             <div class="reg-card-body">
@@ -316,7 +383,6 @@
         <!-- ═══ SECTION 4 — DOCUMENT RETRIEVAL ═══ -->
         <section class="reg-card" id="section-4" style="display: none;">
             <div class="reg-card-header">
-                <i class="fa-solid fa-rotate-left"></i>
                 <span>Document Retrieval</span>
             </div>
             <div class="reg-card-body reg-split">
@@ -390,7 +456,6 @@
         <!-- ═══ SECTION 5 — DOCUMENT DISTRIBUTION ═══ -->
         <section class="reg-card" id="section-5" style="display: none;">
             <div class="reg-card-header">
-                <i class="fa-solid fa-share-nodes"></i>
                 <span>Document Distribution</span>
             </div>
             <div class="reg-card-body reg-split">
@@ -461,8 +526,44 @@
             </div>
         </section>
 
+        <section class="reg-actions" id="formActions" style="display: none;">
+            <div class="reg-actions-left">
+                <a href="{{ route('dashboard') }}" class="reg-btn reg-btn-cancel">
+                    <i class="fa-solid fa-xmark"></i> Cancel
+                </a>
+            </div>
+            <div class="reg-actions-right">
+                <button type="button" class="reg-btn reg-btn-report" onclick="handleGenerateReport()">
+                    <i class="fa-solid fa-file-pdf"></i> Generate Report
+                </button>
+                <button type="button" class="reg-btn reg-btn-save" onclick="confirmSave()">
+                    <i class="fa-solid fa-floppy-disk"></i> Save Document
+                </button>
+            </div>
+        </section>
+
     </form>
 </main>
+
+<div class="reg-modal-overlay" id="confirmModal" style="display: none;">
+    <div class="reg-modal">
+        <div class="reg-modal-header">
+            <i class="fa-solid fa-circle-question"></i>
+            <h3>Confirm Save</h3>
+        </div>
+        <div class="reg-modal-body">
+            <p>Are you sure you want to save this document? Please review all fields before confirming.</p>
+        </div>
+        <div class="reg-modal-footer">
+            <button type="button" class="reg-btn reg-btn-cancel" onclick="closeConfirmModal()">
+                <i class="fa-solid fa-xmark"></i> Cancel
+            </button>
+            <button type="button" class="reg-btn reg-btn-save" onclick="submitForm()">
+                <i class="fa-solid fa-check"></i> Confirm Save
+            </button>
+        </div>
+    </div>
+</div>
 
 @push('styles')
     @vite(['resources/css/dcs/register.css'])

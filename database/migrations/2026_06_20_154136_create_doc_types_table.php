@@ -17,11 +17,11 @@ return new class extends Migration
         });
 
         DB::table('doc_types')->insert([
-            ['doc_type_id' => 1, 'parent_id' => null, 'doc_type_name' => 'internal'],
-            ['doc_type_id' => 2, 'parent_id' => null, 'doc_type_name' => 'internal forms'],
-            ['doc_type_id' => 3, 'parent_id' => null, 'doc_type_name' => 'external'],
-            ['doc_type_id' => 4, 'parent_id' => null, 'doc_type_name' => 'forms'],
-            ['doc_type_id' => 5, 'parent_id' => null, 'doc_type_name' => 'logbooks'],
+            ['doc_type_id' => 1, 'parent_id' => null, 'doc_type_name' => 'Internal'],
+            ['doc_type_id' => 2, 'parent_id' => null, 'doc_type_name' => 'Internal Forms'],
+            ['doc_type_id' => 3, 'parent_id' => null, 'doc_type_name' => 'External'],
+            ['doc_type_id' => 4, 'parent_id' => null, 'doc_type_name' => 'Forms'],
+            ['doc_type_id' => 5, 'parent_id' => null, 'doc_type_name' => 'Logbooks'],
             ['doc_type_id' => 6, 'parent_id' => 1, 'doc_type_name' => 'Manuals/Policy'],
             ['doc_type_id' => 7, 'parent_id' => 1, 'doc_type_name' => 'Quality Objectives'],
             ['doc_type_id' => 8, 'parent_id' => 1, 'doc_type_name' => 'FMEA'],

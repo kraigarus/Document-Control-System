@@ -79,5 +79,5 @@ networks:
 volumes:
     dcs-mysql:
         driver: local
-    vendor:                    # ← ADD THIS
+    vendor:
         driver: local

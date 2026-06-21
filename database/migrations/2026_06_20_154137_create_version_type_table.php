@@ -14,8 +14,8 @@ return new class extends Migration
         });
 
         DB::table('version_type')->insert([
-            ['version_id' => 1, 'version_name' => 'new'],
-            ['version_id' => 2, 'version_name' => 'revised'],
+            ['version_id' => 1, 'version_name' => 'New'],
+            ['version_id' => 2, 'version_name' => 'Revised'],
         ]);
     }
 
