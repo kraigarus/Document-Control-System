@@ -122,7 +122,7 @@ class RegisterController extends Controller
                 }
             }
 
-            // ── 4. Masterlist (Section 3) ──
+           // ── 4. Masterlist (Section 3) ──
             if ($request->filled('masterlistDocNo')) {
                 $masterlistFile = null;
                 if ($request->hasFile('uploadScannedCopy')) {
@@ -130,8 +130,29 @@ class RegisterController extends Controller
                 }
 
                 $masterlistTimeSpent = null;
-                if ($request->filled('masterlistTimeSpent')) {
-                    $masterlistTimeSpent = sprintf('%02d:%02d:00', intval($request->masterlistTimeSpent / 60), $request->masterlistTimeSpent % 60);
+                if ($request->filled('masterlistTimeSpent') && is_numeric($request->masterlistTimeSpent) && $request->masterlistTimeSpent >= 0) {
+                    $totalMin = intval($request->masterlistTimeSpent);
+                    $hours = intdiv($totalMin, 60);
+                    $minutes = $totalMin % 60;
+                    if ($hours > 838) {
+                        $masterlistTimeSpent = '838:59:59';
+                    } else {
+                        $masterlistTimeSpent = sprintf('%02d:%02d:00', $hours, $minutes);
+                    }
+                }
+                // Parse source unit / originator
+                $sourceNames = [];
+                $sourceOfficeIds = [];
+                if ($request->filled('masterlistSourceUnit')) {
+                    $items = json_decode($request->masterlistSourceUnit, true);
+                    if (is_array($items)) {
+                        foreach ($items as $item) {
+                            if (str_starts_with($item['id'], 'office_')) {
+                                $sourceOfficeIds[] = str_replace('office_', '', $item['id']);
+                            }
+                            $sourceNames[] = $item['name'];
+                        }
+                    }
                 }
 
                 MasterlistRegistration::create([
@@ -149,7 +170,8 @@ class RegisterController extends Controller
                     'effectivity_date'      => $request->masterlistEffectivityDate,
                     'revise_no'             => $request->masterlistRevisionNo,
                     'no_pages'              => $request->masterlistNoOfPages,
-                    'office_id'             => $request->masterlistSourceUnit,
+                    'office_id'             => null,
+                    'originator_name'       => $request->filled('masterlistSourceUnit') ? trim($request->masterlistSourceUnit) : null,
                     'deadline'              => $request->deadlineOfSubmission,
                     'in_charge'             => $request->masterlistInCharge,
                     'brief_purpose'         => $request->briefPurpose,
@@ -190,8 +212,15 @@ class RegisterController extends Controller
                 }
 
                 $retrievalTimeSpent = null;
-                if ($request->filled('retrievalTimeSpent')) {
-                    $retrievalTimeSpent = sprintf('%02d:%02d:00', intval($request->retrievalTimeSpent / 60), $request->retrievalTimeSpent % 60);
+                if ($request->filled('retrievalTimeSpent') && is_numeric($request->retrievalTimeSpent) && $request->retrievalTimeSpent >= 0) {
+                    $totalMin = intval($request->retrievalTimeSpent);
+                    $hours = intdiv($totalMin, 60);
+                    $minutes = $totalMin % 60;
+                    if ($hours > 838) {
+                        $retrievalTimeSpent = '838:59:59';
+                    } else {
+                        $retrievalTimeSpent = sprintf('%02d:%02d:00', $hours, $minutes);
+                    }
                 }
 
                 $retrieval = DocumentRetrieval::create([
@@ -228,8 +257,15 @@ class RegisterController extends Controller
                 }
 
                 $distTimeSpent = null;
-                if ($request->filled('distributionTimeSpent')) {
-                    $distTimeSpent = sprintf('%02d:%02d:00', intval($request->distributionTimeSpent / 60), $request->distributionTimeSpent % 60);
+                if ($request->filled('distributionTimeSpent') && is_numeric($request->distributionTimeSpent) && $request->distributionTimeSpent >= 0) {
+                    $totalMin = intval($request->distributionTimeSpent);
+                    $hours = intdiv($totalMin, 60);
+                    $minutes = $totalMin % 60;
+                    if ($hours > 838) {
+                        $distTimeSpent = '838:59:59';
+                    } else {
+                        $distTimeSpent = sprintf('%02d:%02d:00', $hours, $minutes);
+                    }
                 }
 
                 $distribution = DocumentDistribution::create([
@@ -278,8 +314,9 @@ class RegisterController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+            \Log::error('Document registration failed: ' . $e->getMessage());
             return back()->withInput()
-                         ->with('error', 'Failed to register document: ' . $e->getMessage());
+                         ->with('error', 'Failed to save document. Please try again.');
         }
     }
 }

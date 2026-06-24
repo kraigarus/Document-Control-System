@@ -26,7 +26,7 @@ return new class extends Migration
             $table->time('time_spent')->nullable();
             $table->string('doc_title')->nullable();
             $table->date('effectivity_date')->nullable();
-            $table->string('revise_no', 50)->nullable();
+            $table->integer('revise_no')->nullable();
             $table->integer('no_pages')->nullable();
             $table->foreignId('office_id')->nullable()
                   ->constrained('offices', 'office_id');

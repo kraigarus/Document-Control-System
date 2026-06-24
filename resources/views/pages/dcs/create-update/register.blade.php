@@ -16,7 +16,41 @@
 @include('partials.header')
 @include('partials.sidebar')
 @include('partials.inactivity-modal')
+
 <main class="reg-container">
+
+    @if(session('success'))
+    <div class="reg-toast reg-toast-success" id="successToast">
+        <div class="reg-toast-icon">
+            <i class="fa-solid fa-circle-check"></i>
+        </div>
+        <div class="reg-toast-content">
+            <span class="reg-toast-title">Success</span>
+            <span class="reg-toast-message">{{ session('success') }}</span>
+        </div>
+        <button type="button" class="reg-toast-close" onclick="closeToast()">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+        <div class="reg-toast-progress"></div>
+    </div>
+    @endif
+
+    @if(session('error'))
+    <div class="reg-toast reg-toast-error" id="errorToast">
+        <div class="reg-toast-icon">
+            <i class="fa-solid fa-circle-exclamation"></i>
+        </div>
+        <div class="reg-toast-content">
+            <span class="reg-toast-title">Error</span>
+            <span class="reg-toast-message">{{ session('error') }}</span>
+        </div>
+        <button type="button" class="reg-toast-close" onclick="closeToast()">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+        <div class="reg-toast-progress"></div>
+    </div>
+    @endif
+
     <div class="reg-header">
         <div class="reg-header-text">
             <p class="reg-breadcrumb">Document Control System / Registration</p>
@@ -24,7 +58,7 @@
         </div>
     </div>
 
-    <form id="masterForm" enctype="multipart/form-data" method="POST" action="{{ route('register.store') }}">
+    <form id="masterForm" enctype="multipart/form-data" method="POST" action="{{ route('register.store') }}" auto-complete="off">
         @csrf
 
         <!-- ═══ TOP SELECTION PANEL ═══ -->
@@ -32,19 +66,19 @@
             <div class="reg-panel-grid">
                 <div class="reg-field">
                     <label>Version Type</label>
-                    <select id="versionType" name="version_id" onchange="handleVersionChange()">
+                    <select id="versionType" name="version_id" autocomplete="off">
                         <option value="" selected disabled>Select version</option>
                     </select>
                 </div>
                 <div class="reg-field">
                     <label>Document Type</label>
-                    <select id="docType" name="doc_type_id" onchange="handleDocTypeChange()" disabled>
+                    <select id="docType" name="doc_type_id" disabled autocomplete="off">
                         <option value="" selected disabled>Select type</option>
                     </select>
                 </div>
                 <div class="reg-field">
                     <label>Sub-Type Document</label>
-                    <select id="subType" name="sub_type_id" onchange="validateChecklistState()" disabled>
+                    <select id="subType" name="sub_type_id" disabled autocomplete="off">
                         <option value="" selected disabled>Select sub-type</option>
                     </select>
                 </div>
@@ -123,7 +157,7 @@
                                 </td>
                                 <td>
                                     <label class="reg-upload-cell">
-                                        <input type="file" name="syllabiScannedDrf[]" accept=".pdf,.jpg,.png">
+                                        <input type="file" name="syllabiScannedDrf[]" accept=".pdf,.docx">
                                         <i class="fa-solid fa-cloud-arrow-up"></i>
                                         <span>No file chosen</span>
                                     </label>
@@ -181,9 +215,9 @@
                 <div class="reg-field">
                     <label>Upload Scanned DRF</label>
                     <label class="reg-upload">
-                        <input type="file" id="drfFile" name="drfFile">
+                        <input type="file" id="drfFile" name="drfFile" accept=".pdf,.docx">
                         <i class="fa-solid fa-cloud-arrow-up"></i>
-                        <span>Choose file or drag and drop</span>
+                        <span>Choose .pdf or .docx file</span>
                     </label>
                 </div>
             </div>
@@ -216,9 +250,9 @@
                     <div class="reg-field">
                         <label>Upload Scanned DCN</label>
                         <label class="reg-upload">
-                            <input type="file" id="dcnFile" name="dcnFile">
+                            <input type="file" id="dcnFile" name="dcnFile" accept=".pdf,.docx">
                             <i class="fa-solid fa-cloud-arrow-up"></i>
-                            <span>Choose file or drag and drop</span>
+                            <span>Choose .pdf or .docx file</span>
                         </label>
                     </div>
                     <div class="reg-field">
@@ -271,20 +305,17 @@
         <!-- ═══ SECTION 3 — MASTERLIST ═══ -->
         <section class="reg-card" id="section-3" style="display: none;">
             <div class="reg-card-header">
+                <i class="fa-solid fa-clipboard-list"></i>
                 <span>Masterlist Registration</span>
             </div>
             <div class="reg-card-body">
-                <div class="reg-grid-2">
+                <!-- Rows 1-2: 4-column grid, Time Spent spans 2 rows -->
+                <div class="reg-ml-grid">
+                    <!-- Row 1 -->
                     <div class="reg-field">
                         <label>Document No.</label>
                         <input type="text" id="masterlistDocNo" name="masterlistDocNo" placeholder="CSPC-INT.DOC-137">
                     </div>
-                    <div class="reg-field">
-                        <label>Document Title</label>
-                        <input type="text" id="masterlistDocTitle" name="masterlistDocTitle" placeholder="Document title">
-                    </div>
-                </div>
-                <div class="reg-grid-4">
                     <div class="reg-field">
                         <label>Deadline of Submission</label>
                         <input type="date" id="deadlineOfSubmission" name="deadlineOfSubmission">
@@ -292,65 +323,81 @@
                     <div class="reg-field">
                         <label>Document Receipt</label>
                         <div class="reg-dual">
-                            <input type="date" id="masterlistReceiptDate" name="masterlistReceiptDate">
-                            <input type="time" id="masterlistReceiptTime" name="masterlistReceiptTime">
+                            <input type="date" id="masterlistReceiptDate" name="masterlistReceiptDate" oninput="calcMasterlistTimeSpent()">
+                            <input type="time" id="masterlistReceiptTime" name="masterlistReceiptTime" oninput="calcMasterlistTimeSpent()">
                         </div>
                     </div>
+                    <div class="reg-field reg-ml-timespent">
+                        <label>Time Spent/Minute(s)</label>
+                        <input type="text" id="masterlistTimeSpentDisplay" readonly placeholder="--"
+                            style="background: #f8fafc; cursor: default; font-weight: 700; text-align: center; font-size: 18px; height: 100%; min-height: 80px;">
+                        <input type="hidden" id="masterlistTimeSpent" name="masterlistTimeSpent">
+                    </div>
+
+                    <!-- Row 2 -->
+                    <div class="reg-field reg-ml-title-span">
+                        <label>Document Title</label>
+                        <input type="text" id="masterlistDocTitle" name="masterlistDocTitle" placeholder="Document title">
+                    </div>
+                    <div class="reg-field">
+                        <label>Document Registered</label>
+                        <div class="reg-dual">
+                            <input type="date" id="masterlistRegisteredDate" name="masterlistRegisteredDate" oninput="calcMasterlistTimeSpent()">
+                            <input type="time" id="masterlistRegisteredTime" name="masterlistRegisteredTime" oninput="calcMasterlistTimeSpent()">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Row 3: 5-column grid -->
+                <div class="reg-ml-mid">
                     <div class="reg-field">
                         <label>Effectivity Date</label>
                         <input type="date" id="masterlistEffectivityDate" name="masterlistEffectivityDate">
                     </div>
                     <div class="reg-field">
-                        <label>Time Spent (min)</label>
-                        <input type="number" id="masterlistTimeSpent" name="masterlistTimeSpent" min="0" placeholder="0">
-                    </div>
-                </div>
-                <div class="reg-grid-4">
-                    <div class="reg-field">
                         <label>Revision No.</label>
-                        <input type="text" id="masterlistRevisionNo" name="masterlistRevisionNo" placeholder="0">
+                        <input type="number" id="masterlistRevisionNo" name="masterlistRevisionNo" min="0" placeholder="0">
                     </div>
                     <div class="reg-field">
                         <label>No. of Pages</label>
-                        <input type="number" id="masterlistNoOfPages" name="masterlistNoOfPages" placeholder="0">
-                    </div>
-                    <div class="reg-field">
-                        <label>Document Registered</label>
-                        <div class="reg-dual">
-                            <input type="date" id="masterlistRegisteredDate" name="masterlistRegisteredDate">
-                            <input type="time" id="masterlistRegisteredTime" name="masterlistRegisteredTime">
-                        </div>
+                        <input type="number" id="masterlistNoOfPages" name="masterlistNoOfPages" min="0" placeholder="0">
                     </div>
                     <div class="reg-field">
                         <label>In-charge</label>
                         <input type="text" id="masterlistInCharge" name="masterlistInCharge" placeholder="Name">
                     </div>
-                </div>
-                <div class="reg-grid-2">
                     <div class="reg-field">
                         <label>Source Unit / Originator</label>
-                        <select id="masterlistSourceUnit" name="masterlistSourceUnit">
-                            <option value="" disabled selected>Select</option>
-                        </select>
+                        <input type="text" id="masterlistSourceUnit" name="masterlistSourceUnit"
+                            placeholder="e.g. CAS, President, Registrar"
+                            autocomplete="off"
+                            oninput="handleMasterlistSourceInput(this)"
+                            onfocus="handleMasterlistSourceInput(this)">
+                        <div id="masterlistSourceResults" class="reg-source-suggestions" style="display:none;"></div>
+                        <span class="reg-hint"><i class="fa-solid fa-circle-info"></i> Separate multiple with commas</span>
                     </div>
+                </div>
+
+                <!-- Row 4: 2-column grid -->
+                <div class="reg-grid-2">
                     <div class="reg-field">
                         <label>Brief Purpose</label>
                         <input type="text" id="briefPurpose" name="briefPurpose" placeholder="Type here...">
                     </div>
-                </div>
-                <div class="reg-grid-2">
                     <div class="reg-field">
                         <label>Related Documents</label>
                         <input type="text" id="relatedDocuments" name="relatedDocuments" placeholder="Documents...">
                     </div>
-                    <div class="reg-field">
-                        <label>Upload Scanned Copy</label>
-                        <label class="reg-upload">
-                            <input type="file" id="uploadScannedCopy" name="uploadScannedCopy">
-                            <i class="fa-solid fa-cloud-arrow-up"></i>
-                            <span>Choose file or drag and drop</span>
-                        </label>
-                    </div>
+                </div>
+
+                <!-- Row 5: Full width -->
+                <div class="reg-field">
+                    <label>Upload Scanned Copy</label>
+                    <label class="reg-upload">
+                        <input type="file" id="uploadScannedCopy" name="uploadScannedCopy" accept=".pdf,.docx">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                        <span>Choose .pdf or .docx file</span>
+                    </label>
                 </div>
             </div>
         </section>
@@ -387,38 +434,39 @@
             </div>
             <div class="reg-card-body reg-split">
                 <div class="reg-split-left">
-                    <div class="reg-grid-2">
-                        <div class="reg-field">
-                            <label>Retrieval Form Date</label>
-                            <div class="reg-dual">
-                                <input type="date" id="retrievalFormDate" name="retrievalFormDate">
-                                <input type="time" id="retrievalFormTime" name="retrievalFormTime">
+                    <div class="reg-split-form-grid">
+                        <div class="reg-split-form-stack">
+                            <div class="reg-field">
+                                <label>Retrieval Form Date</label>
+                                <div class="reg-dual">
+                                    <input type="date" id="retrievalFormDate" name="retrievalFormDate" oninput="calcRetrievalTimeSpent()">
+                                    <input type="time" id="retrievalFormTime" name="retrievalFormTime" oninput="calcRetrievalTimeSpent()">
+                                </div>
+                            </div>
+                            <div class="reg-field">
+                                <label>Retrieval Date & Time</label>
+                                <div class="reg-dual">
+                                    <input type="date" id="retrievalDate" name="retrievalDate" oninput="calcRetrievalTimeSpent()">
+                                    <input type="time" id="retrievalTime" name="retrievalTime" oninput="calcRetrievalTimeSpent()">
+                                </div>
                             </div>
                         </div>
                         <div class="reg-field">
-                            <label>Retrieval Date & Time</label>
-                            <div class="reg-dual">
-                                <input type="date" id="retrievalDate" name="retrievalDate">
-                                <input type="time" id="retrievalTime" name="retrievalTime">
-                            </div>
+                            <label>Time Spent/Minute(s)</label>
+                            <input type="text" id="retrievalTimeSpentDisplay" readonly placeholder="--" style="background: #f8fafc; cursor: default;">
+                            <input type="hidden" id="retrievalTimeSpent" name="retrievalTimeSpent">
                         </div>
                     </div>
-                    <div class="reg-grid-2">
-                        <div class="reg-field">
-                            <label>Time Spent (min)</label>
-                            <input type="number" id="retrievalTimeSpent" name="retrievalTimeSpent" min="0" placeholder="0">
-                        </div>
-                        <div class="reg-field">
-                            <label>Remarks</label>
-                            <input type="text" id="retrievalRemarks" name="retrievalRemarks" placeholder="Type here...">
-                        </div>
+                    <div class="reg-field">
+                        <label>Remarks</label>
+                        <input type="text" id="retrievalRemarks" name="retrievalRemarks" placeholder="Type here...">
                     </div>
                     <div class="reg-field">
                         <label>Upload Scanned D&R</label>
                         <label class="reg-upload">
-                            <input type="file" id="scannedRet" name="scannedRet">
+                            <input type="file" id="scannedRet" name="scannedRet" accept=".pdf,.docx">
                             <i class="fa-solid fa-cloud-arrow-up"></i>
-                            <span id="retFileName">Choose file or drag and drop</span>
+                            <span>Choose .pdf or .docx file</span>
                         </label>
                     </div>
                 </div>
@@ -427,28 +475,39 @@
                         <label>Select office(s) for retrieval</label>
                         <div class="reg-search">
                             <i class="fa-solid fa-magnifying-glass"></i>
-                            <input type="text" id="retrievalSearch" placeholder="Search office..." autocomplete="off"
+                            <input type="text" id="retrievalSearch" placeholder="Search and add office..." autocomplete="off"
                                 oninput="handleSearch(this, 'retrievalResults', 'retrievalBody', 'totalRetrievalCopies')">
                             <div id="retrievalResults" class="reg-search-dropdown" style="display:none;"></div>
                         </div>
                     </div>
-                    <table class="reg-dist-table">
-                        <thead>
-                            <tr>
-                                <th>Receiving Office(s)</th>
-                                <th>Copies</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody id="retrievalBody"></tbody>
-                        <tfoot>
-                            <tr>
-                                <td>Total</td>
-                                <td id="totalRetrievalCopies">0</td>
-                                <td></td>
-                            </tr>
-                        </tfoot>
-                    </table>
+                    <div class="reg-office-table-wrap">
+                        <table class="reg-dist-table">
+                            <thead>
+                                <tr>
+                                    <th>Receiving Office(s)</th>
+                                    <th style="width: 110px; text-align: center;">No. of Copies</th>
+                                    <th style="width: 40px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="retrievalBody">
+                                <tr class="reg-empty-row">
+                                    <td colspan="3">
+                                        <div class="reg-empty-state">
+                                            <i class="fa-solid fa-building-circle-xmark"></i>
+                                            <span>No offices added yet</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td>Total No. of Copies</td>
+                                    <td id="totalRetrievalCopies" style="text-align: center; font-weight: 700;">0</td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
                 </div>
             </div>
         </section>
@@ -460,38 +519,39 @@
             </div>
             <div class="reg-card-body reg-split">
                 <div class="reg-split-left">
-                    <div class="reg-grid-2">
-                        <div class="reg-field">
-                            <label>Distribution Form Date</label>
-                            <div class="reg-dual">
-                                <input type="date" id="distributionFormDate" name="distributionFormDate">
-                                <input type="time" id="distributionFormTime" name="distributionFormTime">
+                    <div class="reg-split-form-grid">
+                        <div class="reg-split-form-stack">
+                            <div class="reg-field">
+                                <label>Distribution Form Date</label>
+                                <div class="reg-dual">
+                                    <input type="date" id="distributionFormDate" name="distributionFormDate" oninput="calcDistributionTimeSpent()">
+                                    <input type="time" id="distributionFormTime" name="distributionFormTime" oninput="calcDistributionTimeSpent()">
+                                </div>
+                            </div>
+                            <div class="reg-field">
+                                <label>Distribution Date & Time</label>
+                                <div class="reg-dual">
+                                    <input type="date" id="distributionDate" name="distributionDate" oninput="calcDistributionTimeSpent()">
+                                    <input type="time" id="distributionTime" name="distributionTime" oninput="calcDistributionTimeSpent()">
+                                </div>
                             </div>
                         </div>
                         <div class="reg-field">
-                            <label>Distribution Date & Time</label>
-                            <div class="reg-dual">
-                                <input type="date" id="distributionDate" name="distributionDate">
-                                <input type="time" id="distributionTime" name="distributionTime">
-                            </div>
+                            <label>Time Spent/Minute(s)</label>
+                            <input type="text" id="distributionTimeSpentDisplay" readonly placeholder="--" style="background: #f8fafc; cursor: default;">
+                            <input type="hidden" id="distributionTimeSpent" name="distributionTimeSpent">
                         </div>
                     </div>
-                    <div class="reg-grid-2">
-                        <div class="reg-field">
-                            <label>Time Spent (min)</label>
-                            <input type="number" id="distributionTimeSpent" name="distributionTimeSpent" min="0" placeholder="0">
-                        </div>
-                        <div class="reg-field">
-                            <label>Remarks</label>
-                            <input type="text" id="distributionRemarks" name="distributionRemarks" placeholder="Type here...">
-                        </div>
+                    <div class="reg-field">
+                        <label>Remarks</label>
+                        <input type="text" id="distributionRemarks" name="distributionRemarks" placeholder="Type here...">
                     </div>
                     <div class="reg-field">
                         <label>Upload Scanned D&R</label>
                         <label class="reg-upload">
-                            <input type="file" id="scanneddist" name="scanneddist">
+                            <input type="file" id="scanneddist" name="scanneddist" accept=".pdf,.docx">
                             <i class="fa-solid fa-cloud-arrow-up"></i>
-                            <span id="distFileName">Choose file or drag and drop</span>
+                            <span>Choose .pdf or .docx file</span>
                         </label>
                     </div>
                 </div>
@@ -500,32 +560,44 @@
                         <label>Select office(s) for distribution</label>
                         <div class="reg-search">
                             <i class="fa-solid fa-magnifying-glass"></i>
-                            <input type="text" id="distSearch" placeholder="Search office..." autocomplete="off"
+                            <input type="text" id="distSearch" placeholder="Search and add office..." autocomplete="off"
                                 oninput="handleSearch(this, 'distResults', 'distBody', 'totalDistCopies')">
                             <div id="distResults" class="reg-search-dropdown" style="display:none;"></div>
                         </div>
                     </div>
-                    <table class="reg-dist-table">
-                        <thead>
-                            <tr>
-                                <th>Receiving Office(s)</th>
-                                <th>Copies</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody id="distBody"></tbody>
-                        <tfoot>
-                            <tr>
-                                <td>Total</td>
-                                <td id="totalDistCopies">0</td>
-                                <td></td>
-                            </tr>
-                        </tfoot>
-                    </table>
+                    <div class="reg-office-table-wrap">
+                        <table class="reg-dist-table">
+                            <thead>
+                                <tr>
+                                    <th>Receiving Office(s)</th>
+                                    <th style="width: 110px; text-align: center;">No. of Copies</th>
+                                    <th style="width: 40px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="distBody">
+                                <tr class="reg-empty-row">
+                                    <td colspan="3">
+                                        <div class="reg-empty-state">
+                                            <i class="fa-solid fa-building-circle-xmark"></i>
+                                            <span>No offices added yet</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td>Total No. of Copies</td>
+                                    <td id="totalDistCopies" style="text-align: center; font-weight: 700;">0</td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
                 </div>
             </div>
         </section>
 
+        <!-- ═══ FORM ACTIONS ═══ -->
         <section class="reg-actions" id="formActions" style="display: none;">
             <div class="reg-actions-left">
                 <a href="{{ route('dashboard') }}" class="reg-btn reg-btn-cancel">
@@ -545,18 +617,22 @@
     </form>
 </main>
 
+<!-- ═══ CONFIRMATION MODAL ═══ -->
 <div class="reg-modal-overlay" id="confirmModal" style="display: none;">
     <div class="reg-modal">
         <div class="reg-modal-header">
-            <i class="fa-solid fa-circle-question"></i>
-            <h3>Confirm Save</h3>
+            <i class="fa-solid fa-clipboard-check"></i>
+            <h3>Review & Confirm</h3>
+            <button type="button" class="reg-modal-close" onclick="closeConfirmModal()">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
         </div>
-        <div class="reg-modal-body">
-            <p>Are you sure you want to save this document? Please review all fields before confirming.</p>
+        <div class="reg-modal-body" id="reviewContent">
+            <!-- Populated by JS -->
         </div>
         <div class="reg-modal-footer">
             <button type="button" class="reg-btn reg-btn-cancel" onclick="closeConfirmModal()">
-                <i class="fa-solid fa-xmark"></i> Cancel
+                <i class="fa-solid fa-xmark"></i> Go Back
             </button>
             <button type="button" class="reg-btn reg-btn-save" onclick="submitForm()">
                 <i class="fa-solid fa-check"></i> Confirm Save
