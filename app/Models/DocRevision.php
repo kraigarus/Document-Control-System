@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class DocRevision extends Model
 {
+    public $timestamps = false;
     protected $table = 'doc_revision';
     protected $primaryKey = 'revision_id';
 

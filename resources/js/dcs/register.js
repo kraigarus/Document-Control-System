@@ -43,10 +43,10 @@ document.addEventListener("DOMContentLoaded", async function () {
 });
 
 // ══════════════════════════════════════════════
-// MASTERLIST SOURCE UNIT — type with suggestions
+// SOURCE UNIT — autocomplete for Masterlist
 // ══════════════════════════════════════════════
-window.handleMasterlistSourceInput = function (input) {
-    const dropdown = document.getElementById("masterlistSourceResults");
+window.handleSourceSearch = function (input, dropdownId) {
+    const dropdown = document.getElementById(dropdownId);
     if (!dropdown) return;
 
     const fullValue = input.value;
@@ -66,31 +66,31 @@ window.handleMasterlistSourceInput = function (input) {
     }
 
     dropdown.innerHTML = filtered.map(o =>
-        '<div onmousedown="pickMasterlistSource(\'' +
-        o.office_name.replace(/'/g, "\\'") + '\')">' +
-        o.office_name + '</div>'
+        '<div onmousedown="pickSource(\'' + input.id + "', '" + dropdownId + "', '" +
+        o.office_name.replace(/'/g, "\\'") + '\')">' + o.office_name + '</div>'
     ).join("");
     dropdown.style.display = "block";
 };
 
-window.pickMasterlistSource = function (officeName) {
-    const input = document.getElementById("masterlistSourceUnit");
-    const dropdown = document.getElementById("masterlistSourceResults");
+window.pickSource = function (inputId, dropdownId, officeName) {
+    const input = document.getElementById(inputId);
+    const dropdown = document.getElementById(dropdownId);
 
-    const parts = input.value.split(",");
-    parts[parts.length - 1] = " " + officeName;
-    input.value = parts.join(",");
+    if (inputId === "masterlistSourceUnit") {
+        const parts = input.value.split(",");
+        parts[parts.length - 1] = " " + officeName;
+        input.value = parts.join(",");
+    } else {
+        input.value = officeName;
+    }
 
     dropdown.style.display = "none";
     input.focus();
 };
 
 document.addEventListener("click", function (e) {
-    const dropdown = document.getElementById("masterlistSourceResults");
-    const input = document.getElementById("masterlistSourceUnit");
-    if (dropdown && input && e.target !== input && !dropdown.contains(e.target)) {
-        dropdown.style.display = "none";
-    }
+    const dd = document.getElementById("masterlistSourceResults");
+    if (dd && !dd.parentElement.contains(e.target)) dd.style.display = "none";
 });
 
 // ══════════════════════════════════════════════

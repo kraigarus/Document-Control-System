@@ -8,16 +8,26 @@ export default defineConfig({
                 'resources/css/app.css',
                 'resources/css/portal.css',
                 'resources/css/dcs/login.css',
-                'resources/css/dcs/dashboard.css',
+                
                 'resources/js/dcs/calendar.js',
+                
                 'resources/js/dcs/dashboard.js',
+                'resources/css/dcs/dashboard.css',
+
                 'resources/css/dcs/sidebar.css',
                 'resources/js/dcs/sidebar.js',
+
                 'resources/css/dcs/header.css',
                 'resources/js/dcs/header.js',
 
                 'resources/css/dcs/register.css',
                 'resources/js/dcs/register.js',
+
+                'resources/css/dcs/update.css',
+                'resources/js/dcs/update.js',
+
+                'resources/css/dcs/edit.css',
+                'resources/js/dcs/edit.js',
             ],
             refresh: true,
         }),

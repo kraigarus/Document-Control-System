@@ -1,4 +1,4 @@
-    <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -208,7 +208,7 @@
                     <div class="reg-field">
                         <label>Source Unit</label>
                         <select id="drfSourceUnit" name="drfSourceUnit">
-                            <option value="" disabled selected>Select source unit</option>
+                            <option value="" selected disabled>Select office</option>
                         </select>
                     </div>
                 </div>
@@ -256,9 +256,9 @@
                         </label>
                     </div>
                     <div class="reg-field">
-                        <label>Source Unit / Office</label>
+                        <label>Source Unit</label>
                         <select id="dcnSourceUnit" name="dcnSourceUnit">
-                            <option value="" disabled selected>Select</option>
+                            <option value="" selected disabled>Select office</option>
                         </select>
                     </div>
                 </div>
@@ -283,7 +283,7 @@
                                     <td><input type="text" name="documentTitle[]" placeholder="Title"></td>
                                     <td><input type="text" name="documentNo[]" placeholder="Doc No."></td>
                                     <td><input type="date" name="effectiveDate[]"></td>
-                                    <td><input type="text" name="revisionNo[]" placeholder="0"></td>
+                                    <td><input type="number" name="revisionNo[]" placeholder="0"></td>
                                     <td><input type="file" name="scannedCopy[]"></td>
                                     <td><input type="text" name="revisionPurpose[]" placeholder="Purpose"></td>
                                     <td>
@@ -369,10 +369,10 @@
                     <div class="reg-field">
                         <label>Source Unit / Originator</label>
                         <input type="text" id="masterlistSourceUnit" name="masterlistSourceUnit"
-                            placeholder="e.g. CAS, President, Registrar"
+                            placeholder="Type office name(s)..."
                             autocomplete="off"
-                            oninput="handleMasterlistSourceInput(this)"
-                            onfocus="handleMasterlistSourceInput(this)">
+                            oninput="handleSourceSearch(this, 'masterlistSourceResults')"
+                            onfocus="handleSourceSearch(this, 'masterlistSourceResults')">
                         <div id="masterlistSourceResults" class="reg-source-suggestions" style="display:none;"></div>
                         <span class="reg-hint"><i class="fa-solid fa-circle-info"></i> Separate multiple with commas</span>
                     </div>

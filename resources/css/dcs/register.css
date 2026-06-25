@@ -464,7 +464,7 @@ body {
 /* ═══ MASTERLIST — Top grid: 4 columns, Time Spent spans 2 rows ═══ */
 .reg-ml-grid {
     display: grid;
-    grid-template-columns: 1.5fr 1fr 1.92fr 140px;
+    grid-template-columns: 1.4fr 1fr 1.92fr 140px;
     gap: 16px;
     margin-bottom: 16px;
 }
@@ -585,11 +585,21 @@ body {
     margin-bottom: 16px;
 }
 
+.reg-grid-3,
+.reg-grid-4 {
+    overflow: visible;
+}
+
 .reg-grid-2-1 {
     display: grid;
     grid-template-columns: 2fr 1fr;
     gap: 16px;
     margin-bottom: 16px;
+}
+
+.reg-card-body {
+    padding: 24px;
+    overflow: visible;
 }
 
 /* ══════════════════════════════════════════════

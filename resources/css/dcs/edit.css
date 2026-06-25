@@ -1,0 +1,35 @@
+.reg-current-file {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: var(--reg-accent-subtle);
+            border: 1px solid var(--reg-border);
+            border-radius: var(--reg-radius-sm);
+            font-size: 0.82rem;
+            color: var(--reg-text);
+            margin-bottom: 6px;
+        }
+        .reg-current-file i { color: var(--reg-accent); font-size: 0.85rem; }
+        .reg-current-file span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .reg-current-file a {
+            color: var(--reg-accent);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.78rem;
+        }
+        .reg-current-file a:hover { text-decoration: underline; }
+        .edit-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--reg-accent-subtle);
+            color: var(--reg-accent);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.78rem;
+            font-weight: 600;
+        }
+        .reg-table tbody td.existing-file {
+            padding: 6px 12px;
+        }

@@ -43,12 +43,13 @@ Route::middleware(['auth', 'active'])->group(function () {
     // Register
     Route::get('/register', [RegisterController::class, 'index'])->name('register.create');
     Route::post('/register', [RegisterController::class, 'store'])->name('register.store');
-
-    // Register revised
     Route::get('/register/revised', [RegisterController::class, 'revised'])->name('register.revised');
 
     // Update
-    Route::get('/register/update', [RegisterController::class, 'update'])->name('register.update');
+    Route::get('/register/update', [RegisterController::class, 'updateList'])->name('register.update');
+    Route::get('/register/{id}/edit', [RegisterController::class, 'edit'])->name('register.edit');
+    Route::put('/register/{id}', [RegisterController::class, 'updateDocument'])->name('register.updateDocument');
+    Route::delete('/register/{id}', [RegisterController::class, 'destroy'])->name('register.destroy');
 });
 
 
