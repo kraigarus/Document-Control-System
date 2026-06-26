@@ -12,7 +12,6 @@
         'resources/js/dcs/edit.js',
 
         'resources/css/dcs/register.css',
-        'resources/js/dcs/register.js'
     ])
     
     <script>
@@ -94,19 +93,19 @@
                 <div class="reg-panel-grid">
                     <div class="reg-field">
                         <label>Version Type</label>
-                        <select id="versionType" name="version_id" data-last-valid="{{ $docRequest->version_id }}">
+                        <select id="versionType" name="version_id" autocomplete="off" data-last-valid="{{ $docRequest->version_id }}">
                             <option value="" disabled>Select version</option>
                         </select>
                     </div>
                     <div class="reg-field">
                         <label>Document Type</label>
-                        <select id="docType" name="doc_type_id" data-last-valid="{{ $docRequest->doc_type_id }}">
+                        <select id="docType" name="doc_type_id" autocomplete="off" data-last-valid="{{ $docRequest->doc_type_id }}">
                             <option value="" disabled>Select document type</option>
                         </select>
                     </div>
                     <div class="reg-field">
                         <label>Sub-Type</label>
-                        <select id="subType" name="sub_type_id">
+                        <select id="subType" name="sub_type_id" autocomplete="off">
                             <option value="" selected disabled>Select sub-type</option>
                         </select>
                     </div>
@@ -152,7 +151,7 @@
                         </div>
                         <div class="reg-field">
                             <label>Source Unit</label>
-                            <select id="drfSourceUnit" name="drfSourceUnit">
+                            <select id="drfSourceUnit" name="drfSourceUnit" autocomplete="off">
                                 <option value="" selected disabled>Select office</option>
                             </select>
                         </div>
@@ -207,7 +206,7 @@
                         </div>
                         <div class="reg-field">
                             <label>Source Unit</label>
-                            <select id="dcnSourceUnit" name="dcnSourceUnit">
+                            <select id="dcnSourceUnit" name="dcnSourceUnit" autocomplete="off">
                                 <option value="" selected disabled>Select office</option>
                             </select>
                         </div>
@@ -260,7 +259,7 @@
                                         <td><input type="text" name="documentTitle[]" placeholder="Title" value="{{ $rev->title }}"></td>
                                         <td><input type="text" name="documentNo[]" placeholder="Doc No." value="{{ $rev->document_no }}"></td>
                                         <td><input type="date" name="effectiveDate[]" value="{{ fmtDate($rev->effectivity_date) }}"></td>
-                                        <td><input type="text" name="revisionNo[]" placeholder="0" value="{{ $rev->revision_no }}"></td>
+                                        <td><input type="number" name="revisionNo[]" placeholder="0" value="{{ $rev->revision_no }}"></td>
                                         <td>
                                             @if($rev->scanned_copy)
                                                 <div class="reg-current-file" style="margin:0;">
@@ -279,7 +278,7 @@
                                         <td><input type="text" name="documentTitle[]" placeholder="Title"></td>
                                         <td><input type="text" name="documentNo[]" placeholder="Doc No."></td>
                                         <td><input type="date" name="effectiveDate[]"></td>
-                                        <td><input type="text" name="revisionNo[]" placeholder="0"></td>
+                                        <td><input type="number" name="revisionNo[]" placeholder="0"></td>
                                         <td><input type="file" name="scannedCopy[]" accept=".pdf,.docx"></td>
                                         <td><input type="text" name="revisionPurpose[]" placeholder="Purpose"></td>
                                         <td><button type="button" class="reg-row-del" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash-can"></i></button></td>
@@ -343,7 +342,7 @@
                         </div>
                         <div class="reg-field">
                             <label>Revision No.</label>
-                            <input type="text" id="masterlistRevisionNo" name="masterlistRevisionNo" placeholder="0" value="{{ $masterlist->revise_no ?? '' }}">
+                            <input type="number" id="masterlistRevisionNo" name="masterlistRevisionNo" placeholder="0" value="{{ $masterlist->revise_no ?? '' }}">
                         </div>
                         <div class="reg-field">
                             <label>No. of Pages</label>
@@ -403,7 +402,7 @@
                     <div class="reg-grid-3">
                         <div class="reg-field">
                             <label>Approval Body</label>
-                            <select id="approvalBody" name="approvalBody">
+                            <select id="approvalBody" name="approvalBody" autocomplete="off">
                                 <option value="" selected disabled>Select approval body</option>
                             </select>
                         </div>

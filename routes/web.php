@@ -28,6 +28,46 @@ Route::middleware('auth')->group(function () {
             ->orderBy('checklist_types.checklist_id')
             ->get();
     });
+
+    Route::get('/api/dashboard-stats', function () {
+        $totalDocuments = \App\Models\DocumentRequest::count();
+
+        // Internal = doc_type_id 1 + its children (6,7,8,9,10)
+        $internalIds = [1, 6, 7, 8, 9, 10];
+        $internalCount = \App\Models\DocumentRequest::whereIn('doc_type_id', $internalIds)
+            ->orWhereIn('sub_type_id', $internalIds)
+            ->count();
+
+        // Internal Forms = doc_type_id 2 + its children (11,12,13,14)
+        $internalFormIds = [2, 11, 12, 13, 14];
+        $internalFormsCount = \App\Models\DocumentRequest::whereIn('doc_type_id', $internalFormIds)
+            ->orWhereIn('sub_type_id', $internalFormIds)
+            ->count();
+
+        // External = doc_type_id 3
+        $externalCount = \App\Models\DocumentRequest::where('doc_type_id', 3)
+            ->orWhere('sub_type_id', 3)
+            ->count();
+
+        // Forms = doc_type_id 4
+        $formsCount = \App\Models\DocumentRequest::where('doc_type_id', 4)
+            ->orWhere('sub_type_id', 4)
+            ->count();
+
+        // Logbooks = doc_type_id 5
+        $logbooksCount = \App\Models\DocumentRequest::where('doc_type_id', 5)
+            ->orWhere('sub_type_id', 5)
+            ->count();
+
+        return response()->json([
+            'totalDocuments' => $totalDocuments,
+            'internalCount' => $internalCount,
+            'internalFormsCount' => $internalFormsCount,
+            'externalCount' => $externalCount,
+            'formsCount' => $formsCount,
+            'logbooksCount' => $logbooksCount,
+        ]);
+    });
 });
 
 // Logout (POST only, auth required)

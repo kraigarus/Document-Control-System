@@ -1,4 +1,3 @@
-// dashboard.js
 document.addEventListener("DOMContentLoaded", function () {
 
     function escapeHtml(value) {
@@ -32,6 +31,69 @@ document.addEventListener("DOMContentLoaded", function () {
         const now = new Date();
         const options = { weekday: "long", year: "numeric", month: "long", day: "numeric" };
         headerDate.textContent = now.toLocaleDateString("en-US", options);
+    }
+
+    // ── Fetch Dashboard Stats ──
+    loadDashboardStats();
+
+    async function loadDashboardStats() {
+        try {
+            const res = await fetch("/api/dashboard-stats");
+            if (!res.ok) throw new Error("HTTP " + res.status);
+            const stats = await res.json();
+
+            animateCount("internalCount", stats.internalCount || 0);
+            animateCount("internalFormsCount", stats.internalFormsCount || 0);
+            animateCount("externalCount", stats.externalCount || 0);
+            animateCount("formsCount", stats.formsCount || 0);
+            animateCount("logbooksCount", stats.logbooksCount || 0);
+
+            updateTrends(stats);
+
+        } catch (err) {
+            console.error("Failed to load dashboard stats:", err);
+        }
+    }
+
+    function animateCount(elementId, target) {
+        const el = document.getElementById(elementId);
+        if (!el) return;
+
+        const duration = 1000;
+        const startTime = performance.now();
+
+        function step(currentTime) {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            // Ease out cubic
+            const eased = 1 - Math.pow(1 - progress, 3);
+            const current = Math.round(target * eased);
+            el.textContent = current.toLocaleString();
+            if (progress < 1) {
+                requestAnimationFrame(step);
+            }
+        }
+
+        requestAnimationFrame(step);
+    }
+
+    function updateTrends(stats) {
+        const boxes = document.querySelectorAll(".stat-box");
+        boxes.forEach(box => {
+            const valueEl = box.querySelector(".stat-value");
+            const trendEl = box.querySelector(".stat-trend");
+            if (!valueEl || !trendEl) return;
+
+            const count = parseInt(valueEl.textContent.replace(/,/g, "")) || 0;
+
+            if (count > 0) {
+                trendEl.className = "stat-trend up";
+                trendEl.innerHTML = '<i class="fa-solid fa-arrow-trend-up"></i>';
+            } else {
+                trendEl.className = "stat-trend neutral";
+                trendEl.innerHTML = '<i class="fa-solid fa-minus"></i>';
+            }
+        });
     }
 
     // ── Upcoming Events Widget ──
@@ -81,7 +143,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
         let html = "";
 
-        // ── Today's events ──
         if (todayEvents.length > 0) {
             html += `
                 <div class="upcoming-section">
@@ -105,7 +166,6 @@ document.addEventListener("DOMContentLoaded", function () {
             html += `</div>`;
         }
 
-        // ── Tomorrow's events ──
         if (tomorrowEvents.length > 0) {
             html += `
                 <div class="upcoming-section">

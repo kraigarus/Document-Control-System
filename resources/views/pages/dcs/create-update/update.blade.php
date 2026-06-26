@@ -171,21 +171,23 @@
         </div>
     </div>
 
-    <!-- Delete Confirmation Modal -->
-    <div id="deleteModal" style="display:none;">
-        <div class="upd-modal-overlay">
-            <div class="upd-modal">
-                <i class="fa-solid fa-triangle-exclamation"></i>
-                <h3>Delete Document?</h3>
-                <p>This will permanently remove "<span id="deleteDocTitle"></span>" and all related records. This action cannot be undone.</p>
-                <div class="upd-modal-actions">
-                    <button class="upd-modal-btn upd-modal-cancel" onclick="closeDeleteModal()">Cancel</button>
-                    <form id="deleteForm" method="POST" style="display:inline;">
-                        @csrf
-                        @method('DELETE')
-                        <button type="submit" class="upd-modal-btn upd-modal-delete">Delete</button>
-                    </form>
-                </div>
-            </div>
+<!-- Delete Confirmation Modal -->
+<div id="deleteModal" class="upd-modal-overlay" style="display:none;">
+    <div class="upd-modal">
+        <div class="upd-modal-icon">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+        </div>
+        <h3>Delete Document?</h3>
+        <p>This will permanently remove "<strong id="deleteDocTitle"></strong>" and all related records. This action cannot be undone.</p>
+        <form id="deleteForm" method="POST">
+            @csrf
+            @method('DELETE')
+        </form>
+        <div class="upd-modal-actions">
+            <button class="upd-modal-btn upd-modal-cancel" onclick="closeDeleteModal()">Cancel</button>
+            <button class="upd-modal-btn upd-modal-confirm" onclick="submitDelete()">
+                <i class="fa-solid fa-trash-can"></i> Delete
+            </button>
         </div>
     </div>
+</div>

@@ -147,7 +147,7 @@
                                     </select>
                                 </td>
                                 <td>
-                                    <input type="text" name="syllabiDrfNo[]" placeholder="DRF-001">
+                                    <input type="text" name="syllabiDrfNo[]" placeholder="Enter Syllabi No.">
                                 </td>
                                 <td>
                                     <input type="date" name="syllabiDrfDate[]">
@@ -186,7 +186,7 @@
                 <div class="reg-grid-3">
                     <div class="reg-field">
                         <label>DRF No.</label>
-                        <input type="text" id="drfNo" name="drfNo" placeholder="DRF-2025-001">
+                        <input type="text" id="drfNo" name="drfNo" placeholder="Enter DRF No.">
                     </div>
                     <div class="reg-field">
                         <label>DRF Date</label>
@@ -232,7 +232,7 @@
                 <div class="reg-grid-3">
                     <div class="reg-field">
                         <label>DCN No.</label>
-                        <input type="text" id="dcnNumber" name="dcnNumber" placeholder="0000-00-000">
+                        <input type="text" id="dcnNumber" name="dcnNumber" placeholder="Enter DCN No.">
                     </div>
                     <div class="reg-field">
                         <label>DCN Date</label>
@@ -280,12 +280,12 @@
                             </thead>
                             <tbody id="revisionTableBody">
                                 <tr>
-                                    <td><input type="text" name="documentTitle[]" placeholder="Title"></td>
-                                    <td><input type="text" name="documentNo[]" placeholder="Doc No."></td>
+                                    <td><input type="text" name="documentTitle[]" placeholder="Enter Document Title"></td>
+                                    <td><input type="text" name="documentNo[]" placeholder="Enter Document No."></td>
                                     <td><input type="date" name="effectiveDate[]"></td>
                                     <td><input type="number" name="revisionNo[]" placeholder="0"></td>
                                     <td><input type="file" name="scannedCopy[]"></td>
-                                    <td><input type="text" name="revisionPurpose[]" placeholder="Purpose"></td>
+                                    <td><input type="text" name="revisionPurpose[]" placeholder="Enter Purpose"></td>
                                     <td>
                                         <button type="button" class="reg-row-del" onclick="this.closest('tr').remove()">
                                             <i class="fa-solid fa-trash-can"></i>
@@ -314,7 +314,7 @@
                     <!-- Row 1 -->
                     <div class="reg-field">
                         <label>Document No.</label>
-                        <input type="text" id="masterlistDocNo" name="masterlistDocNo" placeholder="CSPC-INT.DOC-137">
+                        <input type="text" id="masterlistDocNo" name="masterlistDocNo" placeholder="Enter Document no.">
                     </div>
                     <div class="reg-field">
                         <label>Deadline of Submission</label>
@@ -337,7 +337,7 @@
                     <!-- Row 2 -->
                     <div class="reg-field reg-ml-title-span">
                         <label>Document Title</label>
-                        <input type="text" id="masterlistDocTitle" name="masterlistDocTitle" placeholder="Document title">
+                        <input type="text" id="masterlistDocTitle" name="masterlistDocTitle" placeholder="Enter Document title">
                     </div>
                     <div class="reg-field">
                         <label>Document Registered</label>
@@ -386,7 +386,7 @@
                     </div>
                     <div class="reg-field">
                         <label>Related Documents</label>
-                        <input type="text" id="relatedDocuments" name="relatedDocuments" placeholder="Documents...">
+                        <input type="text" id="relatedDocuments" name="relatedDocuments" placeholder="Enter related Documents here">
                     </div>
                 </div>
 
@@ -421,7 +421,7 @@
                     </div>
                     <div class="reg-field">
                         <label>Approval No.</label>
-                        <input type="text" id="approvalNo" name="approvalNo" placeholder="2025-042">
+                        <input type="text" id="approvalNo" name="approvalNo" placeholder="Enter Approval No.">
                     </div>
                 </div>
             </div>

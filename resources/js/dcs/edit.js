@@ -26,6 +26,16 @@ function escapeJsAttr(str) {
 
 // ═══ INIT ═══
 document.addEventListener("DOMContentLoaded", async function () {
+
+    // ── BLOCK CHROME AUTOFILL on selects ──
+    document.querySelectorAll("select").forEach(sel => {
+        sel.setAttribute("autocomplete", "off");
+        sel.setAttribute("autofill", "off");
+    });
+    // Block autofill on the form itself
+    const form = document.getElementById("masterForm");
+    if (form) form.setAttribute("autocomplete", "off");
+
     try {
         const [offices, docTypes, versionTypes, approvalBodies] = await Promise.all([
             fetch("/api/offices").then(r => r.json()),
@@ -39,6 +49,7 @@ document.addEventListener("DOMContentLoaded", async function () {
 
         // Populate Version Type
         const versionSelect = document.getElementById("versionType");
+        while (versionSelect.options.length > 1) versionSelect.remove(1);
         versionTypes.forEach(v => {
             const opt = new Option(v.version_name, v.version_id);
             if (v.version_id == CURRENT_VERSION_ID) opt.selected = true;
@@ -48,6 +59,7 @@ document.addEventListener("DOMContentLoaded", async function () {
 
         // Populate Doc Type
         const docTypeSelect = document.getElementById("docType");
+        while (docTypeSelect.options.length > 1) docTypeSelect.remove(1);
         docTypes.filter(d => !d.parent_id).forEach(d => {
             const opt = new Option(d.doc_type_name, d.doc_type_id);
             if (d.doc_type_id == CURRENT_DOC_TYPE_ID) opt.selected = true;
@@ -56,23 +68,27 @@ document.addEventListener("DOMContentLoaded", async function () {
         docTypeSelect.dataset.lastValid = CURRENT_DOC_TYPE_ID;
         docTypeSelect.disabled = false;
 
-        // Populate Sub Type
-        if (CURRENT_SUB_TYPE_ID) {
-            const children = docTypes.filter(d => d.parent_id == CURRENT_DOC_TYPE_ID);
-            const subTypeSelect = document.getElementById("subType");
+        // Populate Sub Type — ONLY if doc type has children
+        const subTypeSelect = document.getElementById("subType");
+        const children = docTypes.filter(d => d.parent_id == CURRENT_DOC_TYPE_ID);
+        if (children.length > 0) {
             children.forEach(c => {
                 const opt = new Option(c.doc_type_name, c.doc_type_id);
                 if (c.doc_type_id == CURRENT_SUB_TYPE_ID) opt.selected = true;
                 subTypeSelect.add(opt);
             });
             subTypeSelect.disabled = false;
-            subTypeSelect.dataset.lastValid = CURRENT_SUB_TYPE_ID;
+            subTypeSelect.dataset.lastValid = CURRENT_SUB_TYPE_ID || "";
+        } else {
+            subTypeSelect.disabled = true;
+            subTypeSelect.dataset.lastValid = "";
         }
 
         // Populate DRF & DCN Source
         ["drfSourceUnit", "dcnSourceUnit"].forEach(id => {
             const sel = document.getElementById(id);
             if (sel) {
+                while (sel.options.length > 1) sel.remove(1);
                 offices.forEach(o => {
                     const opt = new Option(o.office_name, o.office_id);
                     if (id === "drfSourceUnit" && o.office_id == CURRENT_DRF_SOURCE) opt.selected = true;
@@ -85,6 +101,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         // Populate Approval
         const approvalSelect = document.getElementById("approvalBody");
         if (approvalSelect) {
+            while (approvalSelect.options.length > 1) approvalSelect.remove(1);
             approvalBodies.forEach(a => {
                 const opt = new Option(a.approval_name, a.approval_body_id);
                 if (a.approval_body_id == CURRENT_APPROVAL_BODY) opt.selected = true;
@@ -109,7 +126,28 @@ document.addEventListener("DOMContentLoaded", async function () {
         calcRetrievalTimeSpent();
         calcDistributionTimeSpent();
     }, 100);
+
+    // ── AUTOFILL SAFEGUARD: after 500ms, force selects back to valid values ──
+    setTimeout(() => {
+        revertAutofill();
+    }, 500);
+    setTimeout(() => {
+        revertAutofill();
+    }, 1500);
 });
+
+// ── Revert any Chrome autofill changes ──
+function revertAutofill() {
+    const selectIds = ["versionType", "docType", "subType", "drfSourceUnit", "dcnSourceUnit", "approvalBody"];
+    selectIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const lastValid = el.dataset.lastValid;
+        if (lastValid !== undefined && lastValid !== "" && el.value !== lastValid) {
+            el.value = lastValid;
+        }
+    });
+}
 
 function showApiError(message) {
     const existing = document.getElementById("apiErrorToast");
@@ -138,6 +176,7 @@ async function loadChecklists(versionId) {
         if (!res.ok) throw new Error("HTTP " + res.status);
         const checklists = await res.json();
         renderChecklistsEdit(checklists);
+        initializeEditState();
     } catch (err) {
         console.error("Failed to load checklists:", err);
         showApiError("Failed to load checklists. Please refresh.");
@@ -188,6 +227,17 @@ function renderChecklistsEdit(checklists) {
 
         container.appendChild(label);
     });
+}
+
+function initializeEditState() {
+    const container = document.getElementById("dynamicCheckboxes");
+    container.querySelectorAll("input[type='checkbox']").forEach(cb => {
+        cb.disabled = false;
+        cb.dataset.lastChecked = cb.checked ? "true" : "false";
+        toggleSection(parseInt(cb.value), cb.checked);
+    });
+    enableApproval();
+    setTimeout(initFileInputs, 100);
 }
 
 // ═══ SOURCE SEARCH (Masterlist) ═══
@@ -250,13 +300,18 @@ function initSelectProtection() {
         el.addEventListener("pointerdown", () => { userTouched[key] = true; });
         el.addEventListener("keydown", () => { userTouched[key] = true; });
         el.addEventListener("change", function () {
-            if (!userTouched[key]) { this.value = this.dataset.lastValid || ""; return; }
+            if (!userTouched[key]) {
+                this.value = this.dataset.lastValid || "";
+                return;
+            }
             userTouched[key] = false;
             this.dataset.lastValid = this.value;
             handler();
         });
         el.addEventListener("input", function () {
-            if (!userTouched[key]) { this.value = this.dataset.lastValid || ""; }
+            if (!userTouched[key]) {
+                this.value = this.dataset.lastValid || "";
+            }
         });
     });
 }

@@ -39,12 +39,12 @@
                     <div class="stat-icon-wrap">
                         <i class="fa-solid fa-file-shield"></i>
                     </div>
-                    <div class="stat-info">
-                        <p class="stat-title">Total Internal Documents</p>
-                        <h3 class="stat-value" id="internalCount">0</h3>
-                    </div>
-                    <div class="stat-trend up">
-                        <i class="fa-solid fa-arrow-trend-up"></i>
+                    <div class="stat-body">
+                        <p class="stat-label">Total Internal Documents</p>
+                        <div class="stat-number-row">
+                            <h3 class="stat-value" id="internalCount">0</h3>
+                            <div class="stat-trend up"><i class="fa-solid fa-arrow-trend-up"></i></div>
+                        </div>
                     </div>
                 </div>
 
@@ -52,12 +52,12 @@
                     <div class="stat-icon-wrap">
                         <i class="fa-solid fa-file-contract"></i>
                     </div>
-                    <div class="stat-info">
-                        <p class="stat-title">Total Internal Forms</p>
-                        <h3 class="stat-value" id="internalFormsCount">0</h3>
-                    </div>
-                    <div class="stat-trend up">
-                        <i class="fa-solid fa-arrow-trend-up"></i>
+                    <div class="stat-body">
+                        <p class="stat-label">Total Internal Forms</p>
+                        <div class="stat-number-row">
+                            <h3 class="stat-value" id="internalFormsCount">0</h3>
+                            <div class="stat-trend up"><i class="fa-solid fa-arrow-trend-up"></i></div>
+                        </div>
                     </div>
                 </div>
 
@@ -65,12 +65,12 @@
                     <div class="stat-icon-wrap">
                         <i class="fa-solid fa-file-export"></i>
                     </div>
-                    <div class="stat-info">
-                        <p class="stat-title">Total External Documents</p>
-                        <h3 class="stat-value" id="externalCount">0</h3>
-                    </div>
-                    <div class="stat-trend down">
-                        <i class="fa-solid fa-arrow-trend-down"></i>
+                    <div class="stat-body">
+                        <p class="stat-label">Total External Documents</p>
+                        <div class="stat-number-row">
+                            <h3 class="stat-value" id="externalCount">0</h3>
+                            <div class="stat-trend down"><i class="fa-solid fa-arrow-trend-down"></i></div>
+                        </div>
                     </div>
                 </div>
 
@@ -78,12 +78,12 @@
                     <div class="stat-icon-wrap">
                         <i class="fa-solid fa-file-signature"></i>
                     </div>
-                    <div class="stat-info">
-                        <p class="stat-title">Total Forms</p>
-                        <h3 class="stat-value" id="formsCount">0</h3>
-                    </div>
-                    <div class="stat-trend up">
-                        <i class="fa-solid fa-arrow-trend-up"></i>
+                    <div class="stat-body">
+                        <p class="stat-label">Total Forms</p>
+                        <div class="stat-number-row">
+                            <h3 class="stat-value" id="formsCount">0</h3>
+                            <div class="stat-trend up"><i class="fa-solid fa-arrow-trend-up"></i></div>
+                        </div>
                     </div>
                 </div>
 
@@ -91,12 +91,12 @@
                     <div class="stat-icon-wrap">
                         <i class="fa-solid fa-book"></i>
                     </div>
-                    <div class="stat-info">
-                        <p class="stat-title">Total Logbooks</p>
-                        <h3 class="stat-value" id="logbooksCount">0</h3>
-                    </div>
-                    <div class="stat-trend up">
-                        <i class="fa-solid fa-arrow-trend-up"></i>
+                    <div class="stat-body">
+                        <p class="stat-label">Total Logbooks</p>
+                        <div class="stat-number-row">
+                            <h3 class="stat-value" id="logbooksCount">0</h3>
+                            <div class="stat-trend up"><i class="fa-solid fa-arrow-trend-up"></i></div>
+                        </div>
                     </div>
                 </div>
             </section>
