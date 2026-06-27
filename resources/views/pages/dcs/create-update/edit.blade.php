@@ -133,6 +133,99 @@
                 </div>
             </div>
 
+            <!-- ═══ SYLLABI ═══ -->
+            <section class="reg-card" id="section-syllabi" style="display: {{ $syllabi->count() > 0 ? 'block' : 'none' }};">
+                <div class="reg-card-header">
+                    <i class="fa-solid fa-book"></i>
+                    <span>Syllabi</span>
+                </div>
+                <div class="reg-card-body">
+                    <div class="reg-table-wrap">
+                        <table class="reg-table">
+                            <thead>
+                                <tr>
+                                    <th>Course Name</th>
+                                    <th>Availability</th>
+                                    <th>No. Pages</th>
+                                    <th>DRF Avail.</th>
+                                    <th>DRF No.</th>
+                                    <th>DRF Date</th>
+                                    <th>DRF Received</th>
+                                    <th>Scanned DRF</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="syllabiTableBody">
+                                @forelse($syllabi as $syl)
+                                <tr style="animation: fadeSlideUp 0.25s ease;">
+                                    <td><input type="text" name="syllabiCourseName[]" placeholder="Enter course name" value="{{ $syl->course_name }}"></td>
+                                    <td>
+                                        <select name="syllabiAvailability[]">
+                                            <option value="" disabled>Select</option>
+                                            <option value="available" {{ $syl->syllabi_availability === 'available' ? 'selected' : '' }}>Available</option>
+                                            <option value="not_available" {{ $syl->syllabi_availability === 'not_available' ? 'selected' : '' }}>Not Available</option>
+                                        </select>
+                                    </td>
+                                    <td><input type="number" name="syllabiNoPages[]" min="0" placeholder="0" value="{{ $syl->no_pages }}"></td>
+                                    <td>
+                                        <select name="syllabiDrfAvailability[]">
+                                            <option value="" disabled>Select</option>
+                                            <option value="available" {{ $syl->drf_availability === 'available' ? 'selected' : '' }}>Available</option>
+                                            <option value="not_available" {{ $syl->drf_availability === 'not_available' ? 'selected' : '' }}>Not Available</option>
+                                        </select>
+                                    </td>
+                                    <td><input type="text" name="syllabiDrfNo[]" placeholder="DRF-001" value="{{ $syl->drf_no }}"></td>
+                                    <td><input type="date" name="syllabiDrfDate[]" value="{{ fmtDate($syl->drf_date) }}"></td>
+                                    <td><input type="date" name="syllabiDrfReceived[]" value="{{ fmtDate($syl->drf_received_date) }}"></td>
+                                    <td>
+                                        <label class="reg-upload-cell">
+                                            <input type="file" name="syllabiScannedDrf[]" accept=".pdf,.docx">
+                                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                                            <span>{{ $syl->scanned_drf ? basename($syl->scanned_drf) : 'No file chosen' }}</span>
+                                        </label>
+                                    </td>
+                                    <td><button type="button" class="reg-row-del" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash-can"></i></button></td>
+                                </tr>
+                                @empty
+                                <tr style="animation: fadeSlideUp 0.25s ease;">
+                                    <td><input type="text" name="syllabiCourseName[]" placeholder="Enter course name"></td>
+                                    <td>
+                                        <select name="syllabiAvailability[]">
+                                            <option value="" disabled selected>Select</option>
+                                            <option value="available">Available</option>
+                                            <option value="not_available">Not Available</option>
+                                        </select>
+                                    </td>
+                                    <td><input type="number" name="syllabiNoPages[]" min="0" placeholder="0"></td>
+                                    <td>
+                                        <select name="syllabiDrfAvailability[]">
+                                            <option value="" disabled selected>Select</option>
+                                            <option value="available">Available</option>
+                                            <option value="not_available">Not Available</option>
+                                        </select>
+                                    </td>
+                                    <td><input type="text" name="syllabiDrfNo[]" placeholder="DRF-001"></td>
+                                    <td><input type="date" name="syllabiDrfDate[]"></td>
+                                    <td><input type="date" name="syllabiDrfReceived[]"></td>
+                                    <td>
+                                        <label class="reg-upload-cell">
+                                            <input type="file" name="syllabiScannedDrf[]" accept=".pdf,.docx">
+                                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                                            <span>No file chosen</span>
+                                        </label>
+                                    </td>
+                                    <td><button type="button" class="reg-row-del" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash-can"></i></button></td>
+                                </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                    <button type="button" class="reg-add-row" onclick="addSyllabiRow()">
+                        <i class="fa-solid fa-plus"></i> Add Course Row
+                    </button>
+                </div>
+            </section>
+
             <!-- ═══ SECTION 1 — DRF ═══ -->
             <section class="reg-card" id="section-1" style="display: {{ $drf ? 'block' : 'none' }};">
                 <div class="reg-card-header">
@@ -655,99 +748,6 @@
                             </table>
                         </div>
                     </div>
-                </div>
-            </section>
-
-            <!-- ═══ SYLLABI ═══ -->
-            <section class="reg-card" id="section-syllabi" style="display: {{ $syllabi->count() > 0 ? 'block' : 'none' }};">
-                <div class="reg-card-header">
-                    <i class="fa-solid fa-book"></i>
-                    <span>Syllabi</span>
-                </div>
-                <div class="reg-card-body">
-                    <div class="reg-table-wrap">
-                        <table class="reg-table">
-                            <thead>
-                                <tr>
-                                    <th>Course Name</th>
-                                    <th>Availability</th>
-                                    <th>No. Pages</th>
-                                    <th>DRF Avail.</th>
-                                    <th>DRF No.</th>
-                                    <th>DRF Date</th>
-                                    <th>DRF Received</th>
-                                    <th>Scanned DRF</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody id="syllabiTableBody">
-                                @forelse($syllabi as $syl)
-                                <tr style="animation: fadeSlideUp 0.25s ease;">
-                                    <td><input type="text" name="syllabiCourseName[]" placeholder="Enter course name" value="{{ $syl->course_name }}"></td>
-                                    <td>
-                                        <select name="syllabiAvailability[]">
-                                            <option value="" disabled>Select</option>
-                                            <option value="available" {{ $syl->syllabi_availability === 'available' ? 'selected' : '' }}>Available</option>
-                                            <option value="not_available" {{ $syl->syllabi_availability === 'not_available' ? 'selected' : '' }}>Not Available</option>
-                                        </select>
-                                    </td>
-                                    <td><input type="number" name="syllabiNoPages[]" min="0" placeholder="0" value="{{ $syl->no_pages }}"></td>
-                                    <td>
-                                        <select name="syllabiDrfAvailability[]">
-                                            <option value="" disabled>Select</option>
-                                            <option value="available" {{ $syl->drf_availability === 'available' ? 'selected' : '' }}>Available</option>
-                                            <option value="not_available" {{ $syl->drf_availability === 'not_available' ? 'selected' : '' }}>Not Available</option>
-                                        </select>
-                                    </td>
-                                    <td><input type="text" name="syllabiDrfNo[]" placeholder="DRF-001" value="{{ $syl->drf_no }}"></td>
-                                    <td><input type="date" name="syllabiDrfDate[]" value="{{ fmtDate($syl->drf_date) }}"></td>
-                                    <td><input type="date" name="syllabiDrfReceived[]" value="{{ fmtDate($syl->drf_received_date) }}"></td>
-                                    <td>
-                                        <label class="reg-upload-cell">
-                                            <input type="file" name="syllabiScannedDrf[]" accept=".pdf,.docx">
-                                            <i class="fa-solid fa-cloud-arrow-up"></i>
-                                            <span>{{ $syl->scanned_drf ? basename($syl->scanned_drf) : 'No file chosen' }}</span>
-                                        </label>
-                                    </td>
-                                    <td><button type="button" class="reg-row-del" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash-can"></i></button></td>
-                                </tr>
-                                @empty
-                                <tr style="animation: fadeSlideUp 0.25s ease;">
-                                    <td><input type="text" name="syllabiCourseName[]" placeholder="Enter course name"></td>
-                                    <td>
-                                        <select name="syllabiAvailability[]">
-                                            <option value="" disabled selected>Select</option>
-                                            <option value="available">Available</option>
-                                            <option value="not_available">Not Available</option>
-                                        </select>
-                                    </td>
-                                    <td><input type="number" name="syllabiNoPages[]" min="0" placeholder="0"></td>
-                                    <td>
-                                        <select name="syllabiDrfAvailability[]">
-                                            <option value="" disabled selected>Select</option>
-                                            <option value="available">Available</option>
-                                            <option value="not_available">Not Available</option>
-                                        </select>
-                                    </td>
-                                    <td><input type="text" name="syllabiDrfNo[]" placeholder="DRF-001"></td>
-                                    <td><input type="date" name="syllabiDrfDate[]"></td>
-                                    <td><input type="date" name="syllabiDrfReceived[]"></td>
-                                    <td>
-                                        <label class="reg-upload-cell">
-                                            <input type="file" name="syllabiScannedDrf[]" accept=".pdf,.docx">
-                                            <i class="fa-solid fa-cloud-arrow-up"></i>
-                                            <span>No file chosen</span>
-                                        </label>
-                                    </td>
-                                    <td><button type="button" class="reg-row-del" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash-can"></i></button></td>
-                                </tr>
-                                @endforelse
-                            </tbody>
-                        </table>
-                    </div>
-                    <button type="button" class="reg-add-row" onclick="addSyllabiRow()">
-                        <i class="fa-solid fa-plus"></i> Add Course Row
-                    </button>
                 </div>
             </section>
 

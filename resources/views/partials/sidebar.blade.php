@@ -1,4 +1,5 @@
-@vite(['resources/css/dcs/sidebar.css', 'resources/js/dcs/sidebar.js'])
+@vite(['resources/css/dcs/sidebar.css', 
+'resources/js/dcs/sidebar.js'])
 
 <nav class="side-nav" id="sideNav">
     <div class="collapse-btn" id="collapseBtn" role="button" tabindex="0" aria-expanded="true">
@@ -29,7 +30,7 @@
         <li class="nav-item dropdown">
             <span class="dropdown-trigger">
                 <i class="fa-regular fa-pen-to-square"></i>
-                <span>Document Registration</span>
+                <span>Document Registration</span> 
                 <i class="fas fa-caret-down arrow"></i>
                 <span class="tooltip">Document Registration</span>
             </span>
@@ -39,14 +40,14 @@
             </ul>
         </li>
         <li class="nav-item">
-            <a href="/report">
+            <a href="/reports">
                 <i class="fa-regular fa-file-lines"></i>
                 <span>Generate Report</span>
                 <span class="tooltip">Generate Report</span>
             </a>
         </li>
         <li class="nav-item">
-            <a href="/stamp-document">
+            <a href="/stamping">
                 <i class="fa-solid fa-stamp"></i>
                 <span>Stamp Document</span>
                 <span class="tooltip">Stamp Document</span>

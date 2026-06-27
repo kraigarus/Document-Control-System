@@ -70,6 +70,18 @@ Route::middleware('auth')->group(function () {
     });
 });
 
+// Reports
+Route::get('/reports', [RegisterController::class, 'reportIndex'])->name('generate-report.report');
+Route::get('/reports/masterlist', [RegisterController::class, 'masterlistReport'])->name('generate-report.masterlist');
+Route::get('/reports/masterlist/data', [RegisterController::class, 'masterlistData'])->name('generate-report.masterlist.data');
+Route::get('/reports/masterlist/print', [RegisterController::class, 'masterlistPrint'])->name('generate-report.masterlist.print');
+Route::get('/reports/monitoring', [RegisterController::class, 'monitoringReport'])->name('generate-report.monitoring');
+Route::get('/reports/opcr', [RegisterController::class, 'opcrReport'])->name('generate-report.opcr');
+Route::get('/reports/other', [RegisterController::class, 'otherReport'])->name('generate-report.other');
+
+Route::get('/stamping', [RegisterController::class, 'stampingIndex'])->name('stamping.index');
+
+
 // Logout (POST only, auth required)
 Route::post('/logout', [LoginController::class, 'logout'])
     ->name('logout')

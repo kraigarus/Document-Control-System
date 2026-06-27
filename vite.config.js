@@ -28,6 +28,13 @@ export default defineConfig({
 
                 'resources/css/dcs/edit.css',
                 'resources/js/dcs/edit.js',
+
+                'resources/css/dcs/reports.css',
+                'resources/js/dcs/reports.js',
+                'resources/js/dcs/masterlist-report.js',
+
+                'resources/js/dcs/stamping.css',
+                'resources/js/dcs/stamping.js',
             ],
             refresh: true,
         }),

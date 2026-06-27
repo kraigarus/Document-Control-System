@@ -801,4 +801,189 @@ class RegisterController extends Controller
             return back()->with('error', 'Failed to delete document. Please try again.');
         }
     }
+
+        // ══════════════════════════════════════════════
+    // GENERATE REPORTS
+    // ══════════════════════════════════════════════
+
+    public function reportIndex()
+    {
+        return view('pages.dcs.generate-report.report');
+    }
+
+    public function masterlistReport()
+    {
+        $docTypes = \App\Models\DocType::whereNull('parent_id')->get();
+        $offices = \App\Models\Office::where('status', 'active')->orderBy('office_name')->get();
+        return view('pages.dcs.generate-report.masterlist', compact('docTypes', 'offices'));
+    }
+
+    public function masterlistData()
+    {
+        $query = \App\Models\DocumentRequest::with([
+            'version', 'docType', 'subType',
+            'masterlistRegistration',
+            'documentRequestForm',
+        ])->whereHas('masterlistRegistration');
+
+        if (request('category')) {
+            $cat = request('category');
+            $catMap = [
+                'internal' => [1, 6, 7, 8, 9, 10],
+                'internal_forms' => [2, 11, 12, 13, 14],
+                'external' => [3],
+                'forms' => [4],
+                'logbooks' => [5],
+            ];
+            if (isset($catMap[$cat])) {
+                $query->whereIn('doc_type_id', $catMap[$cat]);
+            }
+        }
+
+        if (request('title')) {
+            $query->whereHas('masterlistRegistration', function ($q) {
+                $q->where('doc_title', 'like', '%' . request('title') . '%');
+            });
+        }
+
+        if (request('doc_no')) {
+            $query->whereHas('masterlistRegistration', function ($q) {
+                $q->where('doc_no', 'like', '%' . request('doc_no') . '%');
+            });
+        }
+
+        if (request('rev_no')) {
+            $query->whereHas('masterlistRegistration', function ($q) {
+                $q->where('revise_no', 'like', '%' . request('rev_no') . '%');
+            });
+        }
+
+        if (request('originator')) {
+            $query->whereHas('masterlistRegistration', function ($q) {
+                $q->where('originator_name', 'like', '%' . request('originator') . '%');
+            });
+        }
+
+        if (request('effectivity_from')) {
+            $query->whereHas('masterlistRegistration', function ($q) {
+                $q->where('effectivity_date', '>=', request('effectivity_from'));
+            });
+        }
+
+        if (request('effectivity_to')) {
+            $query->whereHas('masterlistRegistration', function ($q) {
+                $q->where('effectivity_date', '<=', request('effectivity_to'));
+            });
+        }
+
+        $query->orderBy('request_id', 'asc');
+        $documents = $query->get();
+
+        $rows = $documents->map(function ($doc, $index) {
+            $ml = $doc->masterlistRegistration;
+            $drf = $doc->documentRequestForm;
+
+            return [
+                'id' => $doc->request_id,
+                'item_no' => $index + 1,
+                'doc_no' => $ml->doc_no ?? 'N/A',
+                'title' => $ml->doc_title ?? $drf->doc_title ?? 'N/A',
+                'rev_no' => $ml->revise_no ?? '0',
+                'originator' => $ml->originator_name ?? 'N/A',
+                'effectivity' => $ml->effectivity_date ? \Carbon\Carbon::parse($ml->effectivity_date)->format('M d, Y') : 'N/A',
+                'status' => 'Active',
+                'category' => $doc->docType->doc_type_name ?? 'N/A',
+            ];
+        });
+
+        if (request('item_from') || request('item_to')) {
+            $from = (int) (request('item_from') ?: 1);
+            $to = (int) (request('item_to') ?: 99999);
+            $rows = $rows->filter(fn($r) => $r['item_no'] >= $from && $r['item_no'] <= $to);
+        }
+
+        return response()->json($rows->values());
+    }
+
+    public function masterlistPrint()
+    {
+        $mode = request('mode', 'complete');
+        $ids = request('ids') ? explode(',', request('ids')) : [];
+        $generatedBy = request('generated_by', auth()->user()->name ?? 'System');
+
+        $query = \App\Models\DocumentRequest::with([
+            'version', 'docType', 'subType',
+            'masterlistRegistration',
+            'documentRequestForm',
+        ])->whereHas('masterlistRegistration');
+
+        if ($mode === 'selected' && !empty($ids)) {
+            $query->whereIn('request_id', $ids);
+        }
+
+        if ($mode === 'filtered') {
+            if (request('category')) {
+                $catMap = [
+                    'internal' => [1, 6, 7, 8, 9, 10],
+                    'internal_forms' => [2, 11, 12, 13, 14],
+                    'external' => [3],
+                    'forms' => [4],
+                    'logbooks' => [5],
+                ];
+                $cat = request('category');
+                if (isset($catMap[$cat])) {
+                    $query->whereIn('doc_type_id', $catMap[$cat]);
+                }
+            }
+            if (request('title')) {
+                $query->whereHas('masterlistRegistration', fn($q) => $q->where('doc_title', 'like', '%' . request('title') . '%'));
+            }
+        }
+
+        $query->orderBy('request_id', 'asc');
+        $documents = $query->get();
+
+        $rows = $documents->map(function ($doc, $index) {
+            $ml = $doc->masterlistRegistration;
+            $drf = $doc->documentRequestForm;
+            return [
+                'item_no' => $index + 1,
+                'doc_no' => $ml->doc_no ?? 'N/A',
+                'title' => $ml->doc_title ?? $drf->doc_title ?? 'N/A',
+                'rev_no' => $ml->revise_no ?? '0',
+                'originator' => $ml->originator_name ?? 'N/A',
+                'effectivity' => $ml->effectivity_date ? \Carbon\Carbon::parse($ml->effectivity_date)->format('M d, Y') : 'N/A',
+                'status' => 'Active',
+            ];
+        });
+
+        $title = match($mode) {
+            'selected' => 'Masterlist — Selected Documents',
+            'filtered' => 'Masterlist — Filtered Results',
+            default => 'Complete Masterlist',
+        };
+
+        return view('pages.dcs.generate-report.masterlist-print', compact('rows', 'title', 'generatedBy'));
+    }
+
+    public function monitoringReport()
+    {
+        return view('pages.dcs.generate-report.monitoring');
+    }
+
+    public function opcrReport()
+    {
+        return view('pages.dcs.generate-report.opcr');
+    }
+
+    public function otherReport()
+    {
+        return view('pages.dcs.generate-report.other');
+    }
+
+    public function stampingIndex()
+    {
+        $docTypes = \App\Models\DocType::whereNull('parent_id')->get();
+        return view('pages.dcs.stamping.index', compact('docTypes'));
+    }
 }

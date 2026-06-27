@@ -73,7 +73,8 @@
 <script>
 (function () {
     const WARNING_BEFORE = 60;
-    const INACTIVITY_LIMIT = {{ $session_remaining ?? 60 }};
+    // Ensure minimum of 120s so warning never fires immediately
+    const INACTIVITY_LIMIT = Math.max({{ $session_remaining ?? 180 }}, 120);
     const WARNING_TIME = INACTIVITY_LIMIT - WARNING_BEFORE;
 
     let inactivityTimer;
@@ -83,6 +84,12 @@
     const modal = document.getElementById('inactivityModal');
     const countdownEl = document.getElementById('inactivityCountdown');
     const stayBtn = document.getElementById('stayLoggedIn');
+
+    // Guard: if something is wrong and warning time is still <= 0, don't start
+    if (WARNING_TIME <= 0) {
+        console.warn('Inactivity timer: session_remaining too small, skipping.');
+        return;
+    }
 
     // Debounce: only reset timer if user pauses for 1 second
     let debounceTimer;
@@ -127,7 +134,7 @@
         });
     });
 
-    // Track activity with debounce (fixes constant reset issue)
+    // Track activity with debounce
     const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
     events.forEach(function (event) {
         document.addEventListener(event, handleActivity, { passive: true });
