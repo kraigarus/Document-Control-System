@@ -7,7 +7,8 @@
     <title>DCS — Document Stamping</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    @vite(['resources/css/dcs/stamping.css', 'resources/js/dcs/stamping.js'])
+@vite(['resources/css/dcs/stamping.css',
+'resources/js/dcs/stamping.js'])
 </head>
 <body>
 

@@ -33,8 +33,11 @@ export default defineConfig({
                 'resources/js/dcs/reports.js',
                 'resources/js/dcs/masterlist-report.js',
 
-                'resources/js/dcs/stamping.css',
+                'resources/css/dcs/stamping.css',
                 'resources/js/dcs/stamping.js',
+
+                'resources/css/dcs/database.css',
+                'resources/js/dcs/database.js',
             ],
             refresh: true,
         }),

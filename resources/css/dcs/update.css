@@ -71,7 +71,7 @@ body {
     border-radius: var(--upd-radius-sm);
     padding: 0 14px;
     font-size: 0.85rem;
-    font-family: inherit;
+    font-family: Arial, Helvetica, sans-serif;
     color: var(--upd-text);
     background: var(--upd-surface);
     outline: none;
@@ -87,7 +87,7 @@ body {
     border-radius: var(--upd-radius-sm);
     padding: 0 12px;
     font-size: 0.85rem;
-    font-family: inherit;
+    font-family: Arial, Helvetica, sans-serif;
     color: var(--upd-text);
     background: var(--upd-surface);
     outline: none;
@@ -103,7 +103,7 @@ body {
     color: #fff;
     font-size: 0.85rem;
     font-weight: 600;
-    font-family: inherit;
+    font-family: Arial, Helvetica, sans-serif;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
@@ -166,7 +166,7 @@ body {
     white-space: nowrap;
 }
 .upd-table .upd-doc-no {
-    font-family: 'Courier New', monospace;
+    font-family: Arial, Helvetica, sans-serif;
     font-weight: 600;
     font-size: 0.82rem;
     color: var(--upd-text-muted);
@@ -456,7 +456,7 @@ body {
     border-radius: 10px;
     font-size: 0.82rem;
     font-weight: 600;
-    font-family: inherit;
+    font-family: Arial, Helvetica, sans-serif;
     cursor: pointer;
     transition: all 0.2s ease;
     display: flex;

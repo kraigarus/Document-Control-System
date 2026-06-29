@@ -1,4 +1,4 @@
-@vite(['resources/css/dcs/sidebar.css', 
+@vite(['resources/css/dcs/sidebar.css',
 'resources/js/dcs/sidebar.js'])
 
 <nav class="side-nav" id="sideNav">
@@ -54,7 +54,7 @@
             </a>
         </li>
         <li class="nav-item">
-            <a href="/dashboard/inventory">
+            <a href="/database">
                 <i class="fa-solid fa-database"></i>
                 <span>Database</span>
                 <span class="tooltip">Database</span>

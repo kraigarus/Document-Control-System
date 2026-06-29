@@ -986,4 +986,225 @@ class RegisterController extends Controller
         $docTypes = \App\Models\DocType::whereNull('parent_id')->get();
         return view('pages.dcs.stamping.index', compact('docTypes'));
     }
+
+    //============================================================
+    //DATABASE
+    //============================================================
+    public function databaseIndex()
+    {
+        $docTypes = \App\Models\DocType::whereNull('parent_id')->get();
+        $offices = \App\Models\Office::where('status', 'active')->orderBy('office_name')->get();
+        return view('pages.dcs.database.index', compact('docTypes', 'offices'));
+    }
+
+    public function databaseData()
+    {
+        try {
+            $perPage = (int) request('per_page', 20);
+
+            $query = \App\Models\DocumentRequest::with([
+                'docType',
+                'documentRequestForm',
+                'masterlistRegistration',
+                'approvalRecords',
+            ])->orderBy('request_id', 'desc');
+
+            // Doc type filter
+            if (request('doc_type_id') && request('doc_type_id') !== 'all') {
+                $query->where('doc_type_id', request('doc_type_id'));
+            }
+
+            // Search
+            if (request('search')) {
+                $search = request('search');
+                $query->where(function ($q) use ($search) {
+                    $q->whereHas('documentRequestForm', function ($q2) use ($search) {
+                        $q2->where('doc_title', 'like', "%{$search}%")
+                            ->orWhere('drf_no', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('masterlistRegistration', function ($q2) use ($search) {
+                        $q2->where('doc_no', 'like', "%{$search}%")
+                            ->orWhere('doc_title', 'like', "%{$search}%");
+                    });
+                });
+            }
+
+            // Advanced filters
+            if (request('originator')) {
+                $query->whereHas('masterlistRegistration', function ($q) {
+                    $q->where('originator_name', 'like', '%' . request('originator') . '%');
+                });
+            }
+            if (request('source_unit')) {
+                $query->whereHas('documentRequestForm', function ($q) {
+                    $q->where('office_id', request('source_unit'));
+                });
+            }
+            if (request('status')) {
+                $query->where('approval_status', request('status'));
+            }
+            if (request('date_from')) {
+                $query->whereHas('masterlistRegistration', function ($q) {
+                    $q->where('effectivity_date', '>=', request('date_from'));
+                });
+            }
+            if (request('date_to')) {
+                $query->whereHas('masterlistRegistration', function ($q) {
+                    $q->where('effectivity_date', '<=', request('date_to'));
+                });
+            }
+            if (request('rev_no')) {
+                $query->whereHas('masterlistRegistration', function ($q) {
+                    $q->where('revise_no', request('rev_no'));
+                });
+            }
+
+            $documents = $query->paginate($perPage);
+
+            $rows = $documents->map(function ($doc) {
+                $drf  = $doc->documentRequestForm;
+                $ml   = $doc->masterlistRegistration;
+                $appr = $doc->approvalRecords ? $doc->approvalRecords->first() : null;
+
+                // DCN — safe access
+                $dcn = null;
+                $dcnPurpose = null;
+                try {
+                    $dcn = \App\Models\DocumentChangeNotice::where('request_id', $doc->request_id)->first();
+                    if ($dcn) {
+                        $firstRev = \App\Models\DocRevision::where('dcn_id', $dcn->dcn_id)->first();
+                        if ($firstRev) {
+                            $dcnPurpose = $firstRev->brief_purpose;
+                        }
+                    }
+                } catch (\Exception $e) { /* skip */ }
+
+                // Retrieval — safe access
+                $ret = null;
+                $retOffices = null;
+                try {
+                    $ret = \App\Models\DocumentRetrieval::where('request_id', $doc->request_id)->first();
+                    if ($ret) {
+                        $retOffices = \App\Models\RetrievalOffice::where('retrieval_id', $ret->retrieval_id)
+                            ->join('offices', 'retrieval_offices.office_id', '=', 'offices.office_id')
+                            ->pluck('offices.office_name')
+                            ->implode(', ') ?: null;
+                    }
+                } catch (\Exception $e) { /* skip */ }
+
+                // Distribution — safe access
+                $dist = null;
+                $distOffices = null;
+                try {
+                    $dist = \App\Models\DocumentDistribution::where('request_id', $doc->request_id)->first();
+                    if ($dist) {
+                        $distOffices = \App\Models\DistributionOffice::where('distribution_id', $dist->distribution_id)
+                            ->join('offices', 'distribution_offices.office_id', '=', 'offices.office_id')
+                            ->pluck('offices.office_name')
+                            ->implode(', ') ?: null;
+                    }
+                } catch (\Exception $e) { /* skip */ }
+
+                // Source unit name
+                $sourceUnitName = null;
+                if ($drf && $drf->office_id) {
+                    try {
+                        $office = \App\Models\Office::find($drf->office_id);
+                        $sourceUnitName = $office ? $office->office_name : null;
+                    } catch (\Exception $e) { /* skip */ }
+                }
+
+                // Deadline diff
+                $deadlineDiff = null;
+                if ($ml && $ml->deadline && $ml->effectivity_date) {
+                    $deadlineDiff = \Carbon\Carbon::parse($ml->effectivity_date)->diffInDays(\Carbon\Carbon::parse($ml->deadline));
+                }
+
+                return [
+                    'doc_no'           => $ml ? $ml->doc_no : 'N/A',
+                    'rev_no'           => $ml ? $ml->revise_no : '0',
+                    'title'            => ($ml && $ml->doc_title) ? $ml->doc_title : (($drf && $drf->doc_title) ? $drf->doc_title : 'N/A'),
+                    'effectivity'      => ($ml && $ml->effectivity_date) ? \Carbon\Carbon::parse($ml->effectivity_date)->format('M d, Y') : null,
+                    'originator'       => $ml ? $ml->originator_name : null,
+                    'pages'            => $ml ? $ml->no_pages : null,
+                    'status'           => $doc->approval_status ?? 'Active',
+                    'pdf_path'         => ($ml && $ml->scanned_masterlist) ? \Storage::disk('public')->url($ml->scanned_masterlist) : null,
+                    'source_unit'      => $sourceUnitName,
+                    'approval_no'      => $appr ? $appr->approval_no : null,
+                    'approval_date'    => ($appr && $appr->approval_date) ? \Carbon\Carbon::parse($appr->approval_date)->format('M d, Y') : null,
+                    'deadline_date'    => ($ml && $ml->deadline) ? \Carbon\Carbon::parse($ml->deadline)->format('M d, Y') : null,
+                    'deadline_diff'    => $deadlineDiff !== null ? $deadlineDiff . ' days' : null,
+                    'ml_receipt_date'  => ($ml && $ml->doc_receipt_date) ? \Carbon\Carbon::parse($ml->doc_receipt_date)->format('M d, Y') : null,
+                    'ml_receipt_time'  => $ml && $ml->doc_receipt_time ? $this->formatTime($ml->doc_receipt_time) : null,
+                    'ml_register_date' => ($ml && $ml->doc_registered_date) ? \Carbon\Carbon::parse($ml->doc_registered_date)->format('M d, Y') : null,
+                    'ml_register_time' => $ml && $ml->doc_registered_time ? $this->formatTime($ml->doc_registered_time) : null,
+                    'dcn_no'           => $dcn ? $dcn->dcn_no : null,
+                    'dcn_date'         => ($dcn && $dcn->dcn_date) ? \Carbon\Carbon::parse($dcn->dcn_date)->format('M d, Y') : null,
+                    'dcn_receipt_date' => ($dcn && $dcn->dcn_receipt_date) ? \Carbon\Carbon::parse($dcn->dcn_receipt_date)->format('M d, Y') : null,
+                    'dcn_receipt_time' => $dcn && $dcn->dcn_receipt_time ? $this->formatTime($dcn->dcn_receipt_time) : null,
+                    'dcn_purpose'      => $dcnPurpose,
+                    'dcn_scan'         => ($dcn && $dcn->scanned_dcn) ? \Storage::disk('public')->url($dcn->scanned_dcn) : null,
+                    'drf_no'           => $drf ? $drf->drf_no : null,
+                    'drf_date'         => ($drf && $drf->drf_date) ? \Carbon\Carbon::parse($drf->drf_date)->format('M d, Y') : null,
+                    'drf_receipt_date' => ($drf && $drf->drf_receipt_date) ? \Carbon\Carbon::parse($drf->drf_receipt_date)->format('M d, Y') : null,
+                    'drf_receipt_time' => $drf && $drf->drf_receipt_time ? $this->formatTime($drf->drf_receipt_time) : null,
+                    'drf_scan'         => ($drf && $drf->scanned_drf) ? \Storage::disk('public')->url($drf->scanned_drf) : null,
+                    'dist_onfile_date' => ($dist && $dist->doc_distribution_date_file) ? \Carbon\Carbon::parse($dist->doc_distribution_date_file)->format('M d, Y') : null,
+                    'dist_onfile_time' => $dist && $dist->doc_distribution_time_file ? $this->formatTime($dist->doc_distribution_time_file) : null,
+                    'dist_actual_date' => ($dist && $dist->doc_distribution_date_actual) ? \Carbon\Carbon::parse($dist->doc_distribution_date_actual)->format('M d, Y') : null,
+                    'dist_actual_time' => $dist && $dist->doc_distribution_time_actual ? $this->formatTime($dist->doc_distribution_time_actual) : null,
+                    'dist_offices'     => $distOffices,
+                    'dist_scan'        => ($dist && $dist->scanned_distribution) ? \Storage::disk('public')->url($dist->scanned_distribution) : null,
+                    'ret_onfile'       => ($ret && $ret->doc_retrieval_date_file) ? \Carbon\Carbon::parse($ret->doc_retrieval_date_file)->format('M d, Y') : null,
+                    'ret_actual'       => ($ret && $ret->doc_retrieval_date_actual) ? \Carbon\Carbon::parse($ret->doc_retrieval_date_actual)->format('M d, Y') : null,
+                    'ret_offices'      => $retOffices,
+                    'ret_scan'         => ($ret && $ret->scanned_retrieval) ? \Storage::disk('public')->url($ret->scanned_retrieval) : null,
+                ];
+            });
+
+            return response()->json([
+                'data' => $rows,
+                'total' => $documents->total(),
+                'current_page' => $documents->currentPage(),
+                'last_page' => $documents->lastPage(),
+                'per_page' => $documents->perPage(),
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Database data error: ' . $e->getMessage());
+            \Log::error($e->getTraceAsString());
+            return response()->json([
+                'error' => $e->getMessage(),
+                'data' => [],
+                'total' => 0,
+                'current_page' => 1,
+                'last_page' => 1,
+                'per_page' => 20,
+            ], 500);
+        }
+    }
+
+    public function databaseExport()
+    {
+        // Placeholder for Excel/CSV export
+        return redirect()->route('database.index')->with('info', 'Export feature coming soon.');
+    }
+
+    private function formatTime($value)
+    {
+        if (!$value) return null;
+
+        // Already a clean time string like "09:15 AM"
+        if (is_string($value) && !str_contains($value, 'T') && !str_contains($value, '-')) {
+            return $value;
+        }
+
+        try {
+            return \Carbon\Carbon::parse($value)->format('h:i A');
+        } catch (\Exception $e) {
+            return $value;
+        }
+    }
+
+    
 }

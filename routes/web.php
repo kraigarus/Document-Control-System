@@ -82,6 +82,12 @@ Route::get('/reports/other', [RegisterController::class, 'otherReport'])->name('
 Route::get('/stamping', [RegisterController::class, 'stampingIndex'])->name('stamping.index');
 
 
+
+Route::get('/database', [RegisterController::class, 'databaseIndex'])->name('database.index');
+Route::get('/database/data', [RegisterController::class, 'databaseData'])->name('database.data');
+Route::get('/database/export', [RegisterController::class, 'databaseExport'])->name('database.export');
+
+
 // Logout (POST only, auth required)
 Route::post('/logout', [LoginController::class, 'logout'])
     ->name('logout')
