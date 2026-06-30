@@ -42,6 +42,168 @@ document.addEventListener("DOMContentLoaded", async function () {
     initFileInputs();
 });
 
+document.addEventListener('DOMContentLoaded', () => {
+    const revField = document.getElementById('masterlistRevisionNo');
+    if (revField) {
+        // Lock to 0
+        revField.value = 0;
+        revField.readOnly = true;
+        revField.style.background = '#f1f5f9';
+        revField.style.cursor = 'not-allowed';
+
+        // Prevent any manual override
+        revField.addEventListener('input', () => {
+            if (parseInt(revField.value) > 0) {
+                revField.value = 0;
+                showToast('error', 'Cannot set revision higher than 0 for a new document. Use Revised Registration instead.');
+            }
+        });
+    }
+});
+
+// ═══════════════════════════════════════════
+// Revision number logic — depends on page
+// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════
+// Revision number logic — depends on page
+// ═══════════════════════════════════════════
+const isRevisedPage = window.location.pathname.includes('/register/revised');
+const revField = document.getElementById('masterlistRevisionNo');
+const docNoInput = document.getElementById('masterlistDocNo');
+const hintEl = document.getElementById('docNoHint');
+let docNoTimer = null;
+function isRevisedMode() {
+    const sel = document.getElementById('versionType');
+    if (!sel || sel.selectedIndex < 1) return false;
+    const text = sel.options[sel.selectedIndex].text.toLowerCase();
+    return text.includes('revised') || text.includes('revision') || text.includes('revise');
+}
+
+function applyRevisionMode() {
+    if (isRevisedMode()) {
+        // ── REVISED: unlock revision, enable auto-suggest ──
+        if (revField) {
+            revField.value = '';
+            revField.readOnly = false;
+            revField.style.background = '';
+            revField.style.cursor = '';
+        }
+        if (hintEl) {
+            hintEl.innerHTML = '<span style="color:#94a3b8"><i class="fa-solid fa-circle-info"></i> Enter an existing document number</span>';
+        }
+    } else {
+        // ── NEW: lock revision to 0 ──
+        if (revField) {
+            revField.value = 0;
+            revField.readOnly = true;
+            revField.style.background = '#f1f5f9';
+            revField.style.cursor = 'not-allowed';
+        }
+        if (hintEl) hintEl.innerHTML = '';
+    }
+}
+
+// Listen for version type change
+document.getElementById('versionType').addEventListener('change', () => {
+    applyRevisionMode();
+});
+
+// Listen for doc no input (only active in revised mode)
+if (docNoInput) {
+    docNoInput.addEventListener('input', () => {
+        if (!isRevisedMode()) return;
+
+        clearTimeout(docNoTimer);
+        const docNo = docNoInput.value.trim();
+
+        if (!docNo) {
+            if (hintEl) {
+                hintEl.innerHTML = '<span style="color:#94a3b8"><i class="fa-solid fa-circle-info"></i> Enter an existing document number</span>';
+            }
+            if (revField) {
+                revField.value = '';
+                revField.readOnly = false;
+                revField.style.background = '';
+                revField.style.cursor = '';
+            }
+            return;
+        }
+
+        docNoTimer = setTimeout(async () => {
+        try {
+            const docTypeId = document.getElementById('docType').value;
+            const url = '/register/check-docno?doc_no=' + encodeURIComponent(docNo) +
+                        (docTypeId ? '&doc_type_id=' + docTypeId : '');
+            const res = await fetch(url);
+            const data = await res.json();
+
+            if (data.exists) {
+                // Doc found under same type — auto-fill
+                if (revField) {
+                    revField.value = data.next_rev;
+                    revField.readOnly = true;
+                    revField.style.background = '#f0fdf4';
+                    revField.style.cursor = 'default';
+                }
+
+                const titleField = document.getElementById('masterlistDocTitle');
+                if (titleField && data.latest_title && !titleField.value.trim()) {
+                    titleField.value = data.latest_title;
+                }
+
+                const originatorField = document.getElementById('masterlistSourceUnit');
+                if (originatorField && data.latest_originator && !originatorField.value.trim()) {
+                    originatorField.value = data.latest_originator;
+                }
+
+                if (hintEl) {
+                    hintEl.innerHTML =
+                        '<i class="fa-solid fa-circle-check"></i> ' +
+                        data.message +
+                        ' — Next revision: <strong>Rev ' + data.next_rev + '</strong>';
+                    hintEl.style.color = '#16a34a';
+                }
+            } else if (data.wrong_type) {
+                // Doc exists but wrong type — show warning
+                if (revField) {
+                    revField.value = '';
+                    revField.readOnly = false;
+                    revField.style.background = '';
+                    revField.style.cursor = '';
+                }
+
+                if (hintEl) {
+                    hintEl.innerHTML =
+                        '<i class="fa-solid fa-triangle-exclamation"></i> ' +
+                        data.message;
+                    hintEl.style.color = '#d97706';
+                }
+            } else {
+                // Doc doesn't exist at all
+                if (revField) {
+                    revField.value = '';
+                    revField.readOnly = false;
+                    revField.style.background = '';
+                    revField.style.cursor = '';
+                }
+
+                if (hintEl) {
+                    hintEl.innerHTML =
+                        '<i class="fa-solid fa-circle-exclamation"></i> ' +
+                        data.message;
+                    hintEl.style.color = '#dc2626';
+                }
+            }
+        } catch (e) {
+            console.error('DocNo lookup failed:', e);
+        }
+    }, 500);
+    });
+}
+
+// Apply on page load too
+applyRevisionMode();
+
 // ══════════════════════════════════════════════
 // SOURCE UNIT — autocomplete for Masterlist
 // ══════════════════════════════════════════════
@@ -416,6 +578,7 @@ async function handleVersionChange() {
             { checklist_id: 4, checklist_name: "Document Retrieval" },
             { checklist_id: 5, checklist_name: "Document Distribution" },
         ], true);
+        applyRevisionMode(); // ← add this
         return;
     }
 
@@ -426,6 +589,8 @@ async function handleVersionChange() {
     } catch (err) {
         console.error("Failed to load checklists:", err);
     }
+
+    applyRevisionMode(); // ← add this
 }
 
 
@@ -439,6 +604,10 @@ function handleDocTypeChange() {
 
     subTypeSelect.innerHTML = '<option value="" selected disabled>Select sub-type</option>';
     subTypeSelect.disabled = true;
+
+    // ── Always hide syllabi when doc type changes ──
+    const syllabiSection = document.getElementById("section-syllabi");
+    if (syllabiSection) syllabiSection.style.display = "none";
 
     const children = allDocTypes.filter(d => d.parent_id === docTypeId);
 

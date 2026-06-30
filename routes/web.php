@@ -100,6 +100,7 @@ Route::middleware(['auth', 'active'])->group(function () {
 
     // Register
     Route::get('/register', [RegisterController::class, 'index'])->name('register.create');
+    Route::get('/register/check-docno', [\App\Http\Controllers\RegisterController::class, 'checkDocNo'])->name('register.checkDocNo');
     Route::post('/register', [RegisterController::class, 'store'])->name('register.store');
     Route::get('/register/revised', [RegisterController::class, 'revised'])->name('register.revised');
 

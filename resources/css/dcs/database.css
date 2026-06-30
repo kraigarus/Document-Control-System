@@ -405,6 +405,96 @@ td.col-bg-retrieval { background-color: rgba(255,247,237,0.25) !important; backg
 .db-pg:disabled { opacity: 0.4; cursor: not-allowed; }
 .db-pg-active { background: var(--db-primary) !important; color: #fff !important; border-color: var(--db-primary) !important; }
 
+/* ═══════════════════════════════════
+   EXPAND / COLLAPSE REVISIONS
+   ═══════════════════════════════════ */
+
+/* Parent row */
+.db-parent-row {
+    background: var(--db-white);
+}
+
+/* Expand button */
+.db-expand-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    font-size: 7px;
+    cursor: pointer;
+    border: 1px solid var(--db-border);
+    border-radius: 3px;
+    background: var(--db-white);
+    color: var(--db-text-sec);
+    transition: all 0.15s;
+    margin-right: 5px;
+    vertical-align: middle;
+    line-height: 1;
+}
+.db-expand-btn:hover {
+    background: var(--db-accent-light);
+    border-color: var(--db-accent);
+    color: var(--db-accent);
+}
+.db-expand-btn.expanded {
+    background: var(--db-primary);
+    border-color: var(--db-primary);
+    color: #fff;
+    font-size: 8px;
+}
+
+/* Child rows — older revisions */
+.db-child-row {
+    background: #f9fafb !important;
+}
+.db-child-row td {
+    color: var(--db-text-sec) !important;
+    font-size: 11px;
+    border-bottom: 1px solid #f1f5f9 !important;
+}
+
+/* Child row hover */
+.db-table tbody tr.db-child-row:hover td {
+    background-color: #f1f5f9 !important;
+}
+
+/* Child indicator cell */
+.db-child-ind {
+    color: var(--db-text-muted) !important;
+    font-size: 10px !important;
+    padding-left: 14px !important;
+}
+
+/* Child dot */
+.db-child-dot {
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--db-accent);
+    margin-right: 6px;
+    vertical-align: middle;
+    opacity: 0.5;
+}
+
+/* Child row group cell colors (lighter) */
+.db-child-row td.col-bg-approval { background-color: rgba(219,234,254,0.12) !important; }
+.db-child-row td.col-bg-deadline { background-color: rgba(254,243,199,0.12) !important; }
+.db-child-row td.col-bg-masterlist { background-color: rgba(209,250,229,0.12) !important; }
+.db-child-row td.col-bg-dcn { background-color: rgba(237,233,254,0.12) !important; }
+.db-child-row td.col-bg-drf { background-color: rgba(252,231,243,0.12) !important; }
+.db-child-row td.col-bg-distribution { background-color: rgba(224,242,254,0.12) !important; }
+.db-child-row td.col-bg-retrieval { background-color: rgba(255,247,237,0.12) !important; }
+
+.db-table tbody tr.db-child-row:hover td.col-bg-approval { background-color: rgba(219,234,254,0.25) !important; }
+.db-table tbody tr.db-child-row:hover td.col-bg-deadline { background-color: rgba(254,243,199,0.25) !important; }
+.db-table tbody tr.db-child-row:hover td.col-bg-masterlist { background-color: rgba(209,250,229,0.25) !important; }
+.db-table tbody tr.db-child-row:hover td.col-bg-dcn { background-color: rgba(237,233,254,0.25) !important; }
+.db-table tbody tr.db-child-row:hover td.col-bg-drf { background-color: rgba(252,231,243,0.25) !important; }
+.db-table tbody tr.db-child-row:hover td.col-bg-distribution { background-color: rgba(224,242,254,0.25) !important; }
+.db-table tbody tr.db-child-row:hover td.col-bg-retrieval { background-color: rgba(255,247,237,0.25) !important; }
+
 /* ═══════ RESPONSIVE ═══════ */
 @media (max-width: 1024px) {
     .db-controls { flex-direction: column; align-items: stretch; }

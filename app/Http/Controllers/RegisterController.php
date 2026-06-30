@@ -39,6 +39,23 @@ class RegisterController extends Controller
     // POST /register
     public function store(Request $request)
     {
+        $request->validate([
+            'version_id'             => 'required|exists:version_type,version_id',
+            'doc_type_id'            => 'required|exists:doc_types,doc_type_id',
+            'approval_status'        => 'required|in:applicable,not_applicable',
+            'masterlistDocNo'        => 'nullable|string|max:255',
+            'masterlistRevisionNo'   => 'nullable|integer|min:0|max:0',
+        ], [
+            'masterlistRevisionNo.max' => 'A newly registered document must start at Revision 0.',
+            'masterlistRevisionNo.min' => 'Revision number cannot be negative.',
+        ]);
+
+        // Force revision to 0 for new documents (belt-and-suspenders)
+        if ($request->filled('masterlistRevisionNo') && (int) $request->masterlistRevisionNo > 0) {
+            return back()->withInput()
+                ->with('error', 'A newly registered document cannot have a revision number higher than 0. Use the Revised Registration page for revisions.');
+        }
+
         DB::beginTransaction();
 
         $uploadedFiles = []; // Track all uploaded files
@@ -321,6 +338,56 @@ class RegisterController extends Controller
             return back()->withInput()
                         ->with('error', 'Failed to save document. Please try again.');
         }
+    }
+
+    public function checkDocNo(Request $request)
+    {
+        $docNo = $request->input('doc_no');
+        $docTypeId = $request->input('doc_type_id');
+
+        if (!$docNo) {
+            return response()->json([
+                'exists'  => false,
+                'message' => 'No document number provided.',
+            ]);
+        }
+
+        $query = MasterlistRegistration::where('doc_no', $docNo);
+
+        // Match by document type
+        if ($docTypeId) {
+            $query->where('doc_type_id', $docTypeId);
+        }
+
+        $registrations = $query->orderByDesc('revise_no')->get();
+
+        if ($registrations->isEmpty()) {
+            $message = 'This document number is not registered';
+            if ($docTypeId) {
+                $type = \App\Models\DocType::find($docTypeId);
+                $message .= ' under "' . ($type ? $type->doc_type_name : 'this document type') . '"';
+            }
+            $message .= '. Please register it as a New Document first.';
+
+            return response()->json([
+                'exists'   => false,
+                'message'  => $message,
+                'next_rev' => null,
+            ]);
+        }
+
+        $latest = $registrations->first();
+        $latestRev = (int) $latest->revise_no;
+
+        return response()->json([
+            'exists'            => true,
+            'message'           => 'Document found. Latest revision: ' . $latestRev,
+            'next_rev'          => $latestRev + 1,
+            'latest_rev'        => $latestRev,
+            'latest_title'      => $latest->doc_title,
+            'latest_originator' => $latest->originator_name,
+            'revision_count'    => $registrations->count(),
+        ]);
     }
     
     // ══════════════════════════════════════════════
@@ -1007,7 +1074,7 @@ class RegisterController extends Controller
                 'documentRequestForm',
                 'masterlistRegistration',
                 'approvalRecords',
-            ])->orderBy('request_id', 'desc');
+            ]);
 
             // Doc type filter
             if (request('doc_type_id') && request('doc_type_id') !== 'all') {
@@ -1059,14 +1126,15 @@ class RegisterController extends Controller
                 });
             }
 
-            $documents = $query->paginate($perPage);
+            // Get ALL matching documents
+            $allDocs = $query->get();
 
-            $rows = $documents->map(function ($doc) {
+            // Build all rows
+            $allRows = $allDocs->map(function ($doc) {
                 $drf  = $doc->documentRequestForm;
                 $ml   = $doc->masterlistRegistration;
                 $appr = $doc->approvalRecords ? $doc->approvalRecords->first() : null;
 
-                // DCN — safe access
                 $dcn = null;
                 $dcnPurpose = null;
                 try {
@@ -1077,9 +1145,8 @@ class RegisterController extends Controller
                             $dcnPurpose = $firstRev->brief_purpose;
                         }
                     }
-                } catch (\Exception $e) { /* skip */ }
+                } catch (\Exception $e) { }
 
-                // Retrieval — safe access
                 $ret = null;
                 $retOffices = null;
                 try {
@@ -1090,9 +1157,8 @@ class RegisterController extends Controller
                             ->pluck('offices.office_name')
                             ->implode(', ') ?: null;
                     }
-                } catch (\Exception $e) { /* skip */ }
+                } catch (\Exception $e) { }
 
-                // Distribution — safe access
                 $dist = null;
                 $distOffices = null;
                 try {
@@ -1103,26 +1169,25 @@ class RegisterController extends Controller
                             ->pluck('offices.office_name')
                             ->implode(', ') ?: null;
                     }
-                } catch (\Exception $e) { /* skip */ }
+                } catch (\Exception $e) { }
 
-                // Source unit name
                 $sourceUnitName = null;
                 if ($drf && $drf->office_id) {
                     try {
                         $office = \App\Models\Office::find($drf->office_id);
                         $sourceUnitName = $office ? $office->office_name : null;
-                    } catch (\Exception $e) { /* skip */ }
+                    } catch (\Exception $e) { }
                 }
 
-                // Deadline diff
                 $deadlineDiff = null;
                 if ($ml && $ml->deadline && $ml->effectivity_date) {
                     $deadlineDiff = \Carbon\Carbon::parse($ml->effectivity_date)->diffInDays(\Carbon\Carbon::parse($ml->deadline));
                 }
 
                 return [
+                    'request_id'       => $doc->request_id,
                     'doc_no'           => $ml ? $ml->doc_no : 'N/A',
-                    'rev_no'           => $ml ? $ml->revise_no : '0',
+                    'rev_no'           => $ml ? (int) $ml->revise_no : 0,
                     'title'            => ($ml && $ml->doc_title) ? $ml->doc_title : (($drf && $drf->doc_title) ? $drf->doc_title : 'N/A'),
                     'effectivity'      => ($ml && $ml->effectivity_date) ? \Carbon\Carbon::parse($ml->effectivity_date)->format('M d, Y') : null,
                     'originator'       => $ml ? $ml->originator_name : null,
@@ -1162,24 +1227,51 @@ class RegisterController extends Controller
                 ];
             });
 
+            // ── Group by doc_no ──
+            $grouped = $allRows->groupBy('doc_no');
+
+            $groups = collect();
+            foreach ($grouped as $docNo => $rows) {
+                $sorted = $rows->sortByDesc('rev_no')->values();
+                $groups->push([
+                    'doc_no'          => $docNo,
+                    'parent'          => $sorted->first(),
+                    'children'        => $sorted->slice(1)->values(),
+                    'has_revisions'   => $sorted->count() > 1,
+                    'revision_count'  => $sorted->count(),
+                ]);
+            }
+
+            // Sort groups: most recently registered at the top
+            $groups = $groups->sortByDesc(function ($g) {
+                return $g['parent']['request_id'] ?? 0;
+            })->values();
+
+            // Paginate groups
+            $totalGroups = $groups->count();
+            $currentPage = max(1, (int) request('page', 1));
+            $lastPage = max(1, (int) ceil($totalGroups / $perPage));
+            $currentPage = min($currentPage, $lastPage);
+            $paginatedGroups = $groups->slice(($currentPage - 1) * $perPage, $perPage)->values();
+
             return response()->json([
-                'data' => $rows,
-                'total' => $documents->total(),
-                'current_page' => $documents->currentPage(),
-                'last_page' => $documents->lastPage(),
-                'per_page' => $documents->perPage(),
+                'data'         => $paginatedGroups,
+                'total'        => $totalGroups,
+                'current_page' => $currentPage,
+                'last_page'    => $lastPage,
+                'per_page'     => $perPage,
             ]);
 
         } catch (\Exception $e) {
             \Log::error('Database data error: ' . $e->getMessage());
             \Log::error($e->getTraceAsString());
             return response()->json([
-                'error' => $e->getMessage(),
-                'data' => [],
-                'total' => 0,
+                'error'        => $e->getMessage(),
+                'data'         => [],
+                'total'        => 0,
                 'current_page' => 1,
-                'last_page' => 1,
-                'per_page' => 20,
+                'last_page'    => 1,
+                'per_page'     => 20,
             ], 500);
         }
     }

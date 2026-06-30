@@ -504,9 +504,8 @@ body {
 /* ═══ MASTERLIST — Mid grid: 5 columns ═══ */
 .reg-ml-mid {
     display: grid;
-    grid-template-columns: 0.33fr 0.33fr 0.33fr 0.5fr 0.5fr;
+    grid-template-columns: 0.34fr 0.33fr 0.33fr 0.54fr 0.5fr;
     gap: 16px;
-    margin-bottom: 16px;
     overflow: visible;
 }
 
@@ -544,27 +543,12 @@ body {
     background: var(--reg-accent-subtle, #f0f0f0);
 }
 
-.reg-hint {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 0.72rem;
-    color: var(--reg-text-subtle);
-    font-weight: 400;
-    margin-top: -2px;
-}
-
-.reg-hint i {
-    font-size: 0.65rem;
-    color: var(--reg-accent);
-    opacity: 0.6;
-}
 /* ══════════════════════════════════════════════
    GRIDS
    ══════════════════════════════════════════════ */
 .reg-grid-2 {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1.02fr;
     gap: 16px;
     margin-bottom: 16px;
 }
@@ -592,7 +576,7 @@ body {
 
 .reg-grid-2-1 {
     display: grid;
-    grid-template-columns: 2fr 1fr;
+    grid-template-columns: 2.03fr 1fr;
     gap: 16px;
     margin-bottom: 16px;
 }
@@ -799,19 +783,30 @@ body {
     text-transform: uppercase;
     letter-spacing: 0.03em;
     white-space: nowrap;
+    border-right: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.reg-table thead th:last-child {
+    border-right: none;
 }
 
 .reg-table tbody td {
-    border-bottom: 1px solid var(--reg-border);
     padding: 0;
+    border: none;
+    border-right: 1px solid #5c5c5c;
+    border-bottom: 1px solid var(--reg-border);
+}
+
+.reg-table tbody td:last-child {
+    border-right: none;
+}
+
+.reg-table tbody tr:last-child td {
+    border-bottom: none;
 }
 
 .reg-table tbody tr {
     transition: background 0.15s ease;
-}
-
-.reg-table tbody tr:hover {
-    background: var(--reg-accent-subtle);
 }
 
 .reg-table tbody tr:last-child td {
@@ -833,7 +828,7 @@ body {
 }
 
 .reg-table tbody input:focus {
-    background: var(--reg-accent-subtle);
+    background: transparent;
 }
 
 .reg-table tbody input::placeholder {
@@ -859,7 +854,7 @@ body {
 }
 
 .reg-table tbody select:focus {
-    background-color: var(--reg-accent-subtle);
+    background-color: transparent;
 }
 
 .reg-table tbody input[type="file"] {
@@ -946,7 +941,7 @@ body {
     display: grid;
     grid-template-columns: 1fr auto;
     gap: 16px;
-    align-items: stretch;
+    align-items: start;
 }
 
 .reg-split-form-stack {
@@ -959,7 +954,7 @@ body {
 .reg-split-form-grid > .reg-field {
     display: flex;
     flex-direction: column;
-    justify-content: stretch;
+    justify-content: flex-start;
 }
 
 .reg-split-form-grid > .reg-field label {
@@ -968,14 +963,13 @@ body {
     color: var(--reg-text-muted);
     text-transform: uppercase;
     letter-spacing: 0.03em;
-    margin-bottom: 6px;
     white-space: nowrap;
 }
 
 .reg-split-form-grid > .reg-field input[readonly] {
     width: 150px;
     height: 100%;
-    min-height: 90px;
+    min-height: 118px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -988,6 +982,7 @@ body {
     border-radius: var(--reg-radius-sm);
     cursor: default;
 }
+
 
 /* ══════════════════════════════════════════════
    SEARCH — Office Dropdown

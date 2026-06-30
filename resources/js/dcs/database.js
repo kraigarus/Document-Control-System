@@ -219,56 +219,103 @@ document.addEventListener('DOMContentLoaded', () => {
     // ═══════════════════════════════════════════
     // Render rows
     // ═══════════════════════════════════════════
-    function renderRows(rows) {
+        // ═══════════════════════════════════════════
+    // Render grouped rows
+    // ═══════════════════════════════════════════
+    function renderRows(groups) {
         const offset = (currentPage - 1) * perPage;
 
-        const html = rows.map((r, i) => {
+        const html = groups.map((group, i) => {
             const itemNo = offset + i + 1;
-            return '<tr>' +
-                '<td>' + itemNo + '</td>' +
-                '<td>' + esc(r.doc_no) + '</td>' +
-                '<td>' + esc(r.rev_no) + '</td>' +
-                '<td title="' + esc(r.title) + '">' + esc(r.title) + '</td>' +
-                '<td>' + esc(r.effectivity) + '</td>' +
-                '<td>' + esc(r.originator) + '</td>' +
-                '<td style="text-align:center">' + esc(r.pages) + '</td>' +
-                '<td style="text-align:center">' + statusBadge(r.status) + '</td>' +
-                '<td style="text-align:center">' + pdfLink(r.pdf_path) + '</td>' +
-                '<td>' + esc(r.source_unit) + '</td>' +
-                groupCell('approval', r.approval_no) +
-                groupCell('approval', r.approval_date) +
-                groupCell('deadline', r.deadline_date) +
-                groupCell('deadline', r.deadline_diff) +
-                groupCell('masterlist', r.ml_receipt_date) +
-                groupCell('masterlist', r.ml_receipt_time) +
-                groupCell('masterlist', r.ml_register_date) +
-                groupCell('masterlist', r.ml_register_time) +
-                groupCell('dcn', r.dcn_no) +
-                groupCell('dcn', r.dcn_date) +
-                groupCell('dcn', r.dcn_receipt_date) +
-                groupCell('dcn', r.dcn_receipt_time) +
-                groupCell('dcn', r.dcn_purpose) +
-                groupCell('dcn', r.dcn_scan, true) +
-                groupCell('drf', r.drf_no) +
-                groupCell('drf', r.drf_date) +
-                groupCell('drf', r.drf_receipt_date) +
-                groupCell('drf', r.drf_receipt_time) +
-                groupCell('drf', r.drf_scan, true) +
-                groupCell('distribution', r.dist_onfile_date) +
-                groupCell('distribution', r.dist_onfile_time) +
-                groupCell('distribution', r.dist_actual_date) +
-                groupCell('distribution', r.dist_actual_time) +
-                groupCell('distribution', r.dist_offices) +
-                groupCell('distribution', r.dist_scan, true) +
-                groupCell('retrieval', r.ret_onfile) +
-                groupCell('retrieval', r.ret_actual) +
-                groupCell('retrieval', r.ret_offices) +
-                groupCell('retrieval', r.ret_scan, true) +
-            '</tr>';
+            const parent = group.parent;
+            const children = group.children || [];
+            const hasRevisions = group.has_revisions;
+            const groupId = 'rev-' + itemNo;
+
+            // Expand button for parent
+            let firstCell = '';
+            if (hasRevisions) {
+                firstCell = '<td><span class="db-expand-btn" data-target="' + groupId + '" title="Show ' + children.length + ' older revision(s)">▶</span>' + itemNo + '</td>';
+            } else {
+                firstCell = '<td>' + itemNo + '</td>';
+            }
+
+            // Parent row (latest revision)
+            let rows = '<tr class="db-parent-row">' + firstCell + rowCells(parent) + '</tr>';
+
+            // Child rows (older revisions, hidden by default)
+            children.forEach((child, ci) => {
+                rows += '<tr class="db-child-row" data-group="' + groupId + '" style="display:none">' +
+                    '<td class="db-child-ind">' +
+                        '<span class="db-child-dot"></span>' +
+                        itemNo + '.' + (ci + 1) +
+                    '</td>' +
+                    rowCells(child) +
+                '</tr>';
+            });
+
+            return rows;
         }).join('');
 
         tableBody.innerHTML = html;
+
+        // Attach expand/collapse handlers
+        document.querySelectorAll('.db-expand-btn').forEach(btn => {
+            btn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                const target = this.dataset.target;
+                const childRows = document.querySelectorAll('tr[data-group="' + target + '"]');
+                const expanded = this.classList.toggle('expanded');
+                this.textContent = expanded ? '▼' : '▶';
+                childRows.forEach(row => {
+                    row.style.display = expanded ? '' : 'none';
+                });
+            });
+        });
+
         requestAnimationFrame(updateHeaderHeights);
+    }
+
+    // Build cells for a single row (all columns except the first item-no cell)
+    function rowCells(r) {
+        return '<td>' + esc(r.doc_no) + '</td>' +
+            '<td>' + esc(r.rev_no) + '</td>' +
+            '<td title="' + esc(r.title) + '">' + esc(r.title) + '</td>' +
+            '<td>' + esc(r.effectivity) + '</td>' +
+            '<td>' + esc(r.originator) + '</td>' +
+            '<td style="text-align:center">' + esc(r.pages) + '</td>' +
+            '<td style="text-align:center">' + statusBadge(r.status) + '</td>' +
+            '<td style="text-align:center">' + pdfLink(r.pdf_path) + '</td>' +
+            '<td>' + esc(r.source_unit) + '</td>' +
+            groupCell('approval', r.approval_no) +
+            groupCell('approval', r.approval_date) +
+            groupCell('deadline', r.deadline_date) +
+            groupCell('deadline', r.deadline_diff) +
+            groupCell('masterlist', r.ml_receipt_date) +
+            groupCell('masterlist', r.ml_receipt_time) +
+            groupCell('masterlist', r.ml_register_date) +
+            groupCell('masterlist', r.ml_register_time) +
+            groupCell('dcn', r.dcn_no) +
+            groupCell('dcn', r.dcn_date) +
+            groupCell('dcn', r.dcn_receipt_date) +
+            groupCell('dcn', r.dcn_receipt_time) +
+            groupCell('dcn', r.dcn_purpose) +
+            groupCell('dcn', r.dcn_scan, true) +
+            groupCell('drf', r.drf_no) +
+            groupCell('drf', r.drf_date) +
+            groupCell('drf', r.drf_receipt_date) +
+            groupCell('drf', r.drf_receipt_time) +
+            groupCell('drf', r.drf_scan, true) +
+            groupCell('distribution', r.dist_onfile_date) +
+            groupCell('distribution', r.dist_onfile_time) +
+            groupCell('distribution', r.dist_actual_date) +
+            groupCell('distribution', r.dist_actual_time) +
+            groupCell('distribution', r.dist_offices) +
+            groupCell('distribution', r.dist_scan, true) +
+            groupCell('retrieval', r.ret_onfile) +
+            groupCell('retrieval', r.ret_actual) +
+            groupCell('retrieval', r.ret_offices) +
+            groupCell('retrieval', r.ret_scan, true);
     }
 
     function groupCell(group, value, isLink) {

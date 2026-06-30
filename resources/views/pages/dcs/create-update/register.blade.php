@@ -305,7 +305,6 @@
         <!-- ═══ SECTION 3 — MASTERLIST ═══ -->
         <section class="reg-card" id="section-3" style="display: none;">
             <div class="reg-card-header">
-                <i class="fa-solid fa-clipboard-list"></i>
                 <span>Masterlist Registration</span>
             </div>
             <div class="reg-card-body">
@@ -357,6 +356,7 @@
                     <div class="reg-field">
                         <label>Revision No.</label>
                         <input type="number" id="masterlistRevisionNo" name="masterlistRevisionNo" min="0" placeholder="0">
+                        <span id="docNoHint" style="display:block;margin-top:4px;font-size:12px;"></span>
                     </div>
                     <div class="reg-field">
                         <label>No. of Pages</label>
@@ -369,12 +369,11 @@
                     <div class="reg-field">
                         <label>Source Unit / Originator</label>
                         <input type="text" id="masterlistSourceUnit" name="masterlistSourceUnit"
-                            placeholder="Type office name(s)..."
+                            placeholder="Separate multiple with commas"
                             autocomplete="off"
                             oninput="handleSourceSearch(this, 'masterlistSourceResults')"
                             onfocus="handleSourceSearch(this, 'masterlistSourceResults')">
                         <div id="masterlistSourceResults" class="reg-source-suggestions" style="display:none;"></div>
-                        <span class="reg-hint"><i class="fa-solid fa-circle-info"></i> Separate multiple with commas</span>
                     </div>
                 </div>
 
