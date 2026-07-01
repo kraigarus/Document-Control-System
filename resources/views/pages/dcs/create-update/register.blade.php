@@ -60,6 +60,7 @@
 
     <form id="masterForm" enctype="multipart/form-data" method="POST" action="{{ route('register.store') }}" auto-complete="off">
         @csrf
+        <input type="hidden" id="registrationMode" name="registration_mode" value="new">
 
         <!-- ═══ TOP SELECTION PANEL ═══ -->
         <section class="reg-panel">

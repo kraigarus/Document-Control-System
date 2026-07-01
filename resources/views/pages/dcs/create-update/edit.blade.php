@@ -84,7 +84,7 @@
         @endif
 
         <!-- Form -->
-        <form id="masterForm" method="POST" action="{{ route('register.updateDocument', $docRequest->request_id) }}" enctype="multipart/form-data">
+        <form id="masterForm" method="POST" action="{{ route('register.updateDoc', $docRequest->request_id) }}" enctype="multipart/form-data">
             @csrf
             @method('PUT')
 

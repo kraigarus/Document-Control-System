@@ -6,7 +6,12 @@ let allDocTypes = [];
 const ALLOWED_EXTENSIONS = ['pdf', 'docx'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
+// ══════════════════════════════════════════════
+// DOM READY — single consolidated handler
+// ══════════════════════════════════════════════
 document.addEventListener("DOMContentLoaded", async function () {
+
+    // ── Fetch dropdown data ──
     try {
         const [offices, docTypes, versionTypes, approvalBodies] = await Promise.all([
             fetch("/api/offices").then(r => r.json()),
@@ -40,18 +45,15 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     initSelectProtection();
     initFileInputs();
-});
 
-document.addEventListener('DOMContentLoaded', () => {
+    // ── Lock revision field for new registrations ──
     const revField = document.getElementById('masterlistRevisionNo');
     if (revField) {
-        // Lock to 0
         revField.value = 0;
         revField.readOnly = true;
         revField.style.background = '#f1f5f9';
         revField.style.cursor = 'not-allowed';
 
-        // Prevent any manual override
         revField.addEventListener('input', () => {
             if (parseInt(revField.value) > 0) {
                 revField.value = 0;
@@ -59,29 +61,210 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // ── Version type change → apply revision mode ──
+    const versionTypeEl = document.getElementById('versionType');
+    if (versionTypeEl) {
+        versionTypeEl.addEventListener('change', () => {
+            applyRevisionMode();
+        });
+    }
+
+    // ── Document No. live lookup (both modes) ──
+    const docNoInput = document.getElementById('masterlistDocNo');
+    const hintEl = document.getElementById('docNoHint');
+    let docNoTimer = null;
+
+    if (docNoInput) {
+        docNoInput.addEventListener('input', () => {
+            clearTimeout(docNoTimer);
+            const docNo = docNoInput.value.trim();
+
+            // ── Empty field ──
+            if (!docNo) {
+                if (isRevisedMode()) {
+                    if (hintEl) {
+                        hintEl.innerHTML = '<span style="color:#94a3b8"><i class="fa-solid fa-circle-info"></i> Enter an existing document number to continue</span>';
+                        hintEl.style.color = '';
+                        hintEl.dataset.valid = '';
+                    }
+                    if (revField) {
+                        revField.value = '';
+                        revField.readOnly = false;
+                        revField.style.background = '';
+                        revField.style.cursor = '';
+                    }
+                    setSaveEnabled(false);
+                } else {
+                    // New mode — empty is fine, validation catches it on submit
+                    if (hintEl) {
+                        hintEl.innerHTML = '';
+                        hintEl.dataset.valid = '';
+                    }
+                    setSaveEnabled(true);
+                }
+                return;
+            }
+
+            // ── Show loading spinner ──
+            if (hintEl) {
+                hintEl.innerHTML = '<span style="color:#94a3b8"><i class="fa-solid fa-spinner fa-spin"></i> Checking document...</span>';
+                hintEl.style.color = '';
+                hintEl.dataset.valid = '';
+            }
+            if (isRevisedMode()) {
+                setSaveEnabled(false);
+            }
+
+            // ── Debounced fetch ──
+            docNoTimer = setTimeout(async () => {
+                try {
+                    const docTypeId = document.getElementById('docType').value;
+                    const url = '/register/check-docno?doc_no=' + encodeURIComponent(docNo) +
+                                (docTypeId ? '&doc_type_id=' + docTypeId : '');
+                    const res = await fetch(url);
+                    const data = await res.json();
+
+                    if (isRevisedMode()) {
+                        // ══════════════════════════════════
+                        // REVISED MODE — doc must EXIST
+                        // ══════════════════════════════════
+                        if (data.exists) {
+                            setSaveEnabled(true);
+
+                            if (revField) {
+                                revField.value = data.next_rev;
+                                revField.readOnly = true;
+                                revField.style.background = '#f0fdf4';
+                                revField.style.cursor = 'default';
+                            }
+
+                            const titleField = document.getElementById('masterlistDocTitle');
+                            if (titleField && data.latest_title && !titleField.value.trim()) {
+                                titleField.value = data.latest_title;
+                            }
+
+                            const originatorField = document.getElementById('masterlistSourceUnit');
+                            if (originatorField && data.latest_originator && !originatorField.value.trim()) {
+                                originatorField.value = data.latest_originator;
+                            }
+
+                            if (hintEl) {
+                                hintEl.innerHTML =
+                                    '<i class="fa-solid fa-circle-check"></i> ' +
+                                    data.message +
+                                    ' — Next revision: <strong>Rev ' + data.next_rev + '</strong>';
+                                hintEl.style.color = '#16a34a';
+                                hintEl.dataset.valid = 'true';
+                            }
+                        } else {
+                            setSaveEnabled(false);
+
+                            if (revField) {
+                                revField.value = '';
+                                revField.readOnly = false;
+                                revField.style.background = '';
+                                revField.style.cursor = '';
+                            }
+
+                            if (hintEl) {
+                                if (data.wrong_type) {
+                                    hintEl.innerHTML =
+                                        '<i class="fa-solid fa-triangle-exclamation"></i> ' +
+                                        data.message +
+                                        '<br><span style="font-weight:400;font-size:11px;">You cannot save until you enter a valid document number.</span>';
+                                    hintEl.style.color = '#d97706';
+                                    hintEl.dataset.valid = 'wrong_type';
+                                } else {
+                                    hintEl.innerHTML =
+                                        '<i class="fa-solid fa-circle-exclamation"></i> ' +
+                                        data.message +
+                                        '<br><span style="font-weight:400;font-size:11px;">You cannot save until you enter a valid document number.</span>';
+                                    hintEl.style.color = '#dc2626';
+                                    hintEl.dataset.valid = 'not_found';
+                                }
+                            }
+                        }
+
+                    } else {
+                        // ══════════════════════════════════
+                        // NEW MODE — doc must NOT EXIST
+                        // ══════════════════════════════════
+                        if (data.exists) {
+                            // Document already registered — BLOCK
+                            setSaveEnabled(false);
+
+                            if (revField) {
+                                revField.value = 0;
+                                revField.readOnly = true;
+                                revField.style.background = '#f1f5f9';
+                                revField.style.cursor = 'not-allowed';
+                            }
+
+                            if (hintEl) {
+                                hintEl.innerHTML =
+                                    '<i class="fa-solid fa-circle-exclamation"></i> ' +
+                                    'This document number is already registered under <strong>' +
+                                    (data.existing_type_name || 'this document type') +
+                                    '</strong>. Use <strong>Revised Registration</strong> to create a new revision.' +
+                                    '<br><span style="font-weight:400;font-size:11px;">You cannot save until you enter a unique document number.</span>';
+                                hintEl.style.color = '#dc2626';
+                                hintEl.dataset.valid = 'duplicate';
+                            }
+                        } else if (data.wrong_type) {
+                            // Doc exists under a DIFFERENT type — warn but allow
+                            setSaveEnabled(true);
+
+                            if (hintEl) {
+                                hintEl.innerHTML =
+                                    '<i class="fa-solid fa-triangle-exclamation"></i> ' +
+                                    data.message +
+                                    '<br><span style="font-weight:400;font-size:11px;">This number is registered under a different document type. You may continue.</span>';
+                                hintEl.style.color = '#d97706';
+                                hintEl.dataset.valid = 'different_type';
+                            }
+                        } else {
+                            // Doc does not exist — GOOD, allow save
+                            setSaveEnabled(true);
+
+                            if (hintEl) {
+                                hintEl.innerHTML =
+                                    '<i class="fa-solid fa-circle-check"></i> Document number is available.';
+                                hintEl.style.color = '#16a34a';
+                                hintEl.dataset.valid = 'available';
+                            }
+                        }
+                    }
+
+                } catch (e) {
+                    console.error('DocNo lookup failed:', e);
+                    // Don't lock the user out on network errors
+                    if (!isRevisedMode()) {
+                        setSaveEnabled(true);
+                    }
+                }
+            }, 500);
+        });
+    }
+
+    // ── Apply initial revision mode ──
+    applyRevisionMode();
 });
 
-// ═══════════════════════════════════════════
-// Revision number logic — depends on page
-// ═══════════════════════════════════════════
-// ═══════════════════════════════════════════
-// Revision number logic — depends on page
-// ═══════════════════════════════════════════
-const isRevisedPage = window.location.pathname.includes('/register/revised');
-const revField = document.getElementById('masterlistRevisionNo');
-const docNoInput = document.getElementById('masterlistDocNo');
-const hintEl = document.getElementById('docNoHint');
-let docNoTimer = null;
+
+// ══════════════════════════════════════════════
+// REVISION MODE HELPERS
+// ══════════════════════════════════════════════
 function isRevisedMode() {
-    const sel = document.getElementById('versionType');
-    if (!sel || sel.selectedIndex < 1) return false;
-    const text = sel.options[sel.selectedIndex].text.toLowerCase();
-    return text.includes('revised') || text.includes('revision') || text.includes('revise');
+    const hidden = document.getElementById('registrationMode');
+    return hidden && hidden.value === 'revised';
 }
 
 function applyRevisionMode() {
+    const revField = document.getElementById('masterlistRevisionNo');
+    const hintEl = document.getElementById('docNoHint');
+
     if (isRevisedMode()) {
-        // ── REVISED: unlock revision, enable auto-suggest ──
         if (revField) {
             revField.value = '';
             revField.readOnly = false;
@@ -89,120 +272,50 @@ function applyRevisionMode() {
             revField.style.cursor = '';
         }
         if (hintEl) {
-            hintEl.innerHTML = '<span style="color:#94a3b8"><i class="fa-solid fa-circle-info"></i> Enter an existing document number</span>';
+            hintEl.innerHTML = '<span style="color:#94a3b8"><i class="fa-solid fa-circle-info"></i> Enter an existing document number to continue</span>';
+            hintEl.style.color = '';
+            hintEl.dataset.valid = '';
         }
+        setSaveEnabled(true);
     } else {
-        // ── NEW: lock revision to 0 ──
         if (revField) {
             revField.value = 0;
             revField.readOnly = true;
             revField.style.background = '#f1f5f9';
             revField.style.cursor = 'not-allowed';
         }
-        if (hintEl) hintEl.innerHTML = '';
+        if (hintEl) {
+            hintEl.innerHTML = '';
+            hintEl.dataset.valid = '';
+        }
+        setSaveEnabled(true);
     }
 }
 
-// Listen for version type change
-document.getElementById('versionType').addEventListener('change', () => {
+function updateRegistrationMode() {
+    const sel = document.getElementById('versionType');
+    const hidden = document.getElementById('registrationMode');
+    if (!sel || !hidden) return;
+
+    const text = sel.options[sel.selectedIndex]?.text?.toLowerCase() || '';
+    if (text.includes('revised') || text.includes('revision') || text.includes('revise')) {
+        hidden.value = 'revised';
+    } else {
+        hidden.value = 'new';
+    }
     applyRevisionMode();
-});
-
-// Listen for doc no input (only active in revised mode)
-if (docNoInput) {
-    docNoInput.addEventListener('input', () => {
-        if (!isRevisedMode()) return;
-
-        clearTimeout(docNoTimer);
-        const docNo = docNoInput.value.trim();
-
-        if (!docNo) {
-            if (hintEl) {
-                hintEl.innerHTML = '<span style="color:#94a3b8"><i class="fa-solid fa-circle-info"></i> Enter an existing document number</span>';
-            }
-            if (revField) {
-                revField.value = '';
-                revField.readOnly = false;
-                revField.style.background = '';
-                revField.style.cursor = '';
-            }
-            return;
-        }
-
-        docNoTimer = setTimeout(async () => {
-        try {
-            const docTypeId = document.getElementById('docType').value;
-            const url = '/register/check-docno?doc_no=' + encodeURIComponent(docNo) +
-                        (docTypeId ? '&doc_type_id=' + docTypeId : '');
-            const res = await fetch(url);
-            const data = await res.json();
-
-            if (data.exists) {
-                // Doc found under same type — auto-fill
-                if (revField) {
-                    revField.value = data.next_rev;
-                    revField.readOnly = true;
-                    revField.style.background = '#f0fdf4';
-                    revField.style.cursor = 'default';
-                }
-
-                const titleField = document.getElementById('masterlistDocTitle');
-                if (titleField && data.latest_title && !titleField.value.trim()) {
-                    titleField.value = data.latest_title;
-                }
-
-                const originatorField = document.getElementById('masterlistSourceUnit');
-                if (originatorField && data.latest_originator && !originatorField.value.trim()) {
-                    originatorField.value = data.latest_originator;
-                }
-
-                if (hintEl) {
-                    hintEl.innerHTML =
-                        '<i class="fa-solid fa-circle-check"></i> ' +
-                        data.message +
-                        ' — Next revision: <strong>Rev ' + data.next_rev + '</strong>';
-                    hintEl.style.color = '#16a34a';
-                }
-            } else if (data.wrong_type) {
-                // Doc exists but wrong type — show warning
-                if (revField) {
-                    revField.value = '';
-                    revField.readOnly = false;
-                    revField.style.background = '';
-                    revField.style.cursor = '';
-                }
-
-                if (hintEl) {
-                    hintEl.innerHTML =
-                        '<i class="fa-solid fa-triangle-exclamation"></i> ' +
-                        data.message;
-                    hintEl.style.color = '#d97706';
-                }
-            } else {
-                // Doc doesn't exist at all
-                if (revField) {
-                    revField.value = '';
-                    revField.readOnly = false;
-                    revField.style.background = '';
-                    revField.style.cursor = '';
-                }
-
-                if (hintEl) {
-                    hintEl.innerHTML =
-                        '<i class="fa-solid fa-circle-exclamation"></i> ' +
-                        data.message;
-                    hintEl.style.color = '#dc2626';
-                }
-            }
-        } catch (e) {
-            console.error('DocNo lookup failed:', e);
-        }
-    }, 500);
-    });
 }
 
-// Apply on page load too
-applyRevisionMode();
+function setSaveEnabled(enabled) {
+    const saveBtn = document.querySelector('.reg-btn-save');
+    if (saveBtn) {
+        saveBtn.disabled = !enabled;
+        saveBtn.style.opacity = enabled ? '' : '0.5';
+        saveBtn.style.cursor = enabled ? '' : 'not-allowed';
+        saveBtn.style.pointerEvents = enabled ? '' : 'none';
+    }
+}
+
 
 // ══════════════════════════════════════════════
 // SOURCE UNIT — autocomplete for Masterlist
@@ -254,6 +367,7 @@ document.addEventListener("click", function (e) {
     const dd = document.getElementById("masterlistSourceResults");
     if (dd && !dd.parentElement.contains(e.target)) dd.style.display = "none";
 });
+
 
 // ══════════════════════════════════════════════
 // SELECT PROTECTION
@@ -578,7 +692,7 @@ async function handleVersionChange() {
             { checklist_id: 4, checklist_name: "Document Retrieval" },
             { checklist_id: 5, checklist_name: "Document Distribution" },
         ], true);
-        applyRevisionMode(); // ← add this
+        applyRevisionMode();
         return;
     }
 
@@ -590,7 +704,7 @@ async function handleVersionChange() {
         console.error("Failed to load checklists:", err);
     }
 
-    applyRevisionMode(); // ← add this
+    updateRegistrationMode();
 }
 
 
@@ -601,13 +715,145 @@ function handleDocTypeChange() {
     const docTypeSelect = document.getElementById("docType");
     const docTypeId = parseInt(docTypeSelect.value);
     const subTypeSelect = document.getElementById("subType");
+    const syllabiSection = document.getElementById("section-syllabi");
 
     subTypeSelect.innerHTML = '<option value="" selected disabled>Select sub-type</option>';
     subTypeSelect.disabled = true;
 
-    // ── Always hide syllabi when doc type changes ──
-    const syllabiSection = document.getElementById("section-syllabi");
     if (syllabiSection) syllabiSection.style.display = "none";
+
+    // Reset the doc no hint when doc type changes
+    const hintEl = document.getElementById('docNoHint');
+    if (hintEl) {
+        hintEl.innerHTML = '';
+        hintEl.style.color = '';
+        hintEl.dataset.valid = '';
+    }
+
+    ["section-1", "section-2", "section-3", "section-4", "section-5", "section-approval", "formActions"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.style.display = "none";
+            el.querySelectorAll('input[type="text"], input[type="number"], input[type="date"], input[type="time"], textarea').forEach(input => {
+                input.value = '';
+            });
+            el.querySelectorAll('select').forEach(sel => {
+                sel.selectedIndex = 0;
+            });
+            el.querySelectorAll('input[type="file"]').forEach(file => {
+                file.value = '';
+                const container = file.closest('.reg-upload');
+                if (container) {
+                    const icon = container.querySelector('i');
+                    const label = container.querySelector('span');
+                    if (icon) {
+                        icon.className = 'fa-solid fa-cloud-arrow-up';
+                        icon.style.color = '';
+                    }
+                    if (label) {
+                        label.textContent = 'Choose .pdf or .docx file';
+                        label.style.color = '';
+                        label.style.fontWeight = '';
+                    }
+                    container.classList.remove('reg-upload-success', 'reg-upload-error');
+                    container.style.borderColor = '';
+                    container.style.background = '';
+                    const removeBtn = container.querySelector('.reg-file-remove');
+                    if (removeBtn) removeBtn.remove();
+                    const errDiv = container.closest('.reg-field')?.querySelector('.reg-file-error');
+                    if (errDiv) errDiv.remove();
+                }
+            });
+            el.querySelectorAll('.reg-upload-cell').forEach(cell => {
+                const icon = cell.querySelector('i');
+                const label = cell.querySelector('span');
+                if (icon) {
+                    icon.className = 'fa-solid fa-cloud-arrow-up';
+                    icon.style.color = '';
+                }
+                if (label) {
+                    label.textContent = 'No file chosen';
+                    label.style.color = '';
+                    label.style.fontWeight = '';
+                }
+                cell.classList.remove('reg-upload-cell-success', 'reg-upload-cell-error');
+                cell.style.borderColor = '';
+                cell.style.background = '';
+            });
+        }
+    });
+
+    ['masterlistTimeSpentDisplay', 'retrievalTimeSpentDisplay', 'distributionTimeSpentDisplay'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.value = '--';
+            el.style.color = '';
+        }
+    });
+    ['masterlistTimeSpent', 'retrievalTimeSpent', 'distributionTimeSpent'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+
+    ['retrievalBody', 'distBody'].forEach(tbodyId => {
+        const tbody = document.getElementById(tbodyId);
+        if (tbody) {
+            tbody.innerHTML =
+                '<tr class="reg-empty-row">' +
+                    '<td colspan="3">' +
+                        '<div class="reg-empty-state">' +
+                            '<i class="fa-solid fa-building-circle-xmark"></i>' +
+                            '<span>No offices added yet</span>' +
+                        '</div>' +
+                    '</td>' +
+                '</tr>';
+        }
+    });
+    ['totalRetrievalCopies', 'totalDistCopies'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = '0';
+    });
+
+    const revisionBody = document.getElementById('revisionTableBody');
+    if (revisionBody) {
+        revisionBody.innerHTML =
+            '<tr>' +
+                '<td><input type="text" name="documentTitle[]" placeholder="Enter Document Title"></td>' +
+                '<td><input type="text" name="documentNo[]" placeholder="Enter Document No."></td>' +
+                '<td><input type="date" name="effectiveDate[]"></td>' +
+                '<td><input type="number" name="revisionNo[]" placeholder="0"></td>' +
+                '<td><input type="file" name="scannedCopy[]" accept=".pdf,.docx"></td>' +
+                '<td><input type="text" name="revisionPurpose[]" placeholder="Enter Purpose"></td>' +
+                '<td><button type="button" class="reg-row-del" onclick="this.closest(\'tr\').remove()"><i class="fa-solid fa-trash-can"></i></button></td>' +
+            '</tr>';
+        const fileInput = revisionBody.querySelector('input[type="file"]');
+        fileInput.dataset.bound = "true";
+        fileInput.addEventListener('change', function () { validateTableFile(this); });
+    }
+
+    const syllabiBody = document.getElementById('syllabiTableBody');
+    if (syllabiBody) {
+        syllabiBody.innerHTML =
+            '<tr>' +
+                '<td><input type="text" name="syllabiCourseName[]" placeholder="Enter course name"></td>' +
+                '<td><select name="syllabiAvailability[]"><option value="" disabled selected>Select</option><option value="available">Available</option><option value="not_available">Not Available</option></select></td>' +
+                '<td><input type="number" name="syllabiNoPages[]" min="0" placeholder="0"></td>' +
+                '<td><select name="syllabiDrfAvailability[]"><option value="" disabled selected>Select</option><option value="available">Available</option><option value="not_available">Not Available</option></select></td>' +
+                '<td><input type="text" name="syllabiDrfNo[]" placeholder="Enter Syllabi No."></td>' +
+                '<td><input type="date" name="syllabiDrfDate[]"></td>' +
+                '<td><input type="date" name="syllabiDrfReceived[]"></td>' +
+                '<td><label class="reg-upload-cell"><input type="file" name="syllabiScannedDrf[]" accept=".pdf,.docx"><i class="fa-solid fa-cloud-arrow-up"></i><span>No file chosen</span></label></td>' +
+                '<td><button type="button" class="reg-row-del" onclick="this.closest(\'tr\').remove()"><i class="fa-solid fa-trash-can"></i></button></td>' +
+            '</tr>';
+    }
+
+    disableApproval();
+    clearValidation();
+
+    if (!docTypeId) {
+        lockChecklist();
+        return;
+    }
 
     const children = allDocTypes.filter(d => d.parent_id === docTypeId);
 
@@ -890,7 +1136,6 @@ function validateForm() {
     clearValidation();
     const errors = [];
 
-    // ── Version & Doc Type first ──
     if (!document.getElementById("versionType").value) {
         errors.push({ field: "versionType", message: "Version Type is required." });
     }
@@ -898,7 +1143,6 @@ function validateForm() {
         errors.push({ field: "docType", message: "Document Type is required." });
     }
 
-    // If these are missing, stop here — no point checking sections
     if (errors.length > 0) return errors;
 
     const hasChildren = allDocTypes.some(d => d.parent_id == document.getElementById("docType").value);
@@ -907,14 +1151,13 @@ function validateForm() {
         return errors;
     }
 
-    // ── At least one checklist must be checked ──
     const checkedBoxes = document.querySelectorAll("#dynamicCheckboxes input[type='checkbox']:checked:not(:disabled)");
     if (checkedBoxes.length === 0) {
         errors.push({ field: "dynamicCheckboxes", message: "Please check at least one checklist to proceed.", type: "checklist" });
         return errors;
     }
 
-    // ── Section 1: DRF ──
+    // Section 1: DRF
     const section1 = document.getElementById("section-1");
     if (section1 && section1.style.display !== "none") {
         if (!document.getElementById("drfNo").value.trim()) errors.push({ field: "drfNo", message: "DRF No. is required." });
@@ -925,7 +1168,7 @@ function validateForm() {
         if (!document.getElementById("drfSourceUnit").value) errors.push({ field: "drfSourceUnit", message: "Source Unit is required." });
     }
 
-    // ── Section 2: DCN ──
+    // Section 2: DCN
     const section2 = document.getElementById("section-2");
     if (section2 && section2.style.display !== "none") {
         if (!document.getElementById("dcnNumber").value.trim()) errors.push({ field: "dcnNumber", message: "DCN No. is required." });
@@ -942,21 +1185,35 @@ function validateForm() {
         if (!hasRevision) errors.push({ field: "revisionTableBody", message: "At least one revision document is required.", type: "table" });
     }
 
-    // ── Section 3: Masterlist ──
+    // Section 3: Masterlist
     const section3 = document.getElementById("section-3");
     if (section3 && section3.style.display !== "none") {
         if (!document.getElementById("masterlistDocNo").value.trim()) errors.push({ field: "masterlistDocNo", message: "Document No. is required." });
         if (!document.getElementById("masterlistDocTitle").value.trim()) errors.push({ field: "masterlistDocTitle", message: "Document Title is required." });
-        if (!document.getElementById("masterlistSourceUnit").value.trim()) {
-            errors.push({ field: "masterlistSourceUnit", message: "Source Unit / Originator is required." });
+        if (!document.getElementById("deadlineOfSubmission").value) errors.push({ field: "deadlineOfSubmission", message: "Deadline of Submission is required." });
+        if (!document.getElementById("masterlistReceiptDate").value) errors.push({ field: "masterlistReceiptDate", message: "Document Receipt Date is required." });
+        if (!document.getElementById("masterlistReceiptTime").value) errors.push({ field: "masterlistReceiptTime", message: "Document Receipt Time is required." });
+        if (!document.getElementById("masterlistRegisteredDate").value) errors.push({ field: "masterlistRegisteredDate", message: "Document Registered Date is required." });
+        if (!document.getElementById("masterlistRegisteredTime").value) errors.push({ field: "masterlistRegisteredTime", message: "Document Registered Time is required." });
+        if (!document.getElementById("masterlistEffectivityDate").value) errors.push({ field: "masterlistEffectivityDate", message: "Effectivity Date is required." });
+
+        const revVal = document.getElementById("masterlistRevisionNo").value.trim();
+        if (revVal === '' || (revVal !== '0' && isNaN(parseInt(revVal)))) {
+            errors.push({ field: "masterlistRevisionNo", message: "Revision No. is required." });
         }
+
+        if (!document.getElementById("masterlistNoOfPages").value) errors.push({ field: "masterlistNoOfPages", message: "No. of Pages is required." });
+        if (!document.getElementById("masterlistInCharge").value.trim()) errors.push({ field: "masterlistInCharge", message: "In-charge is required." });
+        if (!document.getElementById("masterlistSourceUnit").value.trim()) errors.push({ field: "masterlistSourceUnit", message: "Source Unit / Originator is required." });
+        if (!document.getElementById("briefPurpose").value.trim()) errors.push({ field: "briefPurpose", message: "Brief Purpose is required." });
+
         const mlTimeDisplay = document.getElementById("masterlistTimeSpentDisplay");
         if (mlTimeDisplay.value === "Invalid") {
             errors.push({ field: "masterlistRegisteredDate", message: "Time is invalid. Document Registered must be after Document Receipt." });
         }
     }
 
-    // ── Section 4: Retrieval ──
+    // Section 4: Retrieval
     const section4 = document.getElementById("section-4");
     if (section4 && section4.style.display !== "none") {
         if (!document.getElementById("retrievalFormDate").value) errors.push({ field: "retrievalFormDate", message: "Retrieval Form Date is required." });
@@ -973,7 +1230,7 @@ function validateForm() {
         if (retOffices.length === 0) errors.push({ field: "retrievalSearch", message: "At least one retrieval office is required.", type: "search" });
     }
 
-    // ── Section 5: Distribution ──
+    // Section 5: Distribution
     const section5 = document.getElementById("section-5");
     if (section5 && section5.style.display !== "none") {
         if (!document.getElementById("distributionFormDate").value) errors.push({ field: "distributionFormDate", message: "Distribution Form Date is required." });
@@ -990,7 +1247,7 @@ function validateForm() {
         if (distOffices.length === 0) errors.push({ field: "distSearch", message: "At least one distribution office is required.", type: "search" });
     }
 
-    // ── Syllabi ──
+    // Syllabi
     const sectionSyllabi = document.getElementById("section-syllabi");
     if (sectionSyllabi && sectionSyllabi.style.display !== "none") {
         let hasSyllabi = false;
@@ -1086,6 +1343,34 @@ document.addEventListener("change", function (e) {
 // CONFIRM SAVE
 // ══════════════════════════════════════════════
 window.confirmSave = function () {
+    const hintEl = document.getElementById('docNoHint');
+    const hintState = hintEl ? (hintEl.dataset.valid || '') : '';
+
+    if (isRevisedMode()) {
+        // ── Revised mode: doc no must be found ──
+        const docNo = document.getElementById('masterlistDocNo').value.trim();
+        if (!docNo) {
+            clearValidation();
+            markFieldError('masterlistDocNo', 'Document No. is required. Enter a registered document number.');
+            scrollToField('masterlistDocNo');
+            return;
+        }
+        if (hintState === 'not_found' || hintState === 'wrong_type') {
+            clearValidation();
+            markFieldError('masterlistDocNo', 'This document cannot be revised. Check the Document No. and Document Type.');
+            scrollToField('masterlistDocNo');
+            return;
+        }
+    } else {
+        // ── New mode: doc no must NOT already be registered ──
+        if (hintState === 'duplicate') {
+            clearValidation();
+            markFieldError('masterlistDocNo', 'This document number is already registered. Use Revised Registration to create a new revision.');
+            scrollToField('masterlistDocNo');
+            return;
+        }
+    }
+
     const errors = validateForm();
 
     if (errors.length > 0) {
@@ -1332,7 +1617,9 @@ window.addRevisionRow = function () {
         <td><button type="button" class="reg-row-del" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash-can"></i></button></td>
     `;
     tbody.appendChild(tr);
-    tr.querySelector('input[type="file"]').addEventListener('change', function () { validateTableFile(this); });
+    const fileInput = tr.querySelector('input[type="file"]');
+    fileInput.dataset.bound = "true";
+    fileInput.addEventListener('change', function () { validateTableFile(this); });
 };
 
 
@@ -1377,6 +1664,7 @@ window.addSyllabiRow = function () {
 
     const fileInput = tr.querySelector('.reg-upload-cell input[type="file"]');
     const cell = tr.querySelector('.reg-upload-cell');
+    fileInput.dataset.bound = "true";
     fileInput.addEventListener('change', function () { processUploadCellFile(this, cell); });
 };
 

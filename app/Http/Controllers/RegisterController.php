@@ -30,30 +30,57 @@ class RegisterController extends Controller
         return view('pages.dcs.register-revised');
     }
 
-    // GET /register/update
-    public function update()
-    {
-        return view('pages.dcs.create-update.update');
-    }
-
     // POST /register
     public function store(Request $request)
     {
-        $request->validate([
-            'version_id'             => 'required|exists:version_type,version_id',
-            'doc_type_id'            => 'required|exists:doc_types,doc_type_id',
-            'approval_status'        => 'required|in:applicable,not_applicable',
-            'masterlistDocNo'        => 'nullable|string|max:255',
-            'masterlistRevisionNo'   => 'nullable|integer|min:0|max:0',
-        ], [
-            'masterlistRevisionNo.max' => 'A newly registered document must start at Revision 0.',
-            'masterlistRevisionNo.min' => 'Revision number cannot be negative.',
-        ]);
+         $mode = $request->input('registration_mode', 'new');
 
-        // Force revision to 0 for new documents (belt-and-suspenders)
-        if ($request->filled('masterlistRevisionNo') && (int) $request->masterlistRevisionNo > 0) {
-            return back()->withInput()
-                ->with('error', 'A newly registered document cannot have a revision number higher than 0. Use the Revised Registration page for revisions.');
+        if ($mode === 'revised') {
+            $docNo = $request->input('masterlistDocNo');
+            $docTypeId = $request->input('doc_type_id');
+
+            if (!$docNo) {
+                return back()->withInput()
+                    ->with('error', 'Document No. is required for revised registration.');
+            }
+
+            // Check if document exists under the SAME document type
+            $existing = MasterlistRegistration::where('doc_no', $docNo)
+                ->where('doc_type_id', $docTypeId)
+                ->orderByDesc('revise_no')
+                ->first();
+
+            if (!$existing) {
+                // Check if it exists under a different type
+                $existingAny = MasterlistRegistration::where('doc_no', $docNo)->first();
+
+                if (!$existingAny) {
+                    return back()->withInput()
+                        ->with('error', 'Document "' . $docNo . '" is not registered. You must register it as a New Document first before revising it.');
+                }
+
+                $type = \App\Models\DocType::find($existingAny->doc_type_id);
+                return back()->withInput()
+                    ->with('error', 'Document "' . $docNo . '" is registered under "' . ($type->doc_type_name ?? 'Unknown') . '", not the selected Document Type.');
+            }
+
+            // Validate revision number
+            $nextRev = (int) $existing->revise_no + 1;
+            if ((int) $request->input('masterlistRevisionNo') !== $nextRev) {
+                return back()->withInput()
+                    ->with('error', 'Revision number must be ' . $nextRev . '.');
+            }
+        }
+
+        // New document validation
+        if ($mode === 'new') {
+            $request->validate([
+                'doc_type_id'          => 'required|integer',
+                'approval_status'      => 'required|in:applicable,not_applicable',
+                'masterlistRevisionNo' => 'nullable|integer|min:0|max:0',
+            ], [
+                'masterlistRevisionNo.max' => 'A newly registered document must start at Revision 0.',
+            ]);
         }
 
         DB::beginTransaction();
@@ -352,41 +379,57 @@ class RegisterController extends Controller
             ]);
         }
 
+        // Check under the selected type (or all types if none selected)
         $query = MasterlistRegistration::where('doc_no', $docNo);
-
-        // Match by document type
         if ($docTypeId) {
             $query->where('doc_type_id', $docTypeId);
         }
-
         $registrations = $query->orderByDesc('revise_no')->get();
 
-        if ($registrations->isEmpty()) {
-            $message = 'This document number is not registered';
-            if ($docTypeId) {
-                $type = \App\Models\DocType::find($docTypeId);
-                $message .= ' under "' . ($type ? $type->doc_type_name : 'this document type') . '"';
-            }
-            $message .= '. Please register it as a New Document first.';
+        if ($registrations->isNotEmpty()) {
+            $latest = $registrations->first();
+            $latestRev = (int) $latest->revise_no;
 
             return response()->json([
-                'exists'   => false,
-                'message'  => $message,
-                'next_rev' => null,
+                'exists'            => true,
+                'message'           => 'Document found. Latest revision: ' . $latestRev,
+                'next_rev'          => $latestRev + 1,
+                'latest_rev'        => $latestRev,
+                'latest_title'      => $latest->doc_title,
+                'latest_originator' => $latest->originator_name,
+                'revision_count'    => $registrations->count(),
             ]);
         }
 
-        $latest = $registrations->first();
-        $latestRev = (int) $latest->revise_no;
+        // Not found under selected type — check if it exists under a DIFFERENT type
+        if ($docTypeId) {
+            $anyRegistration = MasterlistRegistration::where('doc_no', $docNo)->first();
+            if ($anyRegistration) {
+                $existingType = \App\Models\DocType::find($anyRegistration->doc_type_id);
+                return response()->json([
+                    'exists'             => false,
+                    'wrong_type'         => true,
+                    'existing_type_name' => $existingType ? $existingType->doc_type_name : 'Unknown',
+                    'message'            => 'Document "' . $docNo . '" is registered under "'
+                        . ($existingType ? $existingType->doc_type_name : 'Unknown')
+                        . '", not the selected Document Type.',
+                    'next_rev'           => null,
+                ]);
+            }
+        }
+
+        // Truly not registered anywhere
+        $message = 'This document number is not registered';
+        if ($docTypeId) {
+            $type = \App\Models\DocType::find($docTypeId);
+            $message .= ' under "' . ($type ? $type->doc_type_name : 'this document type') . '"';
+        }
+        $message .= '. Please register it as a New Document first.';
 
         return response()->json([
-            'exists'            => true,
-            'message'           => 'Document found. Latest revision: ' . $latestRev,
-            'next_rev'          => $latestRev + 1,
-            'latest_rev'        => $latestRev,
-            'latest_title'      => $latest->doc_title,
-            'latest_originator' => $latest->originator_name,
-            'revision_count'    => $registrations->count(),
+            'exists'   => false,
+            'message'  => $message,
+            'next_rev' => null,
         ]);
     }
     
@@ -395,7 +438,28 @@ class RegisterController extends Controller
     // ══════════════════════════════════════════════
     public function updateList(Request $request)
     {
+        // Get the request_id of the LATEST revision for each doc_no
+        $latestIds = DB::table('masterlist_registration as m1')
+            ->leftJoin('masterlist_registration as m2', function ($join) {
+                $join->on('m1.doc_no', '=', 'm2.doc_no')
+                    ->whereRaw('CAST(m1.revise_no AS UNSIGNED) < CAST(m2.revise_no AS UNSIGNED)');
+            })
+            ->whereNull('m2.request_id')
+            ->whereNotNull('m1.doc_no')
+            ->where('m1.doc_no', '!=', '')
+            ->pluck('m1.request_id');
+
+        // Documents that have NO masterlist at all
+        $noMlIds = DocumentRequest::whereDoesntHave('masterlistRegistration')
+            ->orWhereHas('masterlistRegistration', function ($q) {
+                $q->whereNull('doc_no')->orWhere('doc_no', '');
+            })
+            ->pluck('request_id');
+
+        $visibleIds = $latestIds->merge($noMlIds)->unique();
+
         $query = DocumentRequest::with(['docType', 'version'])
+            ->whereIn('request_id', $visibleIds)
             ->orderBy('request_id', 'desc');
 
         // Search
@@ -423,7 +487,6 @@ class RegisterController extends Controller
         }
 
         $documents = $query->paginate(10)->withQueryString();
-
         $docTypes = \App\Models\DocType::whereNull('parent_id')->get();
 
         return view('pages.dcs.create-update.update', compact('documents', 'docTypes'));
@@ -436,10 +499,21 @@ class RegisterController extends Controller
     {
         $docRequest = DocumentRequest::findOrFail($id);
 
+        // ── Guard: only the latest revision can be edited ──
+        $ml = MasterlistRegistration::where('request_id', $id)->first();
+        if ($ml && $ml->doc_no) {
+            $latestRev = MasterlistRegistration::where('doc_no', $ml->doc_no)->max('revise_no');
+            if ((int) $ml->revise_no < (int) $latestRev) {
+                return redirect()->route('register.update')
+                    ->with('error', "Only the latest revision (Rev {$latestRev}) can be edited. This document is Rev {$ml->revise_no}.");
+            }
+        }
+        // ── End guard ──
+
         $drf = DocumentRequestForm::where('request_id', $id)->first();
         $dcn = DocumentChangeNotice::where('request_id', $id)->first();
         $revisions = $dcn ? DocRevision::where('dcn_id', $dcn->dcn_id)->get() : collect();
-        $masterlist = MasterlistRegistration::where('request_id', $id)->first();
+        $masterlist = $ml; // reuse from guard above
         $retrieval = DocumentRetrieval::where('request_id', $id)->first();
         $retrievalOffices = $retrieval ? RetrievalOffice::where('retrieval_id', $retrieval->retrieval_id)->get() : collect();
         $distribution = DocumentDistribution::where('request_id', $id)->first();
@@ -447,17 +521,24 @@ class RegisterController extends Controller
         $approval = ApprovalRecord::where('request_id', $id)->first();
         $syllabi = Syllabi::where('request_id', $id)->get();
 
+        // Load dropdown data for the edit form
+        $offices = \App\Models\Office::orderBy('office_name')->get();
+        $docTypes = \App\Models\DocType::orderBy('doc_type_name')->get();
+        $versionTypes = \App\Models\VersionType::all();
+        $approvalBodies = \App\Models\ApprovalBody::all();
+
         return view('pages.dcs.create-update.edit', compact(
             'docRequest', 'drf', 'dcn', 'revisions', 'masterlist',
             'retrieval', 'retrievalOffices', 'distribution',
-            'distributionOffices', 'approval', 'syllabi'
+            'distributionOffices', 'approval', 'syllabi',
+            'offices', 'docTypes', 'versionTypes', 'approvalBodies'
         ));
     }
 
     // ══════════════════════════════════════════════
     // UPDATE — Save changes
     // ══════════════════════════════════════════════
-    public function updateDocument(Request $request, $id)
+    public function updateDoc(Request $request, $id)
     {
         DB::beginTransaction();
         $uploadedFiles = [];
@@ -811,10 +892,22 @@ class RegisterController extends Controller
     // ══════════════════════════════════════════════
     public function destroy($id)
     {
+        $docRequest = DocumentRequest::findOrFail($id);
+
+        // ── Guard: only the latest revision can be deleted ──
+        $ml = MasterlistRegistration::where('request_id', $id)->first();
+        if ($ml && $ml->doc_no) {
+            $latestRev = MasterlistRegistration::where('doc_no', $ml->doc_no)->max('revise_no');
+            if ((int) $ml->revise_no < (int) $latestRev) {
+                return redirect()->route('register.update')
+                    ->with('error', "Only the latest revision (Rev {$latestRev}) can be deleted. This document is Rev {$ml->revise_no}.");
+            }
+        }
+        // ── End guard ──
+
         DB::beginTransaction();
 
         try {
-            $docRequest = DocumentRequest::findOrFail($id);
             $requestId = $docRequest->request_id;
 
             // Delete related records
@@ -869,7 +962,31 @@ class RegisterController extends Controller
         }
     }
 
-        // ══════════════════════════════════════════════
+    // ══════════════════════════════════════════════
+    // HISTORY — Read-only timeline of all revisions
+    // ══════════════════════════════════════════════
+    public function history($docNo)
+    {
+        $revisions = DocumentRequest::whereHas('masterlistRegistration', function ($q) use ($docNo) {
+            $q->where('doc_no', $docNo);
+        })
+        ->with(['docType', 'masterlistRegistration', 'documentRequestForm', 'documentChangeNotice'])
+        ->get()
+        ->sortByDesc(function ($doc) {
+            return $doc->masterlistRegistration->revise_no ?? 0;
+        })
+        ->values();
+
+        if ($revisions->isEmpty()) {
+            abort(404, 'Document not found.');
+        }
+
+        $docTitle = $revisions->first()->masterlistRegistration->doc_title ?? $docNo;
+
+        return view('pages.dcs.create-update.history', compact('revisions', 'docNo', 'docTitle'));
+    }
+
+    // ══════════════════════════════════════════════
     // GENERATE REPORTS
     // ══════════════════════════════════════════════
 

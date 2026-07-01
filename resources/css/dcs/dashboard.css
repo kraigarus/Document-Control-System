@@ -706,8 +706,6 @@ body {
     position: fixed;
     inset: 0;
     background: rgba(12, 18, 33, 0.35);
-    backdrop-filter: blur(1px);
-    -webkit-backdrop-filter: blur(1px);
     display: none;
     align-items: center;
     justify-content: center;

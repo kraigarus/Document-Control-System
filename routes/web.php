@@ -104,11 +104,13 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::post('/register', [RegisterController::class, 'store'])->name('register.store');
     Route::get('/register/revised', [RegisterController::class, 'revised'])->name('register.revised');
 
-    // Update
+
+    //update
     Route::get('/register/update', [RegisterController::class, 'updateList'])->name('register.update');
-    Route::get('/register/{id}/edit', [RegisterController::class, 'edit'])->name('register.edit');
-    Route::put('/register/{id}', [RegisterController::class, 'updateDocument'])->name('register.updateDocument');
-    Route::delete('/register/{id}', [RegisterController::class, 'destroy'])->name('register.destroy');
+    Route::get('/register/{id}/edit',       [RegisterController::class, 'edit'])->name('register.edit');
+    Route::put('/register/{id}',            [RegisterController::class, 'updateDoc'])->name('register.updateDoc');
+    Route::delete('/register/{id}',         [RegisterController::class, 'destroy'])->name('register.destroy');
+    Route::get('/register/history/{docNo}', [RegisterController::class, 'history'])->name('register.history');
 });
 
 
