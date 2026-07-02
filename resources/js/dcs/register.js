@@ -1383,6 +1383,45 @@ window.confirmSave = function () {
     const reviewContent = document.getElementById("reviewContent");
     reviewContent.innerHTML = "";
 
+    // Syllabi
+    const ss = document.getElementById("section-syllabi");
+    if (ss && ss.style.display !== "none") {
+        document.querySelectorAll("#syllabiTableBody tr").forEach((r, i) => {
+            const course = r.querySelector('input[name="syllabiCourseName[]"]');
+            if (!course || !course.value.trim()) return;
+
+            const avail = r.querySelector('select[name="syllabiAvailability[]"]');
+            const pages = r.querySelector('input[name="syllabiNoPages[]"]');
+            const drfAvail = r.querySelector('select[name="syllabiDrfAvailability[]"]');
+            const drfNo = r.querySelector('input[name="syllabiDrfNo[]"]');
+            const drfDate = r.querySelector('input[name="syllabiDrfDate[]"]');
+            const drfReceived = r.querySelector('input[name="syllabiDrfReceived[]"]');
+            const fileInput = r.querySelector('input[name="syllabiScannedDrf[]"]');
+
+            const fmtDate = (val) => {
+                if (!val) return "";
+                const d = new Date(val + "T00:00:00");
+                if (isNaN(d.getTime())) return val;
+                return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+            };
+
+            const selText = (sel) => {
+                if (!sel || sel.selectedIndex <= 0) return "";
+                return sel.options[sel.selectedIndex].text;
+            };
+
+            addReviewSection(reviewContent, "Syllabi — " + course.value.trim(), [
+                { label: "Availability", value: selText(avail) },
+                { label: "No. of Pages", value: pages?.value || "" },
+                { label: "DRF Availability", value: selText(drfAvail) },
+                { label: "DRF No.", value: drfNo?.value?.trim() || "" },
+                { label: "DRF Date", value: fmtDate(drfDate?.value) },
+                { label: "DRF Received", value: fmtDate(drfReceived?.value) },
+                { label: "Scanned DRF", value: fileInput?.files?.length > 0 ? fileInput.files[0].name : null, isFile: true },
+            ]);
+        });
+    }
+    
     // DRF
     const s1 = document.getElementById("section-1");
     if (s1 && s1.style.display !== "none") {
@@ -1476,17 +1515,6 @@ window.confirmSave = function () {
         ]);
         const off = getOfficeList("distBody");
         if (off.length) addReviewList(reviewContent, "Receiving Offices (Distribution)", off);
-    }
-
-    // Syllabi
-    const ss = document.getElementById("section-syllabi");
-    if (ss && ss.style.display !== "none") {
-        const list = [];
-        document.querySelectorAll("#syllabiTableBody tr").forEach((r, i) => {
-            const c = r.querySelector('input[name="syllabiCourseName[]"]');
-            if (c && c.value.trim()) list.push("Row " + (i + 1) + ": " + c.value);
-        });
-        if (list.length) addReviewList(reviewContent, "Syllabi", list);
     }
 
     if (!reviewContent.children.length) {

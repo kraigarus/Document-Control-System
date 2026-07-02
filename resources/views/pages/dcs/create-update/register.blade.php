@@ -172,7 +172,7 @@
                         </tbody>
                     </table>
                 </div>
-                <button type="button" class="reg-add-row" onclick="addSyllabiRow()">
+                <button type="button" id="btnAddSyllabiRow" onclick="addSyllabiRow()">
                     <i class="fa-solid fa-plus"></i> Add Row
                 </button>
             </div>
@@ -296,7 +296,7 @@
                             </tbody>
                         </table>
                     </div>
-                    <button type="button" id="addRevisionRow" class="reg-add-row" onclick="addRevisionRow()">
+                    <button type="button" id="btnAddRevisionRow" onclick="addRevisionRow()">
                         <i class="fa-solid fa-plus"></i> Add Row
                     </button>
                 </div>

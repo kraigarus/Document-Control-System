@@ -1,4 +1,8 @@
-* { margin: 0; padding: 0; box-sizing: border-box; }
+* { margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: Arial, Helvetica, sans-serif;
+}
 
 :root {
     --hst-accent: #000080;
@@ -21,7 +25,6 @@ body {
     flex-direction: column;
     height: 100vh;
     background: var(--hst-bg);
-    font-family: 'DM Sans', Arial, sans-serif;
 }
 
 .hst-container {
@@ -45,7 +48,7 @@ body {
 .hst-title { font-size: 1.6rem; font-weight: 800; color: var(--hst-text); letter-spacing: -0.02em; }
 .hst-subtitle { font-size: 0.85rem; color: var(--hst-text-muted); margin-top: 4px; }
 .hst-doc-no {
-    font-family: 'JetBrains Mono', monospace; font-weight: 600;
+    font-weight: 600;
     color: var(--hst-accent); background: var(--hst-accent-subtle);
     padding: 2px 8px; border-radius: 4px; font-size: 0.82rem;
 }
@@ -92,7 +95,7 @@ body {
 .hst-node-current .hst-card-header { background: var(--hst-success-bg); }
 
 .hst-rev-badge {
-    font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; font-weight: 700;
+    font-size: 0.82rem; font-weight: 700;
     color: var(--hst-accent); background: var(--hst-accent-subtle);
     padding: 3px 10px; border-radius: 6px;
 }
@@ -120,7 +123,7 @@ body {
 .hst-tags { display: flex; gap: 6px; flex-wrap: wrap; }
 .hst-tag {
     display: inline-block; padding: 2px 8px; border-radius: 4px;
-    font-size: 0.7rem; font-weight: 600; font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem; font-weight: 600;
     background: var(--hst-success-bg); color: #166534;
 }
 

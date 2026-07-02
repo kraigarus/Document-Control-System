@@ -68,6 +68,8 @@ Route::middleware('auth')->group(function () {
             'logbooksCount' => $logbooksCount,
         ]);
     });
+
+    Route::get('/api/registered-documents', [RegisterController::class, 'getRegisteredDocuments']);
 });
 
 // Reports
@@ -106,6 +108,8 @@ Route::middleware(['auth', 'active'])->group(function () {
 
 
     //update
+    Route::get('/register/update', [UpdateController::class, 'update'])->name('register.update');
+    Route::get('/register/update/data', [RegisterController::class, 'updateData'])->name('register.update.data');
     Route::get('/register/update', [RegisterController::class, 'updateList'])->name('register.update');
     Route::get('/register/{id}/edit',       [RegisterController::class, 'edit'])->name('register.edit');
     Route::put('/register/{id}',            [RegisterController::class, 'updateDoc'])->name('register.updateDoc');

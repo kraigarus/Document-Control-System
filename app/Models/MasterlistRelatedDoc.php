@@ -4,9 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class RelatedDocument extends Model
+class MasterlistRelatedDoc extends Model
 {
-    protected $table = 'related_documents';
+    protected $table = 'masterlist_related_docs';
     public $timestamps = false;
 
     protected $fillable = [

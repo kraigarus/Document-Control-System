@@ -29,6 +29,9 @@ export default defineConfig({
                 'resources/css/dcs/edit.css',
                 'resources/js/dcs/edit.js',
 
+                'resources/css/dcs/history.css',
+                'resources/js/dcs/history.js',
+
                 'resources/css/dcs/reports.css',
                 'resources/js/dcs/reports.js',
                 'resources/js/dcs/masterlist-report.js',
