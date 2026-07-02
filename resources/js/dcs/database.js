@@ -41,11 +41,18 @@ document.addEventListener('DOMContentLoaded', () => {
         groupState[group] = !groupState[group];
         const expanded = groupState[group];
 
+        // 1. Toggle header summary column (visible when collapsed)
         const summary = document.querySelector('.col-group-summary[data-group="' + group + '"]');
         if (summary) summary.style.display = expanded ? 'none' : '';
 
+        // 2. Toggle all expanded columns (header th + body td)
         document.querySelectorAll('.col-group-' + group).forEach(cell => {
             cell.style.display = expanded ? '' : 'none';
+        });
+
+        // 3. Toggle body summary cells (visible when collapsed, hidden when expanded)
+        document.querySelectorAll('.col-group-summary-' + group).forEach(cell => {
+            cell.style.display = expanded ? 'none' : '';
         });
 
         requestAnimationFrame(updateHeaderHeights);
@@ -152,10 +159,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // ═══════════════════════════════════════════
     // Load data
     // ═══════════════════════════════════════════
-        async function loadData() {
+    async function loadData() {
         document.querySelector('.db-table-scroll').style.display = '';
         emptyState.style.display = 'none';
-        tableBody.innerHTML = '<tr><td colspan="39" style="text-align:center;padding:40px;color:#94a3b8;">Loading documents...</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="46" style="text-align:center;padding:40px;color:#94a3b8;">Loading documents...</td></tr>';
 
         try {
             const params = buildParams();
@@ -187,7 +194,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // Show table, hide empty
             document.querySelector('.db-table-scroll').style.display = '';
             emptyState.style.display = 'none';
             renderRows(json.data);
@@ -217,9 +223,42 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ═══════════════════════════════════════════
-    // Render rows
+    // Check if a row has any data for a group
     // ═══════════════════════════════════════════
-        // ═══════════════════════════════════════════
+    function hasGroupData(r, group) {
+        switch (group) {
+            case 'approval':
+                return !!(r.approval_no || r.approval_date);
+            case 'deadline':
+                return !!(r.deadline_date || r.deadline_diff);
+            case 'masterlist':
+                return !!(r.ml_receipt_date || r.ml_receipt_time || r.ml_register_date || r.ml_register_time);
+            case 'dcn':
+                return !!(r.dcn_no || r.dcn_date || r.dcn_receipt_date || r.dcn_receipt_time || r.dcn_purpose || r.dcn_scan);
+            case 'drf':
+                return !!(r.drf_no || r.drf_date || r.drf_receipt_date || r.drf_receipt_time || r.drf_scan);
+            case 'distribution':
+                return !!(r.dist_onfile_date || r.dist_onfile_time || r.dist_actual_date || r.dist_actual_time || r.dist_offices || r.dist_scan);
+            case 'retrieval':
+                return !!(r.ret_onfile || r.ret_actual || r.ret_offices || r.ret_scan);
+            default:
+                return false;
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    // Build summary cell for body row
+    // ═══════════════════════════════════════════
+    function summaryCell(group, r) {
+        const hidden = groupState[group] ? ' style="display:none"' : '';
+        const hasData = hasGroupData(r, group);
+        const icon = hasData
+            ? '<span class="db-summary-check">\u2713</span>'
+            : '<span class="db-summary-x">\u2717</span>';
+        return '<td class="col-group-summary-body col-group-summary-' + group + ' col-bg-' + group + '"' + hidden + '>' + icon + '</td>';
+    }
+
+    // ═══════════════════════════════════════════
     // Render grouped rows
     // ═══════════════════════════════════════════
     function renderRows(groups) {
@@ -232,18 +271,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const hasRevisions = group.has_revisions;
             const groupId = 'rev-' + itemNo;
 
-            // Expand button for parent
             let firstCell = '';
             if (hasRevisions) {
-                firstCell = '<td><span class="db-expand-btn" data-target="' + groupId + '" title="Show ' + children.length + ' older revision(s)">▶</span>' + itemNo + '</td>';
+                firstCell = '<td><span class="db-expand-btn" data-target="' + groupId + '" title="Show ' + children.length + ' older revision(s)">\u25B6</span>' + itemNo + '</td>';
             } else {
                 firstCell = '<td>' + itemNo + '</td>';
             }
 
-            // Parent row (latest revision)
             let rows = '<tr class="db-parent-row">' + firstCell + rowCells(parent) + '</tr>';
 
-            // Child rows (older revisions, hidden by default)
             children.forEach((child, ci) => {
                 rows += '<tr class="db-child-row" data-group="' + groupId + '" style="display:none">' +
                     '<td class="db-child-ind">' +
@@ -259,14 +295,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         tableBody.innerHTML = html;
 
-        // Attach expand/collapse handlers
         document.querySelectorAll('.db-expand-btn').forEach(btn => {
             btn.addEventListener('click', function (e) {
                 e.stopPropagation();
                 const target = this.dataset.target;
                 const childRows = document.querySelectorAll('tr[data-group="' + target + '"]');
                 const expanded = this.classList.toggle('expanded');
-                this.textContent = expanded ? '▼' : '▶';
+                this.textContent = expanded ? '\u25BC' : '\u25B6';
                 childRows.forEach(row => {
                     row.style.display = expanded ? '' : 'none';
                 });
@@ -287,31 +322,45 @@ document.addEventListener('DOMContentLoaded', () => {
             '<td style="text-align:center">' + statusBadge(r.status) + '</td>' +
             '<td style="text-align:center">' + pdfLink(r.pdf_path) + '</td>' +
             '<td>' + esc(r.source_unit) + '</td>' +
+            // ── Approval ──
+            summaryCell('approval', r) +
             groupCell('approval', r.approval_no) +
             groupCell('approval', r.approval_date) +
+            // ── Deadline ──
+            summaryCell('deadline', r) +
             groupCell('deadline', r.deadline_date) +
             groupCell('deadline', r.deadline_diff) +
+            // ── Masterlist ──
+            summaryCell('masterlist', r) +
             groupCell('masterlist', r.ml_receipt_date) +
             groupCell('masterlist', r.ml_receipt_time) +
             groupCell('masterlist', r.ml_register_date) +
             groupCell('masterlist', r.ml_register_time) +
+            // ── DCN ──
+            summaryCell('dcn', r) +
             groupCell('dcn', r.dcn_no) +
             groupCell('dcn', r.dcn_date) +
             groupCell('dcn', r.dcn_receipt_date) +
             groupCell('dcn', r.dcn_receipt_time) +
             groupCell('dcn', r.dcn_purpose) +
             groupCell('dcn', r.dcn_scan, true) +
+            // ── DRF ──
+            summaryCell('drf', r) +
             groupCell('drf', r.drf_no) +
             groupCell('drf', r.drf_date) +
             groupCell('drf', r.drf_receipt_date) +
             groupCell('drf', r.drf_receipt_time) +
             groupCell('drf', r.drf_scan, true) +
+            // ── Distribution ──
+            summaryCell('distribution', r) +
             groupCell('distribution', r.dist_onfile_date) +
             groupCell('distribution', r.dist_onfile_time) +
             groupCell('distribution', r.dist_actual_date) +
             groupCell('distribution', r.dist_actual_time) +
             groupCell('distribution', r.dist_offices) +
             groupCell('distribution', r.dist_scan, true) +
+            // ── Retrieval ──
+            summaryCell('retrieval', r) +
             groupCell('retrieval', r.ret_onfile) +
             groupCell('retrieval', r.ret_actual) +
             groupCell('retrieval', r.ret_offices) +
@@ -321,7 +370,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function groupCell(group, value, isLink) {
         const hidden = groupState[group] ? '' : ' style="display:none"';
         if (!value || value === 'N/A') {
-            return '<td class="col-group-' + group + ' col-bg-' + group + '"' + hidden + '><span class="db-na">—</span></td>';
+            return '<td class="col-group-' + group + ' col-bg-' + group + '"' + hidden + '><span class="db-na">\u2014</span></td>';
         }
         if (isLink) {
             return '<td class="col-group-' + group + ' col-bg-' + group + '"' + hidden + '>' +
@@ -329,7 +378,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         return '<td class="col-group-' + group + ' col-bg-' + group + '"' + hidden + '>' + esc(value) + '</td>';
     }
-    
+
     function statusBadge(status) {
         const s = (status || 'active').toLowerCase();
         let cls = 'db-status-active';
@@ -339,7 +388,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function pdfLink(path) {
-        if (!path) return '<span class="db-na">—</span>';
+        if (!path) return '<span class="db-na">\u2014</span>';
         return '<a href="' + esc(path) + '" class="db-pdf-link" target="_blank" rel="noopener" title="View PDF">' +
             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
             '<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>' +
@@ -362,7 +411,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const from = total === 0 ? 0 : (currentPage - 1) * perPage + 1;
         const to = Math.min(currentPage * perPage, total);
 
-        pageInfo.innerHTML = 'Showing <strong>' + from + '–' + to + '</strong> of <strong>' + total + '</strong> documents';
+        pageInfo.innerHTML = 'Showing <strong>' + from + '\u2013' + to + '</strong> of <strong>' + total + '</strong> documents';
 
         let btns = '<button class="db-pg" ' + (currentPage <= 1 ? 'disabled' : '') + ' data-page="' + (currentPage - 1) + '">&laquo;</button>';
 
@@ -400,20 +449,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // ═══════════════════════════════════════════
     const sideNav = document.getElementById('sideNav');
     const dbPage = document.querySelector('.db-page');
-    if (sideNav && dbPage) {
-        const obs = new MutationObserver(() => {
-            dbPage.style.left = sideNav.classList.contains('collapsed') ? '68px' : '280px';
-        });
-        obs.observe(sideNav, { attributes: true, attributeFilter: ['class'] });
-        if (sideNav.classList.contains('collapsed')) {
-            dbPage.style.left = '68px';
-        }
-    }
 
     function updateSidebarOffset() {
+        if (!sideNav || !dbPage) return;
         const collapsed = sideNav.classList.contains('collapsed');
-        const left = collapsed ? '68px' : '280px';
-        if (dbPage) dbPage.style.left = left;
+        dbPage.style.left = collapsed ? '68px' : '280px';
     }
 
     if (sideNav) {

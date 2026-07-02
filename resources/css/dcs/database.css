@@ -320,6 +320,41 @@
 }
 .db-table td:last-child { border-right: none; }
 
+/* ── Summary body cells (collapsed column indicator) ── */
+td.col-group-summary-body {
+    text-align: center;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 8px 6px;
+    white-space: nowrap;
+}
+
+.db-summary-check {
+    color: var(--db-green);
+    font-weight: 800;
+    font-size: 15px;
+}
+
+.db-summary-x {
+    color: var(--db-text-muted);
+    font-weight: 400;
+    font-size: 13px;
+}
+
+/* Child row summary cells (slightly faded) */
+.db-child-row td.col-group-summary-body {
+    opacity: 0.55;
+}
+.db-table tbody tr.db-child-row:hover td.col-group-summary-body {
+    opacity: 0.8;
+}
+
+/* Header summary column always keeps space */
+.col-group-summary {
+    min-width: 65px;
+    white-space: nowrap;
+}
+
 .db-table tbody tr:hover td { background-color: #f8fafc !important; }
 
 /* ── STICKY BODY CELLS ── */

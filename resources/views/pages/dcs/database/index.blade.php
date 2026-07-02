@@ -114,33 +114,47 @@
                     <col style="width:100px">
                     <col style="width:80px">
                     <col style="width:170px">
+                    <!-- APPROVAL: summary + 2 expanded -->
+                    <col style="width:70px">
                     <col style="width:100px">
                     <col style="width:130px">
+                    <!-- DEADLINE: summary + 2 expanded -->
+                    <col style="width:70px">
                     <col style="width:130px">
                     <col style="width:100px">
+                    <!-- MASTERLIST: summary + 4 expanded -->
+                    <col style="width:70px">
                     <col style="width:120px">
                     <col style="width:100px">
                     <col style="width:120px">
                     <col style="width:100px">
+                    <!-- DCN: summary + 6 expanded -->
+                    <col style="width:70px">
                     <col style="width:140px">
                     <col style="width:120px">
                     <col style="width:120px">
                     <col style="width:100px">
                     <col style="width:170px">
                     <col style="width:120px">
+                    <!-- DRF: summary + 5 expanded -->
+                    <col style="width:70px">
                     <col style="width:140px">
                     <col style="width:120px">
                     <col style="width:120px">
                     <col style="width:100px">
                     <col style="width:120px">
+                    <!-- DISTRIBUTION: summary + 6 expanded -->
+                    <col style="width:70px">
                     <col style="width:120px">
                     <col style="width:100px">
                     <col style="width:120px">
+                    <col style="width:120px">
                     <col style="width:100px">
-                    <col style="width:170px">
-                    <col style="width:130px">
                     <col style="width:120px">
+                    <!-- RETRIEVAL: summary + 4 expanded -->
+                    <col style="width:70px">
                     <col style="width:120px">
+                    <col style="width:100px">
                     <col style="width:170px">
                     <col style="width:130px">
                 </colgroup>
