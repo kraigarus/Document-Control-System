@@ -8,21 +8,23 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
-    @vite(['resources/css/dcs/history.css', 'resources/js/dcs/history.js'])
+    @vite(['resources/css/dcs/history.css', 'resources/css/dcs/register.css', 'resources/js/dcs/history.js'])
     @include('partials.header')
     @include('partials.sidebar')
     @include('partials.inactivity-modal')
 
     <div class="hst-container">
-        <div class="hst-header">
-            <a href="{{ route('register.update') }}" class="hst-back">
+        <div class="reg-header">
+            <div>
+                <div class="reg-breadcrumb">Document Control System / Update / History</div>
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <div class="reg-title">{{ $docTitle }}</div>
+                    <span class="hst-badge"><i class="fa-solid fa-clock-rotate-left"></i> {{ $revisions->count() }} {{ Str::plural('revision', $revisions->count()) }}</span>
+                </div>
+            </div>
+            <a href="{{ route('register.update') }}" class="reg-btn reg-btn-cancel">
                 <i class="fa-solid fa-arrow-left"></i> Back to Documents
             </a>
-            <div class="hst-title">{{ $docTitle }}</div>
-            <div class="hst-subtitle">
-                Document No: <span class="hst-doc-no">{{ $docNo }}</span>
-                &middot; {{ $revisions->count() }} {{ Str::plural('revision', $revisions->count()) }}
-            </div>
         </div>
 
         <div class="hst-timeline">

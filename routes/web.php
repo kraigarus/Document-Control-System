@@ -15,6 +15,9 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [LoginController::class, 'login']);
 });
 
+// Catch-all: redirect unknown routes to portal
+Route::fallback(fn () => redirect('/login'));
+
 Route::middleware('auth')->group(function () {
     Route::get('/api/offices', fn () => \App\Models\Office::where('status', 'active')->orderBy('office_name')->get());
     Route::get('/api/doc-types', fn () => \App\Models\DocType::orderBy('doc_type_id')->get());
@@ -30,34 +33,57 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::get('/api/dashboard-stats', function () {
-        $totalDocuments = \App\Models\DocumentRequest::count();
+        // Get latest revision's request_id for each doc_no
+        $latestIds = DB::table('masterlist_registration as m1')
+            ->leftJoin('masterlist_registration as m2', function ($join) {
+                $join->on('m1.doc_no', '=', 'm2.doc_no')
+                    ->whereRaw('CAST(m1.revise_no AS UNSIGNED) < CAST(m2.revise_no AS UNSIGNED)');
+            })
+            ->whereNull('m2.request_id')
+            ->whereNotNull('m1.doc_no')
+            ->where('m1.doc_no', '!=', '')
+            ->pluck('m1.request_id');
 
-        // Internal = doc_type_id 1 + its children (6,7,8,9,10)
+        // Documents with no masterlist at all
+        $noMlIds = \App\Models\DocumentRequest::whereDoesntHave('masterlistRegistration')
+            ->orWhereHas('masterlistRegistration', function ($q) {
+                $q->whereNull('doc_no')->orWhere('doc_no', '');
+            })
+            ->pluck('request_id');
+
+        $visibleIds = $latestIds->merge($noMlIds)->unique();
+
+        // Base query: latest revisions only, not obsolete
+        $base = function () use ($visibleIds) {
+            return \App\Models\DocumentRequest::whereIn('request_id', $visibleIds)
+                ->where('approval_status', '!=', 'obsolete');
+        };
+
+        $totalDocuments = $base()->count();
+
         $internalIds = [1, 6, 7, 8, 9, 10];
-        $internalCount = \App\Models\DocumentRequest::whereIn('doc_type_id', $internalIds)
-            ->orWhereIn('sub_type_id', $internalIds)
-            ->count();
+        $internalCount = $base()->where(function ($q) use ($internalIds) {
+            $q->whereIn('doc_type_id', $internalIds)
+            ->orWhereIn('sub_type_id', $internalIds);
+        })->count();
 
-        // Internal Forms = doc_type_id 2 + its children (11,12,13,14)
         $internalFormIds = [2, 11, 12, 13, 14];
-        $internalFormsCount = \App\Models\DocumentRequest::whereIn('doc_type_id', $internalFormIds)
-            ->orWhereIn('sub_type_id', $internalFormIds)
-            ->count();
+        $internalFormsCount = $base()->where(function ($q) use ($internalFormIds) {
+            $q->whereIn('doc_type_id', $internalFormIds)
+            ->orWhereIn('sub_type_id', $internalFormIds);
+        })->count();
 
-        // External = doc_type_id 3
-        $externalCount = \App\Models\DocumentRequest::where('doc_type_id', 3)
-            ->orWhere('sub_type_id', 3)
-            ->count();
+        $externalCount = $base()->where(function ($q) {
+            $q->where('doc_type_id', 3)->orWhere('sub_type_id', 3);
+        })->count();
 
-        // Forms = doc_type_id 4
-        $formsCount = \App\Models\DocumentRequest::where('doc_type_id', 4)
-            ->orWhere('sub_type_id', 4)
-            ->count();
+        $formsCount = $base()->where(function ($q) {
+            $q->where('doc_type_id', 4)->orWhere('sub_type_id', 4);
+        })->count();
 
-        // Logbooks = doc_type_id 5
-        $logbooksCount = \App\Models\DocumentRequest::where('doc_type_id', 5)
-            ->orWhere('sub_type_id', 5)
-            ->count();
+        $logbooksCount = $base()->where(function ($q) {
+            $q->where('doc_type_id', 5)->orWhere('sub_type_id', 5);
+        })->count();
 
         return response()->json([
             'totalDocuments' => $totalDocuments,
@@ -116,9 +142,3 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::delete('/register/{id}',         [RegisterController::class, 'destroy'])->name('register.destroy');
     Route::get('/register/history/{docNo}', [RegisterController::class, 'history'])->name('register.history');
 });
-
-
-
-// Catch-all: redirect unknown routes to portal
-Route::fallback(fn () => redirect('/login'));
-

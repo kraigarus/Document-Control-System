@@ -38,19 +38,16 @@ body {
     transition: left 0.3s cubic-bezier(0.4,0,0.2,1);
 }
 
-.hst-header { margin-bottom: 36px; }
-.hst-back {
-    display: inline-flex; align-items: center; gap: 6px;
-    font-size: 0.82rem; color: var(--hst-accent); text-decoration: none;
-    font-weight: 600; margin-bottom: 12px; transition: all 0.2s;
-}
-.hst-back:hover { gap: 10px; }
-.hst-title { font-size: 1.6rem; font-weight: 800; color: var(--hst-text); letter-spacing: -0.02em; }
-.hst-subtitle { font-size: 0.85rem; color: var(--hst-text-muted); margin-top: 4px; }
-.hst-doc-no {
+.hst-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--hst-accent-subtle);
+    color: var(--hst-accent);
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.78rem;
     font-weight: 600;
-    color: var(--hst-accent); background: var(--hst-accent-subtle);
-    padding: 2px 8px; border-radius: 4px; font-size: 0.82rem;
 }
 
 /* Timeline */

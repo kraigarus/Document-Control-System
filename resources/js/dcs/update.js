@@ -189,7 +189,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 '<td class="upd-doc-no">' + esc(doc.doc_no) + '</td>' +
                 '<td><span class="upd-rev-badge">' + doc.rev_no + '</span></td>' +
                 '<td><div class="upd-status-checklists">' + checklistTags + '</div></td>' +
-                '<td>' + esc(doc.created_at) + '</td>' +
                 '<td><div class="upd-actions">' +
                     historyBtn +
                     '<a href="' + esc(doc.edit_url) + '" class="upd-btn-icon" title="Edit"><i class="fa-solid fa-pen-to-square"></i></a>' +

@@ -12,6 +12,7 @@ const CURRENT_SUB_TYPE_ID = CFG.CURRENT_SUB_TYPE_ID || null;
 const CURRENT_DRF_SOURCE = CFG.CURRENT_DRF_SOURCE || '';
 const CURRENT_DCN_SOURCE = CFG.CURRENT_DCN_SOURCE || '';
 const CURRENT_APPROVAL_BODY = CFG.CURRENT_APPROVAL_BODY || '';
+const IS_EDIT_MODE = true;
 
 // ═══ HELPERS ═══
 function escapeHtml(str) {
@@ -22,6 +23,19 @@ function escapeHtml(str) {
 
 function escapeJsAttr(str) {
     return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+function injectHiddenForDisabled(selectId, hiddenName) {
+    const sel = document.getElementById(selectId);
+    if (!sel || !sel.disabled) return;
+    const existing = document.querySelector('input[type="hidden"][data-for="' + selectId + '"]');
+    if (existing) existing.remove();
+    const hidden = document.createElement('input');
+    hidden.type = 'hidden';
+    hidden.name = hiddenName;
+    hidden.value = sel.value;
+    hidden.dataset.for = selectId;
+    sel.parentElement.appendChild(hidden);
 }
 
 // ═══ INIT ═══
@@ -44,52 +58,57 @@ document.addEventListener("DOMContentLoaded", async function () {
             fetch("/api/approval-bodies").then(r => r.json()),
         ]);
 
-        allOffices = offices;
-        allDocTypes = docTypes;
+        allOffices = Array.isArray(offices) ? offices : [];
+        allDocTypes = Array.isArray(docTypes) ? docTypes : [];
 
         // Populate Version Type
         const versionSelect = document.getElementById("versionType");
         while (versionSelect.options.length > 1) versionSelect.remove(1);
-        versionTypes.forEach(v => {
+        (versionTypes || []).forEach(v => {
             const opt = new Option(v.version_name, v.version_id);
             if (v.version_id == CURRENT_VERSION_ID) opt.selected = true;
             versionSelect.add(opt);
         });
         versionSelect.dataset.lastValid = CURRENT_VERSION_ID;
+        versionSelect.disabled = true;
 
         // Populate Doc Type
         const docTypeSelect = document.getElementById("docType");
         while (docTypeSelect.options.length > 1) docTypeSelect.remove(1);
-        docTypes.filter(d => !d.parent_id).forEach(d => {
+        allDocTypes.filter(d => !d.parent_id).forEach(d => {
             const opt = new Option(d.doc_type_name, d.doc_type_id);
             if (d.doc_type_id == CURRENT_DOC_TYPE_ID) opt.selected = true;
             docTypeSelect.add(opt);
         });
         docTypeSelect.dataset.lastValid = CURRENT_DOC_TYPE_ID;
-        docTypeSelect.disabled = false;
+        docTypeSelect.disabled = true;
 
-        // Populate Sub Type — ONLY if doc type has children
+        // Populate Sub Type
         const subTypeSelect = document.getElementById("subType");
-        const children = docTypes.filter(d => d.parent_id == CURRENT_DOC_TYPE_ID);
+        const children = allDocTypes.filter(d => d.parent_id == CURRENT_DOC_TYPE_ID);
         if (children.length > 0) {
             children.forEach(c => {
                 const opt = new Option(c.doc_type_name, c.doc_type_id);
                 if (c.doc_type_id == CURRENT_SUB_TYPE_ID) opt.selected = true;
                 subTypeSelect.add(opt);
             });
-            subTypeSelect.disabled = false;
             subTypeSelect.dataset.lastValid = CURRENT_SUB_TYPE_ID || "";
         } else {
-            subTypeSelect.disabled = true;
             subTypeSelect.dataset.lastValid = "";
         }
+        subTypeSelect.disabled = true;
+
+        // Inject hidden inputs for disabled selects
+        injectHiddenForDisabled('versionType', 'version_id');
+        injectHiddenForDisabled('docType', 'doc_type_id');
+        injectHiddenForDisabled('subType', 'sub_type_id');
 
         // Populate DRF & DCN Source
         ["drfSourceUnit", "dcnSourceUnit"].forEach(id => {
             const sel = document.getElementById(id);
             if (sel) {
                 while (sel.options.length > 1) sel.remove(1);
-                offices.forEach(o => {
+                allOffices.forEach(o => {
                     const opt = new Option(o.office_name, o.office_id);
                     if (id === "drfSourceUnit" && o.office_id == CURRENT_DRF_SOURCE) opt.selected = true;
                     if (id === "dcnSourceUnit" && o.office_id == CURRENT_DCN_SOURCE) opt.selected = true;
@@ -102,7 +121,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         const approvalSelect = document.getElementById("approvalBody");
         if (approvalSelect) {
             while (approvalSelect.options.length > 1) approvalSelect.remove(1);
-            approvalBodies.forEach(a => {
+            (approvalBodies || []).forEach(a => {
                 const opt = new Option(a.approval_name, a.approval_body_id);
                 if (a.approval_body_id == CURRENT_APPROVAL_BODY) opt.selected = true;
                 approvalSelect.add(opt);
@@ -116,6 +135,142 @@ document.addEventListener("DOMContentLoaded", async function () {
         console.error("Failed to load data:", err);
         showApiError("Failed to load form data. Please refresh the page.");
     }
+
+    (function () {
+        const updateBtn = document.querySelector('.reg-btn-save');
+        if (!updateBtn) return;
+
+        // Store initial state
+        const initialState = {};
+
+        function captureInitialState() {
+            const form = document.getElementById('masterForm');
+            if (!form) return;
+
+            // All inputs, selects, textareas
+            form.querySelectorAll('input, select, textarea').forEach(el => {
+                const key = el.name || el.id;
+                if (!key) return;
+
+                if (el.type === 'checkbox') {
+                    initialState[key + '|' + (el.value || '')] = el.checked;
+                } else if (el.type === 'radio') {
+                    initialState[key] = document.querySelector('input[name="' + el.name + '"]:checked')?.value || '';
+                } else if (el.type === 'file') {
+                    // Files can't be pre-captured, track by id
+                    initialState['file|' + (el.name || el.id)] = '';
+                } else {
+                    initialState[key] = el.value;
+                }
+            });
+
+            // Capture which checklist sections are visible
+            ['section-1', 'section-2', 'section-3', 'section-4', 'section-5', 'section-approval', 'section-syllabi'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) {
+                    initialState['visible|' + id] = el.style.display !== 'none';
+                }
+            });
+
+            // Capture office rows count for retrieval and distribution
+            const retBody = document.getElementById('retrievalBody');
+            const distBody = document.getElementById('distBody');
+            initialState['officeCount|retrievalBody'] = retBody ? retBody.querySelectorAll('input[type="hidden"]').length : 0;
+            initialState['officeCount|distBody'] = distBody ? distBody.querySelectorAll('input[type="hidden"]').length : 0;
+        }
+
+        function isDirty() {
+            const form = document.getElementById('masterForm');
+            if (!form) return false;
+
+            let dirty = false;
+
+            form.querySelectorAll('input, select, textarea').forEach(el => {
+                if (dirty) return;
+                const key = el.name || el.id;
+                if (!key) return;
+
+                if (el.type === 'checkbox') {
+                    const initVal = initialState[key + '|' + (el.value || '')];
+                    if (initVal !== undefined && el.checked !== initVal) dirty = true;
+                } else if (el.type === 'radio') {
+                    const current = document.querySelector('input[name="' + el.name + '"]:checked')?.value || '';
+                    if (initialState[key] !== undefined && current !== initialState[key]) dirty = true;
+                } else if (el.type === 'file') {
+                    if (el.files && el.files.length > 0) dirty = true;
+                } else {
+                    if (initialState[key] !== undefined && el.value !== initialState[key]) dirty = true;
+                }
+            });
+
+            // Check section visibility changes
+            ['section-1', 'section-2', 'section-3', 'section-4', 'section-5', 'section-approval', 'section-syllabi'].forEach(id => {
+                if (dirty) return;
+                const el = document.getElementById(id);
+                if (el && initialState['visible|' + id] !== undefined) {
+                    const currentVisible = el.style.display !== 'none';
+                    if (currentVisible !== initialState['visible|' + id]) dirty = true;
+                }
+            });
+
+            // Check office row additions/removals
+            ['retrievalBody', 'distBody'].forEach(bodyId => {
+                if (dirty) return;
+                const tbody = document.getElementById(bodyId);
+                if (!tbody) return;
+                const currentCount = tbody.querySelectorAll('input[type="hidden"]').length;
+                if (initialState['officeCount|' + bodyId] !== undefined && currentCount !== initialState['officeCount|' + bodyId]) {
+                    dirty = true;
+                }
+            });
+
+            return dirty;
+        }
+
+        function updateButtonState() {
+            if (isDirty()) {
+                updateBtn.disabled = false;
+                updateBtn.style.opacity = '';
+                updateBtn.style.cursor = '';
+                updateBtn.title = '';
+            } else {
+                updateBtn.disabled = true;
+                updateBtn.style.opacity = '0.45';
+                updateBtn.style.cursor = 'not-allowed';
+                updateBtn.title = 'No changes detected';
+            }
+        }
+
+        // Capture initial state after everything is loaded
+        setTimeout(() => {
+            captureInitialState();
+            updateButtonState();
+        }, 2000);
+
+        // Listen for changes on the entire form
+        const form = document.getElementById('masterForm');
+        if (form) {
+            form.addEventListener('input', updateButtonState);
+            form.addEventListener('change', updateButtonState);
+        }
+
+        // Also watch for dynamic changes (office add/remove, checklist toggle, revision row add/remove)
+        const observer = new MutationObserver(() => {
+            setTimeout(updateButtonState, 100);
+        });
+
+        if (form) {
+            observer.observe(form, { childList: true, subtree: true });
+        }
+
+        // Override confirmSave to allow submission even when button is disabled
+        const originalConfirmSave = window.confirmSave;
+        window.confirmSave = function () {
+            if (!isDirty()) return;
+            if (originalConfirmSave) originalConfirmSave();
+        };
+
+    })();
 
     initSelectProtection();
     initFileInputs();
@@ -482,6 +637,7 @@ function validateTableFile(input) {
 
 // ═══ VERSION / DOC TYPE / SUB TYPE ═══
 async function handleVersionChange() {
+    if (IS_EDIT_MODE) return;
     const versionId = document.getElementById("versionType").value;
     document.getElementById("docType").value = "";
     document.getElementById("docType").disabled = !versionId;
@@ -506,6 +662,7 @@ async function handleVersionChange() {
 }
 
 function handleDocTypeChange() {
+    if (IS_EDIT_MODE) return;
     const docTypeId = parseInt(document.getElementById("docType").value);
     const subTypeSelect = document.getElementById("subType");
     subTypeSelect.innerHTML = '<option value="" selected disabled>Select sub-type</option>';
@@ -732,78 +889,285 @@ document.addEventListener("input", function (e) {
 // ═══ CONFIRM SAVE ═══
 window.confirmSave = function () {
     const errors = validateForm();
-    if (errors.length > 0) { showValidationErrors(errors); return; }
+
+    if (errors.length > 0) {
+        showValidationErrors(errors);
+        return;
+    }
+
     clearValidation();
 
     const reviewContent = document.getElementById("reviewContent");
     reviewContent.innerHTML = "";
 
+    // ── Syllabi ──
+    const ss = document.getElementById("section-syllabi");
+    if (ss && ss.style.display !== "none") {
+        document.querySelectorAll("#syllabiTableBody tr").forEach((r) => {
+            const course = r.querySelector('input[name="syllabiCourseName[]"]');
+            if (!course || !course.value.trim()) return;
+
+            const avail = r.querySelector('select[name="syllabiAvailability[]"]');
+            const pages = r.querySelector('input[name="syllabiNoPages[]"]');
+            const drfAvail = r.querySelector('select[name="syllabiDrfAvailability[]"]');
+            const drfNo = r.querySelector('input[name="syllabiDrfNo[]"]');
+            const drfDate = r.querySelector('input[name="syllabiDrfDate[]"]');
+            const drfReceived = r.querySelector('input[name="syllabiDrfReceived[]"]');
+            const fileInput = r.querySelector('input[name="syllabiScannedDrf[]"]');
+
+            const fmtDate = (val) => {
+                if (!val) return "";
+                const d = new Date(val + "T00:00:00");
+                if (isNaN(d.getTime())) return val;
+                return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+            };
+
+            const selText = (sel) => {
+                if (!sel || sel.selectedIndex <= 0) return "";
+                return sel.options[sel.selectedIndex].text;
+            };
+
+            addReviewSection(reviewContent, "Syllabi — " + course.value.trim(), [
+                { label: "Availability", value: selText(avail) },
+                { label: "No. of Pages", value: pages?.value || "" },
+                { label: "DRF Availability", value: selText(drfAvail) },
+                { label: "DRF No.", value: drfNo?.value?.trim() || "" },
+                { label: "DRF Date", value: fmtDate(drfDate?.value) },
+                { label: "DRF Received", value: fmtDate(drfReceived?.value) },
+                { label: "Scanned DRF", value: fileInput?.files?.length > 0 ? fileInput.files[0].name : null, isFile: true },
+            ]);
+        });
+    }
+
+    // ── DRF ──
     const s1 = document.getElementById("section-1");
     if (s1 && s1.style.display !== "none") {
+        const f = document.getElementById("drfFile").files;
         addReviewSection(reviewContent, "Document Request Form", [
             { label: "DRF No.", value: getInputVal("drfNo") },
             { label: "DRF Date", value: formatInputDate("drfDate") },
+            { label: "Receipt", value: formatInputDate("drfReceiptDate") + " " + getInputVal("drfTime") },
             { label: "Title", value: getInputVal("drfTitle") },
             { label: "Source Unit", value: getSelectText("drfSourceUnit") },
+            { label: "File", value: f.length > 0 ? f[0].name : null, isFile: true },
         ]);
     }
 
+    // ── DCN ──
+    const s2 = document.getElementById("section-2");
+    if (s2 && s2.style.display !== "none") {
+        const f = document.getElementById("dcnFile").files;
+        addReviewSection(reviewContent, "Document Change Notice", [
+            { label: "DCN No.", value: getInputVal("dcnNumber") },
+            { label: "DCN Date", value: formatInputDate("noticeDate") },
+            { label: "Receipt", value: formatInputDate("receiptDate") + " " + getInputVal("receiptTime") },
+            { label: "Source Unit", value: getSelectText("dcnSourceUnit") },
+            { label: "File", value: f.length > 0 ? f[0].name : null, isFile: true },
+        ]);
+        const rev = [];
+        document.querySelectorAll("#revisionTableBody tr").forEach((r, i) => {
+            const t = r.querySelector('input[name="documentTitle[]"]');
+            if (t && t.value.trim()) rev.push("Row " + (i + 1) + ": " + t.value);
+        });
+        if (rev.length) addReviewList(reviewContent, "Revisions", rev);
+    }
+
+    // ── Masterlist ──
     const s3 = document.getElementById("section-3");
     if (s3 && s3.style.display !== "none") {
+        const f = document.getElementById("uploadScannedCopy").files;
         addReviewSection(reviewContent, "Masterlist Registration", [
             { label: "Doc No.", value: getInputVal("masterlistDocNo") },
             { label: "Title", value: getInputVal("masterlistDocTitle") },
+            { label: "Deadline", value: formatInputDate("deadlineOfSubmission") },
+            { label: "Receipt", value: formatInputDate("masterlistReceiptDate") + " " + getInputVal("masterlistReceiptTime") },
+            { label: "Registered", value: formatInputDate("masterlistRegisteredDate") + " " + getInputVal("masterlistRegisteredTime") },
+            { label: "Time Spent", value: document.getElementById("masterlistTimeSpentDisplay").value || null },
+            { label: "Effectivity", value: formatInputDate("masterlistEffectivityDate") },
+            { label: "Revision No.", value: getInputVal("masterlistRevisionNo") },
+            { label: "Pages", value: getInputVal("masterlistNoOfPages") },
+            { label: "In-charge", value: getInputVal("masterlistInCharge") },
             { label: "Source Unit", value: getInputVal("masterlistSourceUnit") || null },
+            { label: "Purpose", value: getInputVal("briefPurpose") },
+            { label: "Related Docs", value: getInputVal("relatedDocuments") },
+            { label: "File", value: f.length > 0 ? f[0].name : null, isFile: true },
         ]);
     }
 
+    // ── Approval ──
+    const sa = document.getElementById("section-approval");
+    if (sa && sa.style.display !== "none") {
+        addReviewSection(reviewContent, "Approval Details", [
+            { label: "Body", value: getSelectText("approvalBody") },
+            { label: "Date", value: formatInputDate("approvalDate") },
+            { label: "No.", value: getInputVal("approvalNo") },
+        ]);
+    }
+
+    // ── Retrieval ──
     const s4 = document.getElementById("section-4");
     if (s4 && s4.style.display !== "none") {
+        const f = document.getElementById("scannedRet").files;
         addReviewSection(reviewContent, "Document Retrieval", [
-            { label: "Retrieval Date", value: formatInputDate("retrievalDate") },
+            { label: "Form Date", value: formatInputDate("retrievalFormDate") + " " + getInputVal("retrievalFormTime") },
+            { label: "Retrieval Date", value: formatInputDate("retrievalDate") + " " + getInputVal("retrievalTime") },
             { label: "Time Spent", value: document.getElementById("retrievalTimeSpentDisplay").value || null },
+            { label: "Remarks", value: getInputVal("retrievalRemarks") },
+            { label: "File", value: f.length > 0 ? f[0].name : null, isFile: true },
         ]);
+        const off = getOfficeList("retrievalBody");
+        if (off.length) addReviewList(reviewContent, "Receiving Offices (Retrieval)", off);
     }
 
+    // ── Distribution ──
     const s5 = document.getElementById("section-5");
     if (s5 && s5.style.display !== "none") {
+        const f = document.getElementById("scanneddist").files;
         addReviewSection(reviewContent, "Document Distribution", [
-            { label: "Distribution Date", value: formatInputDate("distributionDate") },
+            { label: "Form Date", value: formatInputDate("distributionFormDate") + " " + getInputVal("distributionFormTime") },
+            { label: "Distribution Date", value: formatInputDate("distributionDate") + " " + getInputVal("distributionTime") },
             { label: "Time Spent", value: document.getElementById("distributionTimeSpentDisplay").value || null },
+            { label: "Remarks", value: getInputVal("distributionRemarks") },
+            { label: "File", value: f.length > 0 ? f[0].name : null, isFile: true },
         ]);
+        const off = getOfficeList("distBody");
+        if (off.length) addReviewList(reviewContent, "Receiving Offices (Distribution)", off);
     }
 
-    if (!reviewContent.children.length) reviewContent.innerHTML = '<div class="review-empty">No data to review.</div>';
+    if (!reviewContent.children.length) {
+        reviewContent.innerHTML = '<div class="review-empty">No data to review.</div>';
+    }
+
     document.getElementById("confirmModal").style.display = "flex";
 };
 
-window.closeConfirmModal = function () { document.getElementById("confirmModal").style.display = "none"; };
-window.submitForm = function () { document.getElementById("masterForm").submit(); };
-
-function addReviewSection(container, title, fields) {
-    const visible = fields.filter(f => f.value && f.value.trim() !== "" && f.value !== "N/A");
-    if (!visible.length) return;
-    const section = document.createElement("div"); section.className = "review-section";
-    let html = '<div class="review-section-title">' + escapeHtml(title) + '</div>';
-    visible.forEach(f => {
-        html += '<div class="review-row"><span class="review-label">' + escapeHtml(f.label) + '</span><span class="review-value">' + escapeHtml(f.value) + '</span></div>';
-    });
-    section.innerHTML = html; container.appendChild(section);
+// ═══ REVIEW HELPERS ═══
+function getRadioText(name) {
+    const checked = document.querySelector('input[name="' + name + '"]:checked');
+    if (!checked) return "";
+    const label = checked.closest("label");
+    return label ? label.textContent.trim() : checked.value;
 }
 
-function getInputVal(id) { const el = document.getElementById(id); return el ? el.value.trim() : ""; }
+function getFileStatus(inputId) {
+    const input = document.getElementById(inputId);
+    if (!input) return "No file";
+
+    // If a new file was selected
+    if (input.files && input.files[0]) {
+        return input.files[0].name;
+    }
+
+    // Check if there's an existing file shown
+    const parent = input.closest(".reg-field") || input.closest("td") || input.parentElement;
+    const existingFile = parent?.querySelector(".reg-current-file span");
+    if (existingFile && existingFile.textContent.trim()) {
+        return existingFile.textContent.trim() + " (existing)";
+    }
+
+    return "No file";
+}
+
+function getTableRows(tbodyId, columns) {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return [];
+    const rows = [];
+    tbody.querySelectorAll("tr").forEach(tr => {
+        const rowData = {};
+        let hasData = false;
+        columns.forEach(col => {
+            let value = "";
+            if (col.type === "select") {
+                const sel = tr.querySelector('select[name="' + col.name + '"]');
+                value = sel && sel.selectedIndex > 0 ? sel.options[sel.selectedIndex].text : "";
+            } else if (col.type === "date") {
+                const inp = tr.querySelector('input[name="' + col.name + '"]');
+                value = inp ? formatInputDateValue(inp.value) : "";
+            } else {
+                const inp = tr.querySelector('input[name="' + col.name + '"]');
+                value = inp ? inp.value.trim() : "";
+            }
+            rowData[col.label] = value;
+            if (value) hasData = true;
+        });
+        if (hasData) rows.push(rowData);
+    });
+    return rows;
+}
+
+function formatInputDateValue(val) {
+    if (!val) return "";
+    const date = new Date(val + "T00:00:00");
+    if (isNaN(date.getTime())) return val;
+    return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+}
+
+window.closeConfirmModal = function () {
+    document.getElementById("confirmModal").style.display = "none";
+};
+
+window.submitForm = function () {
+    document.getElementById("masterForm").submit();
+};
+function addReviewSection(container, title, fields) {
+    const visibleFields = fields.filter(f => f.value && f.value.trim() !== "" && f.value !== "N/A");
+    if (visibleFields.length === 0) return;
+
+    const section = document.createElement("div");
+    section.className = "review-section";
+
+    let html = '<div class="review-section-title">' + title + '</div>';
+    visibleFields.forEach(f => {
+        html += '<div class="review-row">';
+        html += '<span class="review-label">' + f.label + '</span>';
+        if (f.isFile) {
+            html += '<span class="review-value review-file"><i class="fa-solid fa-paperclip"></i> ' + f.value + '</span>';
+        } else {
+            html += '<span class="review-value">' + f.value + '</span>';
+        }
+        html += '</div>';
+    });
+
+    section.innerHTML = html;
+    container.appendChild(section);
+}
+
+function addReviewList(container, title, items) {
+    const section = document.createElement("div");
+    section.className = "review-section";
+
+    let html = '<div class="review-section-title">' + escapeHtml(title) + '</div><ul class="review-list">';
+    items.forEach(item => {
+        html += '<li>' + escapeHtml(item) + '</li>';
+    });
+    html += '</ul>';
+
+    section.innerHTML = html;
+    container.appendChild(section);
+}
+
+function getInputVal(id) {
+    const el = document.getElementById(id);
+    return el ? el.value.trim() : "";
+}
+
 function getSelectText(id) {
     const el = document.getElementById(id);
     if (!el || el.selectedIndex < 0) return "";
     return el.options[el.selectedIndex].text;
 }
+
 function formatInputDate(id) {
-    const val = getInputVal(id); if (!val) return "";
-    const date = new Date(val + "T00:00:00"); if (isNaN(date.getTime())) return val;
+    const val = getInputVal(id);
+    if (!val) return "";
+    const date = new Date(val + "T00:00:00");
+    if (isNaN(date.getTime())) return val;
     return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
+
 function getOfficeList(tbodyId) {
-    const tbody = document.getElementById(tbodyId); if (!tbody) return [];
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return [];
     const offices = [];
     tbody.querySelectorAll("tr").forEach(row => {
         const name = row.querySelector(".reg-office-text")?.textContent?.trim();
@@ -885,9 +1249,9 @@ window.addOffice = function (officeId, officeName, bodyId, totalId, resultsId) {
 
     const safeDisplay = escapeHtml(officeName);
     const tr = document.createElement("tr"); tr.className = "reg-office-added";
-    tr.innerHTML = `<td><input type="hidden" name="${officeNameAttr}" value="${officeId}"><div class="reg-office-name"><div class="reg-office-icon"><i class="fa-solid fa-building"></i></div><span class="reg-office-text">${safeDisplay}</span></div></td><td style="text-align:center;"><input type="number" name="${copiesNameAttr}" value="1" min="1" oninput="updateTotal('${totalId}')"></td><td><button type="button" class="btn-remove" onclick="removeOffice(this, '${totalId}', '${bodyId}')"><i class="fa-solid fa-xmark"></i></button></td>`;
+    tr.innerHTML = `<td><input type="hidden" name="${officeNameAttr}" value="${officeId}"><div class="reg-office-name"><div class="reg-office-icon"><i class="fa-solid fa-building"></i></div><span class="reg-office-text">${safeDisplay}</span></div></td><td style="text-align:center;"><input type="number" name="${copiesNameAttr}" value="1" min="1" oninput="updateTotal('${totalId}', '${bodyId}')"></td><td><button type="button" class="btn-remove" onclick="removeOffice(this, '${totalId}', '${bodyId}')"><i class="fa-solid fa-xmark"></i></button></td>`;
     tbody.appendChild(tr);
-    updateTotal(totalId);
+    updateTotal(totalId, bodyId);
     dropdown.style.display = "none";
     dropdown.parentElement.querySelector("input[type='text']").value = "";
 };
@@ -896,7 +1260,7 @@ window.removeOffice = function (btn, totalId, bodyId) {
     const tr = btn.closest("tr");
     tr.style.opacity = "0"; tr.style.transform = "translateX(20px)"; tr.style.transition = "all 0.2s ease";
     setTimeout(() => {
-        tr.remove(); updateTotal(totalId);
+        tr.remove(); updateTotal(totalId, bodyId);
         const tbody = document.getElementById(bodyId);
         if (tbody && tbody.querySelectorAll("tr").length === 0) {
             tbody.innerHTML = '<tr class="reg-empty-row"><td colspan="3"><div class="reg-empty-state"><i class="fa-solid fa-building-circle-xmark"></i><span>No offices added yet</span></div></td></tr>';
@@ -904,12 +1268,28 @@ window.removeOffice = function (btn, totalId, bodyId) {
     }, 200);
 };
 
-function updateTotal(totalId) {
-    const totalEl = document.getElementById(totalId); if (!totalEl) return;
+window.updateTotal = function (totalId, bodyId) {
+    const totalEl = document.getElementById(totalId);
+    if (!totalEl) return;
+
     let sum = 0;
-    totalEl.closest("table").querySelectorAll("tbody input[type='number']").forEach(i => sum += parseInt(i.value) || 0);
+    if (bodyId) {
+        const tbody = document.getElementById(bodyId);
+        if (tbody) {
+            tbody.querySelectorAll('input[type="number"]').forEach(input => {
+                sum += parseInt(input.value) || 0;
+            });
+        }
+    } else {
+        const table = totalEl.closest("table");
+        if (table) {
+            table.querySelectorAll('tbody input[type="number"]').forEach(input => {
+                sum += parseInt(input.value) || 0;
+            });
+        }
+    }
     totalEl.textContent = sum;
-}
+};
 
 document.addEventListener("click", function (e) {
     document.querySelectorAll(".reg-search-dropdown").forEach(dd => {

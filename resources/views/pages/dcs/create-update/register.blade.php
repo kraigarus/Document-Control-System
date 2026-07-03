@@ -110,71 +110,64 @@
                 <span>Syllabi</span>
             </div>
             <div class="reg-card-body">
-                <div class="reg-table-wrap">
-                    <table class="reg-table">
-                        <thead>
-                            <tr>
-                                <th>Course Name</th>
-                                <th>Syllabi Availability</th>
-                                <th>No. of Pages</th>
-                                <th>DRF Availability</th>
-                                <th>DRF No.</th>
-                                <th>DRF Date</th>
-                                <th>DRF Received Date</th>
-                                <th>Scanned DRF</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody id="syllabiTableBody">
-                            <tr>
-                                <td>
-                                    <input type="text" name="syllabiCourseName[]" placeholder="Enter course name">
-                                </td>
-                                <td>
-                                    <select name="syllabiAvailability[]">
-                                        <option value="" disabled selected>Select</option>
-                                        <option value="available">Available</option>
-                                        <option value="not_available">Not Available</option>
-                                    </select>
-                                </td>
-                                <td>
-                                    <input type="number" name="syllabiNoPages[]" min="0" placeholder="0">
-                                </td>
-                                <td>
-                                    <select name="syllabiDrfAvailability[]">
-                                        <option value="" disabled selected>Select</option>
-                                        <option value="available">Available</option>
-                                        <option value="not_available">Not Available</option>
-                                    </select>
-                                </td>
-                                <td>
-                                    <input type="text" name="syllabiDrfNo[]" placeholder="Enter Syllabi No.">
-                                </td>
-                                <td>
-                                    <input type="date" name="syllabiDrfDate[]">
-                                </td>
-                                <td>
-                                    <input type="date" name="syllabiDrfReceived[]">
-                                </td>
-                                <td>
-                                    <label class="reg-upload-cell">
-                                        <input type="file" name="syllabiScannedDrf[]" accept=".pdf,.docx">
-                                        <i class="fa-solid fa-cloud-arrow-up"></i>
-                                        <span>No file chosen</span>
-                                    </label>
-                                </td>
-                                <td>
-                                    <button type="button" class="reg-row-del" onclick="this.closest('tr').remove()">
-                                        <i class="fa-solid fa-trash-can"></i>
-                                    </button>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <div class="reg-field">
+                    <label>Syllabi Details</label>
+                    <div class="reg-table-wrap">
+                        <table class="reg-table">
+                            <thead>
+                                <tr>
+                                    <th>Course Name</th>
+                                    <th>Syllabi Availability</th>
+                                    <th>No. of Pages</th>
+                                    <th>DRF Availability</th>
+                                    <th>DRF No.</th>
+                                    <th>DRF Date</th>
+                                    <th>DRF Received Date</th>
+                                    <th>Scanned DRF</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="syllabiTableBody">
+                                <tr>
+                                    <td><input type="text" name="syllabiCourseName[]" placeholder="Enter course name"></td>
+                                    <td>
+                                        <select name="syllabiAvailability[]">
+                                            <option value="" disabled selected>Select</option>
+                                            <option value="available">Available</option>
+                                            <option value="not_available">Not Available</option>
+                                        </select>
+                                    </td>
+                                    <td><input type="number" name="syllabiNoPages[]" min="0" placeholder="0"></td>
+                                    <td>
+                                        <select name="syllabiDrfAvailability[]">
+                                            <option value="" disabled selected>Select</option>
+                                            <option value="available">Available</option>
+                                            <option value="not_available">Not Available</option>
+                                        </select>
+                                    </td>
+                                    <td><input type="text" name="syllabiDrfNo[]" placeholder="Enter Syllabi No."></td>
+                                    <td><input type="date" name="syllabiDrfDate[]"></td>
+                                    <td><input type="date" name="syllabiDrfReceived[]"></td>
+                                    <td>
+                                        <label class="reg-upload-cell">
+                                            <input type="file" name="syllabiScannedDrf[]" accept=".pdf,.docx">
+                                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                                            <span>No file chosen</span>
+                                        </label>
+                                    </td>
+                                    <td>
+                                        <button type="button" class="reg-row-del" onclick="this.closest('tr').remove()">
+                                            <i class="fa-solid fa-trash-can"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <button type="button" id="btnAddSyllabiRow" onclick="addSyllabiRow()">
+                        <i class="fa-solid fa-plus"></i> Add Row
+                    </button>
                 </div>
-                <button type="button" id="btnAddSyllabiRow" onclick="addSyllabiRow()">
-                    <i class="fa-solid fa-plus"></i> Add Row
-                </button>
             </div>
         </section>
 
@@ -369,12 +362,14 @@
                     </div>
                     <div class="reg-field">
                         <label>Source Unit / Originator</label>
-                        <input type="text" id="masterlistSourceUnit" name="masterlistSourceUnit"
-                            placeholder="Separate multiple with commas"
-                            autocomplete="off"
-                            oninput="handleSourceSearch(this, 'masterlistSourceResults')"
-                            onfocus="handleSourceSearch(this, 'masterlistSourceResults')">
-                        <div id="masterlistSourceResults" class="reg-source-suggestions" style="display:none;"></div>
+                        <div class="reg-source-wrap">
+                            <input type="text" id="masterlistSourceUnit" name="masterlistSourceUnit"
+                                placeholder="Separate multiple with commas"
+                                autocomplete="off"
+                                oninput="handleSourceSearch(this, 'masterlistSourceResults')"
+                                onfocus="handleSourceSearch(this, 'masterlistSourceResults')">
+                            <div id="masterlistSourceResults" class="reg-source-suggestions" style="display:none;"></div>
+                        </div>
                     </div>
                 </div>
 
@@ -474,7 +469,10 @@
                     <div class="reg-field">
                         <label>Select office(s) for retrieval</label>
                         <div class="reg-search">
-                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"/>
+                                <path d="M21 21l-4.35-4.35"/>
+                            </svg>
                             <input type="text" id="retrievalSearch" placeholder="Search and add office..." autocomplete="off"
                                 oninput="handleSearch(this, 'retrievalResults', 'retrievalBody', 'totalRetrievalCopies')">
                             <div id="retrievalResults" class="reg-search-dropdown" style="display:none;"></div>
@@ -559,7 +557,10 @@
                     <div class="reg-field">
                         <label>Select office(s) for distribution</label>
                         <div class="reg-search">
-                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"/>
+                                <path d="M21 21l-4.35-4.35"/>
+                            </svg>
                             <input type="text" id="distSearch" placeholder="Search and add office..." autocomplete="off"
                                 oninput="handleSearch(this, 'distResults', 'distBody', 'totalDistCopies')">
                             <div id="distResults" class="reg-search-dropdown" style="display:none;"></div>
@@ -641,6 +642,7 @@
     </div>
 </div>
 
+
 @push('styles')
     @vite(['resources/css/dcs/register.css'])
 @endpush
@@ -648,3 +650,12 @@
 @push('scripts')
     @vite(['resources/js/dcs/register.js'])
 @endpush
+
+$.ajax({
+    url: '{{ route("register.checkDocNo") }}',
+    data: {
+        doc_no: someValue,
+        doc_type_id: someValue,
+        sub_type_id: someValue   // ← make sure this line exists
+    },
+});

@@ -77,7 +77,6 @@
                             <th>Document No.</th>
                             <th>Rev</th>
                             <th>Checklists</th>
-                            <th>Date Created</th>
                             <th style="width:130px;">Actions</th>
                         </tr>
                     </thead>

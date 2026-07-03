@@ -78,19 +78,25 @@ body {
 .upd-table { width: 100%; border-collapse: collapse; }
 .upd-table thead { background: var(--upd-accent); }
 .upd-table thead th {
-    color: #fff; font-size: 0.72rem; font-weight: 600; padding: 12px 16px;
+    color: #fff; font-size: 0.72rem; font-weight: 600; padding: 12px 20px;
     text-align: left; text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap;
 }
 .upd-table tbody tr { border-bottom: 1px solid var(--upd-border); transition: background 0.15s ease; }
 .upd-table tbody tr:hover { background: var(--upd-accent-subtle); }
 .upd-table tbody tr:last-child { border-bottom: none; }
-.upd-table tbody td { padding: 12px 16px; font-size: 0.85rem; color: var(--upd-text); vertical-align: middle; }
+.upd-table tbody td { padding: 12px 12px; font-size: 0.85rem; color: var(--upd-text); vertical-align: middle; }
 .upd-table .upd-id { font-weight: 700;  color: var(--upd-accent); font-size: 0.8rem; }
 .upd-table .upd-doc-title { font-weight: 600; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .upd-table .upd-doc-no {  font-weight: 500; font-size: 0.8rem; color: var(--upd-text-muted); }
 .upd-type-badge {
-    display: inline-block; padding: 3px 10px; border-radius: 20px;
-    font-size: 0.72rem; font-weight: 600; background: var(--upd-accent-subtle); color: var(--upd-accent);
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    background: var(--upd-accent-subtle);
+    color: var(--upd-accent);
+    white-space: nowrap;
 }
 .upd-rev-badge {
     display: inline-block; min-width: 28px; text-align: center;
@@ -126,8 +132,11 @@ body {
     display: flex; justify-content: space-between; align-items: center;
     padding: 14px 16px; border-top: 1px solid var(--upd-border); background: #f8fafc;
 }
+
 .upd-pagination-info { font-size: 0.82rem; color: var(--upd-text-muted); }
+
 .upd-pagination-links { display: flex; gap: 4px; }
+
 .upd-pagination-links a, .upd-pagination-links span {
     display: inline-flex; align-items: center; justify-content: center;
     min-width: 34px; height: 34px; padding: 0 8px;
@@ -135,6 +144,7 @@ body {
     font-size: 0.82rem; color: var(--upd-text); text-decoration: none;
     transition: all 0.15s ease; background: var(--upd-surface);
 }
+
 .upd-pagination-links a:hover { border-color: var(--upd-accent); color: var(--upd-accent); }
 .upd-pagination-links .active { background: var(--upd-accent); border-color: var(--upd-accent); color: #fff; font-weight: 700; }
 .upd-pagination-links .disabled { opacity: 0.4; pointer-events: none; }

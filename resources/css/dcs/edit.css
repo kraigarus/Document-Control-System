@@ -1,3 +1,23 @@
+:root {
+    --reg-accent: #000080;
+    --reg-accent-dark: #091d5a;
+    --reg-accent-subtle: #eef2ff;
+    --reg-surface: #ffffff;
+    --reg-bg: #f8fafc;
+    --reg-border: #e2e8f0;
+    --reg-border-strong: #cbd5e1;
+    --reg-text: #1e293b;
+    --reg-text-muted: #64748b;
+    --reg-text-subtle: #94a3b8;
+    --reg-radius: 10px;
+    --reg-radius-sm: 8px;
+    --reg-success: #16a34a;
+    --reg-success-bg: #f0fdf4;
+    --reg-success-border: #86efac;
+    --reg-error: #dc2626;
+    --reg-error-bg: #fef2f2;
+    --reg-error-border: #fecaca;
+}
 .reg-current-file {
     display: flex;
     align-items: center;
@@ -32,4 +52,212 @@
 }
 .reg-table tbody td.existing-file {
     padding: 6px 12px;
+}
+
+#btnAddRevisionRow, #btnAddSyllabiRow, .reg-add-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    padding: 8px 14px;
+    border: 1.5px dashed var(--reg-border-strong);
+    border-radius: var(--reg-radius-sm);
+    background: transparent;
+    color: var(--reg-text-muted);
+    font-size: 0.82rem;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+#btnAddRevisionRow:hover, #btnAddSyllabiRow:hover, .reg-add-row:hover {
+    border-color: var(--reg-accent);
+    color: var(--reg-accent);
+    background: var(--reg-accent-subtle);
+    border-style: solid;
+}
+
+/* ══════════════════════════════════════════════
+   CONFIRMATION MODAL
+   ══════════════════════════════════════════════ */
+.reg-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    animation: fadeIn 0.2s ease;
+    padding: 20px;
+}
+
+.reg-modal {
+    background: var(--reg-surface);
+    border-radius: var(--reg-radius);
+    width: 100%;
+    max-width: 640px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
+    animation: scaleIn 0.2s ease;
+    overflow: hidden;
+}
+
+.reg-modal-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--reg-border);
+    flex-shrink: 0;
+    background: #f8fafc;
+}
+
+.reg-modal-header i {
+    font-size: 1.3rem;
+    color: var(--reg-accent);
+}
+
+.reg-modal-header h3 {
+    margin: 0;
+    font-size: 1.05rem;
+    color: var(--reg-text);
+    flex: 1;
+    font-weight: 700;
+}
+
+.reg-modal-close {
+    background: none;
+    border: none;
+    color: var(--reg-text-subtle);
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.reg-modal-close:hover {
+    background: #f1f5f9;
+    color: var(--reg-text-muted);
+}
+
+.reg-modal-body {
+    padding: 20px 24px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.reg-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 16px 24px;
+    border-top: 1px solid var(--reg-border);
+    flex-shrink: 0;
+    background: #f8fafc;
+}
+
+/* ══════════════════════════════════════════════
+   REVIEW SECTIONS INSIDE MODAL
+   ══════════════════════════════════════════════ */
+.review-section {
+    margin-bottom: 16px;
+}
+
+.review-section:last-child {
+    margin-bottom: 0;
+}
+
+.review-section-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--reg-accent);
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--reg-border);
+    margin-bottom: 8px;
+}
+
+.review-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    font-size: 0.85rem;
+}
+
+.review-label {
+    color: var(--reg-text-muted);
+    font-weight: 500;
+}
+
+.review-value {
+    color: var(--reg-text);
+    font-weight: 600;
+    text-align: right;
+    max-width: 60%;
+    word-break: break-word;
+}
+
+.review-value-empty {
+    color: #cbd5e1;
+    font-weight: 400;
+    font-style: italic;
+}
+
+.review-file {
+    color: var(--reg-success);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.review-file i {
+    font-size: 0.8rem;
+}
+
+.review-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    background: var(--reg-accent-subtle);
+    color: var(--reg-accent);
+}
+
+.review-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.review-list li {
+    padding: 5px 0;
+    font-size: 0.85rem;
+    color: var(--reg-text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.review-list li::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    background: var(--reg-accent);
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.review-empty {
+    text-align: center;
+    padding: 24px;
+    color: var(--reg-text-subtle);
+    font-size: 0.9rem;
 }

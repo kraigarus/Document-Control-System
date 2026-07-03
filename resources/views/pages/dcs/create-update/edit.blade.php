@@ -93,21 +93,26 @@
                 <div class="reg-panel-grid">
                     <div class="reg-field">
                         <label>Version Type</label>
-                        <select id="versionType" name="version_id" autocomplete="off" data-last-valid="{{ $docRequest->version_id }}">
+                        <select id="versionType" name="version_id" autocomplete="off" disabled data-last-valid="{{ $docRequest->version_id }}">
                             <option value="" disabled>Select version</option>
                         </select>
+                        <input type="hidden" name="version_id" value="{{ $docRequest->version_id }}">
                     </div>
                     <div class="reg-field">
                         <label>Document Type</label>
-                        <select id="docType" name="doc_type_id" autocomplete="off" data-last-valid="{{ $docRequest->doc_type_id }}">
+                        <select id="docType" name="doc_type_id" autocomplete="off" disabled data-last-valid="{{ $docRequest->doc_type_id }}">
                             <option value="" disabled>Select document type</option>
                         </select>
+                        <input type="hidden" name="doc_type_id" value="{{ $docRequest->doc_type_id }}">
                     </div>
                     <div class="reg-field">
                         <label>Sub-Type</label>
-                        <select id="subType" name="sub_type_id" autocomplete="off">
+                        <select id="subType" name="sub_type_id" autocomplete="off" disabled>
                             <option value="" selected disabled>Select sub-type</option>
                         </select>
+                        @if($docRequest->sub_type_id)
+                            <input type="hidden" name="sub_type_id" value="{{ $docRequest->sub_type_id }}">
+                        @endif
                     </div>
                 </div>
 
@@ -136,100 +141,101 @@
             <!-- ═══ SYLLABI ═══ -->
             <section class="reg-card" id="section-syllabi" style="display: {{ $syllabi->count() > 0 ? 'block' : 'none' }};">
                 <div class="reg-card-header">
-                    <i class="fa-solid fa-book"></i>
                     <span>Syllabi</span>
                 </div>
                 <div class="reg-card-body">
-                    <div class="reg-table-wrap">
-                        <table class="reg-table">
-                            <thead>
-                                <tr>
-                                    <th>Course Name</th>
-                                    <th>Availability</th>
-                                    <th>No. Pages</th>
-                                    <th>DRF Avail.</th>
-                                    <th>DRF No.</th>
-                                    <th>DRF Date</th>
-                                    <th>DRF Received</th>
-                                    <th>Scanned DRF</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody id="syllabiTableBody">
-                                @forelse($syllabi as $syl)
-                                <tr style="animation: fadeSlideUp 0.25s ease;">
-                                    <td><input type="text" name="syllabiCourseName[]" placeholder="Enter course name" value="{{ $syl->course_name }}"></td>
-                                    <td>
-                                        <select name="syllabiAvailability[]">
-                                            <option value="" disabled>Select</option>
-                                            <option value="available" {{ $syl->syllabi_availability === 'available' ? 'selected' : '' }}>Available</option>
-                                            <option value="not_available" {{ $syl->syllabi_availability === 'not_available' ? 'selected' : '' }}>Not Available</option>
-                                        </select>
-                                    </td>
-                                    <td><input type="number" name="syllabiNoPages[]" min="0" placeholder="0" value="{{ $syl->no_pages }}"></td>
-                                    <td>
-                                        <select name="syllabiDrfAvailability[]">
-                                            <option value="" disabled>Select</option>
-                                            <option value="available" {{ $syl->drf_availability === 'available' ? 'selected' : '' }}>Available</option>
-                                            <option value="not_available" {{ $syl->drf_availability === 'not_available' ? 'selected' : '' }}>Not Available</option>
-                                        </select>
-                                    </td>
-                                    <td><input type="text" name="syllabiDrfNo[]" placeholder="DRF-001" value="{{ $syl->drf_no }}"></td>
-                                    <td><input type="date" name="syllabiDrfDate[]" value="{{ fmtDate($syl->drf_date) }}"></td>
-                                    <td><input type="date" name="syllabiDrfReceived[]" value="{{ fmtDate($syl->drf_received_date) }}"></td>
-                                    <td>
-                                        <label class="reg-upload-cell">
-                                            <input type="file" name="syllabiScannedDrf[]" accept=".pdf,.docx">
-                                            <i class="fa-solid fa-cloud-arrow-up"></i>
-                                            <span>{{ $syl->scanned_drf ? basename($syl->scanned_drf) : 'No file chosen' }}</span>
-                                        </label>
-                                    </td>
-                                    <td><button type="button" class="reg-row-del" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash-can"></i></button></td>
-                                </tr>
-                                @empty
-                                <tr style="animation: fadeSlideUp 0.25s ease;">
-                                    <td><input type="text" name="syllabiCourseName[]" placeholder="Enter course name"></td>
-                                    <td>
-                                        <select name="syllabiAvailability[]">
-                                            <option value="" disabled selected>Select</option>
-                                            <option value="available">Available</option>
-                                            <option value="not_available">Not Available</option>
-                                        </select>
-                                    </td>
-                                    <td><input type="number" name="syllabiNoPages[]" min="0" placeholder="0"></td>
-                                    <td>
-                                        <select name="syllabiDrfAvailability[]">
-                                            <option value="" disabled selected>Select</option>
-                                            <option value="available">Available</option>
-                                            <option value="not_available">Not Available</option>
-                                        </select>
-                                    </td>
-                                    <td><input type="text" name="syllabiDrfNo[]" placeholder="DRF-001"></td>
-                                    <td><input type="date" name="syllabiDrfDate[]"></td>
-                                    <td><input type="date" name="syllabiDrfReceived[]"></td>
-                                    <td>
-                                        <label class="reg-upload-cell">
-                                            <input type="file" name="syllabiScannedDrf[]" accept=".pdf,.docx">
-                                            <i class="fa-solid fa-cloud-arrow-up"></i>
-                                            <span>No file chosen</span>
-                                        </label>
-                                    </td>
-                                    <td><button type="button" class="reg-row-del" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash-can"></i></button></td>
-                                </tr>
-                                @endforelse
-                            </tbody>
-                        </table>
+                    <div class="reg-field">
+                        <label>Syllabi Details</label>
+                        <div class="reg-table-wrap">
+                            <table class="reg-table">
+                                <thead>
+                                    <tr>
+                                        <th>Course Name</th>
+                                        <th>Availability</th>
+                                        <th>No. Pages</th>
+                                        <th>DRF Avail.</th>
+                                        <th>DRF No.</th>
+                                        <th>DRF Date</th>
+                                        <th>DRF Received</th>
+                                        <th>Scanned DRF</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="syllabiTableBody">
+                                    @forelse($syllabi as $syl)
+                                    <tr style="animation: fadeSlideUp 0.25s ease;">
+                                        <td><input type="text" name="syllabiCourseName[]" placeholder="Enter course name" value="{{ $syl->course_name }}"></td>
+                                        <td>
+                                            <select name="syllabiAvailability[]">
+                                                <option value="" disabled>Select</option>
+                                                <option value="available" {{ $syl->syllabi_availability === 'available' ? 'selected' : '' }}>Available</option>
+                                                <option value="not_available" {{ $syl->syllabi_availability === 'not_available' ? 'selected' : '' }}>Not Available</option>
+                                            </select>
+                                        </td>
+                                        <td><input type="number" name="syllabiNoPages[]" min="0" placeholder="0" value="{{ $syl->no_pages }}"></td>
+                                        <td>
+                                            <select name="syllabiDrfAvailability[]">
+                                                <option value="" disabled>Select</option>
+                                                <option value="available" {{ $syl->drf_availability === 'available' ? 'selected' : '' }}>Available</option>
+                                                <option value="not_available" {{ $syl->drf_availability === 'not_available' ? 'selected' : '' }}>Not Available</option>
+                                            </select>
+                                        </td>
+                                        <td><input type="text" name="syllabiDrfNo[]" placeholder="DRF-001" value="{{ $syl->drf_no }}"></td>
+                                        <td><input type="date" name="syllabiDrfDate[]" value="{{ fmtDate($syl->drf_date) }}"></td>
+                                        <td><input type="date" name="syllabiDrfReceived[]" value="{{ fmtDate($syl->drf_received_date) }}"></td>
+                                        <td>
+                                            <label class="reg-upload-cell">
+                                                <input type="file" name="syllabiScannedDrf[]" accept=".pdf,.docx">
+                                                <i class="fa-solid fa-cloud-arrow-up"></i>
+                                                <span>{{ $syl->scanned_drf ? basename($syl->scanned_drf) : 'No file chosen' }}</span>
+                                            </label>
+                                        </td>
+                                        <td><button type="button" class="reg-row-del" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash-can"></i></button></td>
+                                    </tr>
+                                    @empty
+                                    <tr style="animation: fadeSlideUp 0.25s ease;">
+                                        <td><input type="text" name="syllabiCourseName[]" placeholder="Enter course name"></td>
+                                        <td>
+                                            <select name="syllabiAvailability[]">
+                                                <option value="" disabled selected>Select</option>
+                                                <option value="available">Available</option>
+                                                <option value="not_available">Not Available</option>
+                                            </select>
+                                        </td>
+                                        <td><input type="number" name="syllabiNoPages[]" min="0" placeholder="0"></td>
+                                        <td>
+                                            <select name="syllabiDrfAvailability[]">
+                                                <option value="" disabled selected>Select</option>
+                                                <option value="available">Available</option>
+                                                <option value="not_available">Not Available</option>
+                                            </select>
+                                        </td>
+                                        <td><input type="text" name="syllabiDrfNo[]" placeholder="DRF-001"></td>
+                                        <td><input type="date" name="syllabiDrfDate[]"></td>
+                                        <td><input type="date" name="syllabiDrfReceived[]"></td>
+                                        <td>
+                                            <label class="reg-upload-cell">
+                                                <input type="file" name="syllabiScannedDrf[]" accept=".pdf,.docx">
+                                                <i class="fa-solid fa-cloud-arrow-up"></i>
+                                                <span>No file chosen</span>
+                                            </label>
+                                        </td>
+                                        <td><button type="button" class="reg-row-del" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash-can"></i></button></td>
+                                    </tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
+                        <button type="button" class="reg-add-row" onclick="addSyllabiRow()">
+                            <i class="fa-solid fa-plus"></i> Add Course Row
+                        </button>
                     </div>
-                    <button type="button" class="reg-add-row" onclick="addSyllabiRow()">
-                        <i class="fa-solid fa-plus"></i> Add Course Row
-                    </button>
                 </div>
             </section>
 
             <!-- ═══ SECTION 1 — DRF ═══ -->
             <section class="reg-card" id="section-1" style="display: {{ $drf ? 'block' : 'none' }};">
                 <div class="reg-card-header">
-                    <i class="fa-solid fa-file-lines"></i>
                     <span>Document Request Form</span>
                 </div>
                 <div class="reg-card-body">
@@ -284,7 +290,6 @@
             <!-- ═══ SECTION 2 — DCN ═══ -->
             <section class="reg-card" id="section-2" style="display: {{ $dcn ? 'block' : 'none' }};">
                 <div class="reg-card-header">
-                    <i class="fa-solid fa-file-pen"></i>
                     <span>Document Change Notice</span>
                 </div>
                 <div class="reg-card-body">
@@ -361,7 +366,11 @@
                                                     <a href="{{ asset('storage/' . $rev->scanned_copy) }}" target="_blank">View</a>
                                                 </div>
                                             @endif
-                                            <input type="file" name="scannedCopy[]" accept=".pdf,.docx">
+                                            <label class="reg-upload-cell">
+                                                <input type="file" name="scannedCopy[]" accept=".pdf,.docx">
+                                                <i class="fa-solid fa-cloud-arrow-up"></i>
+                                                <span>{{ $rev->scanned_copy ? 'Replace file' : 'No file chosen' }}</span>
+                                            </label>
                                         </td>
                                         <td><input type="text" name="revisionPurpose[]" placeholder="Purpose" value="{{ $rev->brief_purpose }}"></td>
                                         <td><button type="button" class="reg-row-del" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash-can"></i></button></td>
@@ -372,7 +381,13 @@
                                         <td><input type="text" name="documentNo[]" placeholder="Doc No."></td>
                                         <td><input type="date" name="effectiveDate[]"></td>
                                         <td><input type="number" name="revisionNo[]" placeholder="0"></td>
-                                        <td><input type="file" name="scannedCopy[]" accept=".pdf,.docx"></td>
+                                        <td>
+                                            <label class="reg-upload-cell">
+                                                <input type="file" name="scannedCopy[]" accept=".pdf,.docx">
+                                                <i class="fa-solid fa-cloud-arrow-up"></i>
+                                                <span>No file chosen</span>
+                                            </label>
+                                        </td>
                                         <td><input type="text" name="revisionPurpose[]" placeholder="Purpose"></td>
                                         <td><button type="button" class="reg-row-del" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash-can"></i></button></td>
                                     </tr>
@@ -390,7 +405,6 @@
             <!-- ═══ SECTION 3 — MASTERLIST ═══ -->
             <section class="reg-card" id="section-3" style="display: {{ $masterlist ? 'block' : 'none' }};">
                 <div class="reg-card-header">
-                    <i class="fa-solid fa-clipboard-list"></i>
                     <span>Masterlist Registration</span>
                 </div>
                 <div class="reg-card-body">
@@ -435,7 +449,10 @@
                         </div>
                         <div class="reg-field">
                             <label>Revision No.</label>
-                            <input type="number" id="masterlistRevisionNo" name="masterlistRevisionNo" placeholder="0" value="{{ $masterlist->revise_no ?? '' }}">
+                            <input type="number" id="masterlistRevisionNo" name="masterlistRevisionNo" placeholder="0"
+                                value="{{ $masterlist->revise_no ?? '' }}" disabled
+                                style="background:#f1f5f9; cursor:not-allowed; opacity:0.7;">
+                            <input type="hidden" name="masterlistRevisionNo" value="{{ $masterlist->revise_no ?? '0' }}">
                         </div>
                         <div class="reg-field">
                             <label>No. of Pages</label>
@@ -448,13 +465,12 @@
                         <div class="reg-field">
                             <label>Source Unit / Originator</label>
                             <input type="text" id="masterlistSourceUnit" name="masterlistSourceUnit"
-                                placeholder="Type office name... (e.g. CAS, President)"
+                                placeholder="Separate multiple with commas"
                                 autocomplete="off"
                                 value="{{ $masterlist->originator_name ?? '' }}"
                                 oninput="handleSourceSearch(this, 'masterlistSourceResults')"
                                 onfocus="handleSourceSearch(this, 'masterlistSourceResults')">
                             <div id="masterlistSourceResults" class="reg-source-suggestions" style="display:none;"></div>
-                            <span class="reg-hint"><i class="fa-solid fa-circle-info"></i> Separate multiple with commas</span>
                         </div>
                     </div>
                     <div class="reg-grid-2">
@@ -488,7 +504,6 @@
             <!-- ═══ SECTION — APPROVAL ═══ -->
             <section class="reg-card" id="section-approval" style="display: {{ $approval ? 'block' : 'none' }};">
                 <div class="reg-card-header">
-                    <i class="fa-solid fa-stamp"></i>
                     <span>Approval Details</span>
                 </div>
                 <div class="reg-card-body">
@@ -514,7 +529,6 @@
             <!-- ═══ SECTION 4 — RETRIEVAL ═══ -->
             <section class="reg-card" id="section-4" style="display: {{ $retrieval ? 'block' : 'none' }};">
                 <div class="reg-card-header">
-                    <i class="fa-solid fa-box-archive"></i>
                     <span>Document Retrieval</span>
                 </div>
                 <div class="reg-card-body reg-split">
@@ -572,11 +586,14 @@
                         <div class="reg-field">
                             <label>Receiving Offices</label>
                             <div class="reg-search">
-                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="11" cy="11" r="8"/>
+                                    <path d="M21 21l-4.35-4.35"/>
+                                </svg>
                                 <input type="text" id="retrievalSearch" placeholder="Search office..."
                                     oninput="handleSearch(this, 'retrievalResults', 'retrievalBody', 'retrievalTotal')"
                                     autocomplete="off">
-                                <div id="retrievalResults" class="reg-search-dropdown"></div>
+                                <div id="retrievalResults" class="reg-search-dropdown" style="display:none;"></div>
                             </div>
                         </div>
                         <div class="reg-office-table-wrap">
@@ -600,7 +617,7 @@
                                             </div>
                                         </td>
                                         <td style="text-align:center;">
-                                            <input type="number" name="retrievalCopies[]" value="{{ $retOff->copies }}" min="1" oninput="updateTotal('retrievalTotal')">
+                                            <input type="number" name="retrievalCopies[]" value="{{ $retOff->copies }}" min="1" oninput="updateTotal('retrievalTotal', 'retrievalBody')">
                                         </td>
                                         <td>
                                             <button type="button" class="btn-remove" onclick="removeOffice(this, 'retrievalTotal', 'retrievalBody')">
@@ -634,7 +651,6 @@
             <!-- ═══ SECTION 5 — DISTRIBUTION ═══ -->
             <section class="reg-card" id="section-5" style="display: {{ $distribution ? 'block' : 'none' }};">
                 <div class="reg-card-header">
-                    <i class="fa-solid fa-share-from-square"></i>
                     <span>Document Distribution</span>
                 </div>
                 <div class="reg-card-body reg-split">
@@ -692,11 +708,14 @@
                         <div class="reg-field">
                             <label>Receiving Offices</label>
                             <div class="reg-search">
-                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="11" cy="11" r="8"/>
+                                    <path d="M21 21l-4.35-4.35"/>
+                                </svg>
                                 <input type="text" id="distSearch" placeholder="Search office..."
                                     oninput="handleSearch(this, 'distResults', 'distBody', 'distTotal')"
                                     autocomplete="off">
-                                <div id="distResults" class="reg-search-dropdown"></div>
+                                <div id="distResults" class="reg-search-dropdown" style="display:none;"></div>
                             </div>
                         </div>
                         <div class="reg-office-table-wrap">
@@ -720,7 +739,7 @@
                                             </div>
                                         </td>
                                         <td style="text-align:center;">
-                                            <input type="number" name="distCopies[]" value="{{ $distOff->copies }}" min="1" oninput="updateTotal('distTotal')">
+                                            <input type="number" name="distCopies[]" value="{{ $distOff->copies }}" min="1" oninput="updateTotal('distTotal', 'distBody')">
                                         </td>
                                         <td>
                                             <button type="button" class="btn-remove" onclick="removeOffice(this, 'distTotal', 'distBody')">
@@ -738,7 +757,6 @@
                                         </td>
                                     </tr>
                                     @endforelse
-                                </tbody>
                                 <tfoot>
                                     <tr>
                                         <td colspan="2" style="text-align:right; font-weight:700;">Total Copies:</td>
@@ -768,17 +786,23 @@
     </div>
 
     <!-- ═══ CONFIRM MODAL ═══ -->
-    <div id="confirmModal" class="reg-modal-overlay" style="display:none;">
+    <div class="reg-modal-overlay" id="confirmModal" style="display: none;">
         <div class="reg-modal">
             <div class="reg-modal-header">
-                <i class="fa-solid fa-circle-check"></i>
-                <h3>Review Before Updating</h3>
-                <button class="reg-modal-close" onclick="closeConfirmModal()"><i class="fa-solid fa-xmark"></i></button>
+                <i class="fa-solid fa-clipboard-check"></i>
+                <h3>Review & Confirm</h3>
+                <button type="button" class="reg-modal-close" onclick="closeConfirmModal()">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
             </div>
-            <div class="reg-modal-body" id="reviewContent"></div>
+            <div class="reg-modal-body" id="reviewContent">
+                <!-- Populated by JS -->
+            </div>
             <div class="reg-modal-footer">
-                <button class="reg-btn reg-btn-cancel" onclick="closeConfirmModal()">Cancel</button>
-                <button class="reg-btn reg-btn-save" onclick="submitForm()">
+                <button type="button" class="reg-btn reg-btn-cancel" onclick="closeConfirmModal()">
+                    <i class="fa-solid fa-xmark"></i> Go Back
+                </button>
+                <button type="button" class="reg-btn reg-btn-save" onclick="submitForm()">
                     <i class="fa-solid fa-check"></i> Confirm Update
                 </button>
             </div>

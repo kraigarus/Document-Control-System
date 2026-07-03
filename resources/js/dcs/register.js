@@ -1,5 +1,3 @@
-// register.js
-
 let allOffices = [];
 let allDocTypes = [];
 
@@ -120,8 +118,10 @@ document.addEventListener("DOMContentLoaded", async function () {
             docNoTimer = setTimeout(async () => {
                 try {
                     const docTypeId = document.getElementById('docType').value;
+                    const subTypeId = document.getElementById('subType').value;
                     const url = '/register/check-docno?doc_no=' + encodeURIComponent(docNo) +
-                                (docTypeId ? '&doc_type_id=' + docTypeId : '');
+                                (docTypeId ? '&doc_type_id=' + docTypeId : '') +
+                                (subTypeId ? '&sub_type_id=' + subTypeId : '');
                     const res = await fetch(url);
                     const data = await res.json();
 
@@ -1343,34 +1343,6 @@ document.addEventListener("change", function (e) {
 // CONFIRM SAVE
 // ══════════════════════════════════════════════
 window.confirmSave = function () {
-    const hintEl = document.getElementById('docNoHint');
-    const hintState = hintEl ? (hintEl.dataset.valid || '') : '';
-
-    if (isRevisedMode()) {
-        // ── Revised mode: doc no must be found ──
-        const docNo = document.getElementById('masterlistDocNo').value.trim();
-        if (!docNo) {
-            clearValidation();
-            markFieldError('masterlistDocNo', 'Document No. is required. Enter a registered document number.');
-            scrollToField('masterlistDocNo');
-            return;
-        }
-        if (hintState === 'not_found' || hintState === 'wrong_type') {
-            clearValidation();
-            markFieldError('masterlistDocNo', 'This document cannot be revised. Check the Document No. and Document Type.');
-            scrollToField('masterlistDocNo');
-            return;
-        }
-    } else {
-        // ── New mode: doc no must NOT already be registered ──
-        if (hintState === 'duplicate') {
-            clearValidation();
-            markFieldError('masterlistDocNo', 'This document number is already registered. Use Revised Registration to create a new revision.');
-            scrollToField('masterlistDocNo');
-            return;
-        }
-    }
-
     const errors = validateForm();
 
     if (errors.length > 0) {
@@ -1383,10 +1355,10 @@ window.confirmSave = function () {
     const reviewContent = document.getElementById("reviewContent");
     reviewContent.innerHTML = "";
 
-    // Syllabi
+    // ── Syllabi ──
     const ss = document.getElementById("section-syllabi");
     if (ss && ss.style.display !== "none") {
-        document.querySelectorAll("#syllabiTableBody tr").forEach((r, i) => {
+        document.querySelectorAll("#syllabiTableBody tr").forEach((r) => {
             const course = r.querySelector('input[name="syllabiCourseName[]"]');
             if (!course || !course.value.trim()) return;
 
@@ -1421,8 +1393,8 @@ window.confirmSave = function () {
             ]);
         });
     }
-    
-    // DRF
+
+    // ── DRF ──
     const s1 = document.getElementById("section-1");
     if (s1 && s1.style.display !== "none") {
         const f = document.getElementById("drfFile").files;
@@ -1436,7 +1408,7 @@ window.confirmSave = function () {
         ]);
     }
 
-    // DCN
+    // ── DCN ──
     const s2 = document.getElementById("section-2");
     if (s2 && s2.style.display !== "none") {
         const f = document.getElementById("dcnFile").files;
@@ -1455,7 +1427,7 @@ window.confirmSave = function () {
         if (rev.length) addReviewList(reviewContent, "Revisions", rev);
     }
 
-    // Masterlist
+    // ── Masterlist ──
     const s3 = document.getElementById("section-3");
     if (s3 && s3.style.display !== "none") {
         const f = document.getElementById("uploadScannedCopy").files;
@@ -1477,7 +1449,7 @@ window.confirmSave = function () {
         ]);
     }
 
-    // Approval
+    // ── Approval ──
     const sa = document.getElementById("section-approval");
     if (sa && sa.style.display !== "none") {
         addReviewSection(reviewContent, "Approval Details", [
@@ -1487,7 +1459,7 @@ window.confirmSave = function () {
         ]);
     }
 
-    // Retrieval
+    // ── Retrieval ──
     const s4 = document.getElementById("section-4");
     if (s4 && s4.style.display !== "none") {
         const f = document.getElementById("scannedRet").files;
@@ -1502,7 +1474,7 @@ window.confirmSave = function () {
         if (off.length) addReviewList(reviewContent, "Receiving Offices (Retrieval)", off);
     }
 
-    // Distribution
+    // ── Distribution ──
     const s5 = document.getElementById("section-5");
     if (s5 && s5.style.display !== "none") {
         const f = document.getElementById("scanneddist").files;
@@ -1529,15 +1501,13 @@ window.closeConfirmModal = function () {
 };
 
 window.submitForm = function () {
-    const form = document.getElementById("masterForm");
-    if (form) {
-        form.submit();
-    }
+    document.getElementById("masterForm").submit();
 };
 
 window.handleGenerateReport = function () {
     alert("Report generation coming soon.");
 };
+
 
 function addReviewSection(container, title, fields) {
     const visibleFields = fields.filter(f => f.value && f.value.trim() !== "" && f.value !== "N/A");
@@ -1762,7 +1732,7 @@ window.addOffice = function (officeId, officeName, bodyId, totalId, resultsId) {
     `;
     tbody.appendChild(tr);
 
-    updateTotal(totalId);
+    updateTotal(totalId, bodyId);
     dropdown.style.display = "none";
     dropdown.parentElement.querySelector("input[type='text']").value = "";
 };
@@ -1775,7 +1745,7 @@ window.removeOffice = function (btn, totalId, bodyId) {
 
     setTimeout(() => {
         tr.remove();
-        updateTotal(totalId);
+        updateTotal(totalId, bodyId);   // ← add bodyId here
         const tbody = document.getElementById(bodyId);
         if (tbody && tbody.querySelectorAll("tr").length === 0) {
             tbody.innerHTML = `
@@ -1792,20 +1762,28 @@ window.removeOffice = function (btn, totalId, bodyId) {
     }, 200);
 };
 
-function updateTotal(totalId) {
+window.updateTotal = function (totalId, bodyId) {
     const totalEl = document.getElementById(totalId);
     if (!totalEl) return;
-    const inputs = totalEl.closest("table").querySelectorAll("tbody input[type='number']");
-    let sum = 0;
-    inputs.forEach(input => sum += parseInt(input.value) || 0);
-    totalEl.textContent = sum;
-}
 
-document.addEventListener("click", function (e) {
-    document.querySelectorAll(".reg-search-dropdown").forEach(dd => {
-        if (!dd.parentElement.contains(e.target)) dd.style.display = "none";
-    });
-});
+    let sum = 0;
+    if (bodyId) {
+        const tbody = document.getElementById(bodyId);
+        if (tbody) {
+            tbody.querySelectorAll('input[type="number"]').forEach(input => {
+                sum += parseInt(input.value) || 0;
+            });
+        }
+    } else {
+        const table = totalEl.closest("table");
+        if (table) {
+            table.querySelectorAll('tbody input[type="number"]').forEach(input => {
+                sum += parseInt(input.value) || 0;
+            });
+        }
+    }
+    totalEl.textContent = sum;
+};
 
 
 // ══════════════════════════════════════════════
@@ -1823,3 +1801,4 @@ window.closeToast = function () {
     toast.style.animation = "toastSlideOut 0.3s ease forwards";
     setTimeout(() => { toast.remove(); }, 300);
 };
+
