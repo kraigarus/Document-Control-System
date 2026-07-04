@@ -382,7 +382,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function statusBadge(status) {
         const s = (status || 'active').toLowerCase();
         let cls = 'db-status-active';
-        if (s === 'obsolete') cls = 'db-status-obsolete';
+        if (s === 'latest') cls = 'db-status-latest';
+        else if (s === 'obsolete') cls = 'db-status-obsolete';
         else if (s === 'pending') cls = 'db-status-pending';
         return '<span class="db-status ' + cls + '">' + esc(status || 'Active') + '</span>';
     }

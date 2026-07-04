@@ -75,4 +75,9 @@ class MasterlistRegistration extends Model
     {
         return $this->belongsToMany(MasterlistRegistration::class, 'related_documents', 'masterlist_id', 'related_doc_id');
     }
+
+    public function origins()
+    {
+        return $this->hasMany(MasterlistOrigin::class, 'masterlist_id', 'masterlist_id');
+    }
 }

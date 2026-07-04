@@ -333,7 +333,9 @@ window.handleSourceSearch = function (input, dropdownId) {
         return;
     }
 
-    const filtered = allOffices.filter(o => o.office_name.toLowerCase().includes(currentQuery));
+    const filtered = allOffices.filter(o =>
+        o.office_name.toLowerCase().includes(currentQuery)
+    );
 
     if (filtered.length === 0) {
         dropdown.style.display = "none";
@@ -341,20 +343,26 @@ window.handleSourceSearch = function (input, dropdownId) {
     }
 
     dropdown.innerHTML = filtered.map(o =>
-        '<div onmousedown="pickSource(\'' + input.id + "', '" + dropdownId + "', '" +
-        o.office_name.replace(/'/g, "\\'") + '\')">' + o.office_name + '</div>'
+        '<div onmousedown="pickSource(\'' + input.id + "', '" + dropdownId +
+        "', '" + o.office_name.replace(/'/g, "\\'") +
+        "', '" + o.office_id + '\')">' + o.office_name + '</div>'
     ).join("");
     dropdown.style.display = "block";
 };
 
-window.pickSource = function (inputId, dropdownId, officeName) {
+window.pickSource = function (inputId, dropdownId, officeName, officeId) {
     const input = document.getElementById(inputId);
     const dropdown = document.getElementById(dropdownId);
 
     if (inputId === "masterlistSourceUnit") {
+        input.dataset.justPicked = "true";
         const parts = input.value.split(",");
         parts[parts.length - 1] = " " + officeName;
         input.value = parts.join(",");
+
+        // Store the office ID in the hidden field
+        const hiddenId = document.getElementById("masterlistOfficeId");
+        if (hiddenId) hiddenId.value = officeId || "";
     } else {
         input.value = officeName;
     }
@@ -1090,17 +1098,27 @@ function clearValidation() {
 }
 
 function markFieldError(fieldId, message) {
-    const field = document.getElementById(fieldId);
-    if (!field) return;
+    const field = fieldId ? document.getElementById(fieldId) : null;
 
-    field.classList.add("reg-input-error");
-
-    const parent = field.closest(".reg-field") || field.closest("td") || field.parentElement;
-    if (parent && !parent.querySelector(".reg-field-error")) {
-        const err = document.createElement("div");
-        err.className = "reg-field-error";
-        err.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' + message;
-        parent.appendChild(err);
+    if (field) {
+        field.classList.add("reg-input-error");
+        const parent = field.closest(".reg-field") || field.closest("td") || field.parentElement;
+        if (parent && !parent.querySelector(".reg-field-error")) {
+            const err = document.createElement("div");
+            err.className = "reg-field-error";
+            err.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' + message;
+            parent.appendChild(err);
+        }
+    } else {
+        // Fallback for fields without IDs (like syllabi rows)
+        // Show a table-level error on the first occurrence only
+        const syllabiSection = document.getElementById("section-syllabi");
+        if (syllabiSection && !syllabiSection.querySelector('.reg-field-error')) {
+            const err = document.createElement("div");
+            err.className = "reg-field-error";
+            err.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' + message;
+            syllabiSection.insertBefore(err, syllabiSection.querySelector('.reg-table-wrap') || syllabiSection.firstChild);
+        }
     }
 }
 
@@ -1250,12 +1268,98 @@ function validateForm() {
     // Syllabi
     const sectionSyllabi = document.getElementById("section-syllabi");
     if (sectionSyllabi && sectionSyllabi.style.display !== "none") {
-        let hasSyllabi = false;
-        document.querySelectorAll("#syllabiTableBody tr").forEach(row => {
-            const course = row.querySelector('input[name="syllabiCourseName[]"]');
-            if (course && course.value.trim()) hasSyllabi = true;
+        const syllabiRows = document.querySelectorAll("#syllabiTableBody tr");
+        let hasValidSyllabi = false;
+
+        syllabiRows.forEach((row, index) => {
+            const course    = row.querySelector('input[name="syllabiCourseName[]"]');
+            const avail     = row.querySelector('select[name="syllabiAvailability[]"]');
+            const pages     = row.querySelector('input[name="syllabiNoPages[]"]');
+            const drfAvail  = row.querySelector('select[name="syllabiDrfAvailability[]"]');
+            const drfNo     = row.querySelector('input[name="syllabiDrfNo[]"]');
+            const drfDate   = row.querySelector('input[name="syllabiDrfDate[]"]');
+            const drfRecv   = row.querySelector('input[name="syllabiDrfReceived[]"]');
+
+            const rowNum = index + 1;
+            let rowHasError = false;
+
+            // Course name — required
+            if (!course || !course.value.trim()) {
+                markFieldError(course?.id || 'syllabiTableBody',
+                    'Syllabi Row ' + rowNum + ': Course Name is required.');
+                if (course) course.classList.add('reg-input-error');
+                rowHasError = true;
+            }
+
+            // Availability — required
+            if (!avail || !avail.value) {
+                markFieldError(avail?.id || 'syllabiTableBody',
+                    'Syllabi Row ' + rowNum + ': Availability is required.');
+                if (avail) avail.classList.add('reg-input-error');
+                rowHasError = true;
+            }
+
+            // No. of Pages — required and must be > 0
+            if (!pages || !pages.value || parseInt(pages.value) <= 0) {
+                markFieldError(pages?.id || 'syllabiTableBody',
+                    'Syllabi Row ' + rowNum + ': No. of Pages is required and must be greater than 0.');
+                if (pages) pages.classList.add('reg-input-error');
+                rowHasError = true;
+            }
+
+            // DRF Availability — required
+            if (!drfAvail || !drfAvail.value) {
+                markFieldError(drfAvail?.id || 'syllabiTableBody',
+                    'Syllabi Row ' + rowNum + ': DRF Availability is required.');
+                if (drfAvail) drfAvail.classList.add('reg-input-error');
+                rowHasError = true;
+            }
+
+            // DRF No. — required
+            if (!drfNo || !drfNo.value.trim()) {
+                markFieldError(drfNo?.id || 'syllabiTableBody',
+                    'Syllabi Row ' + rowNum + ': DRF No. is required.');
+                if (drfNo) drfNo.classList.add('reg-input-error');
+                rowHasError = true;
+            }
+
+            // DRF Date — required
+            if (!drfDate || !drfDate.value) {
+                markFieldError(drfDate?.id || 'syllabiTableBody',
+                    'Syllabi Row ' + rowNum + ': DRF Date is required.');
+                if (drfDate) drfDate.classList.add('reg-input-error');
+                rowHasError = true;
+            }
+
+            // DRF Received — required
+            if (!drfRecv || !drfRecv.value) {
+                markFieldError(drfRecv?.id || 'syllabiTableBody',
+                    'Syllabi Row ' + rowNum + ': DRF Received Date is required.');
+                if (drfRecv) drfRecv.classList.add('reg-input-error');
+                rowHasError = true;
+            }
+
+            // Scanned DRF — required
+            const fileInput = row.querySelector('input[name="syllabiScannedDrf[]"]');
+            if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+                const cell = fileInput?.closest('.reg-upload-cell') || fileInput?.closest('td');
+                if (cell && !cell.querySelector('.reg-file-error')) {
+                    const err = document.createElement('div');
+                    err.className = 'reg-file-error';
+                    err.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> Syllabi Row ' +
+                        rowNum + ': Scanned DRF is required.';
+                    cell.appendChild(err);
+                }
+                rowHasError = true;
+            }
+
+            if (!rowHasError) hasValidSyllabi = true;
         });
-        if (!hasSyllabi) errors.push({ field: "syllabiTableBody", message: "At least one syllabi course is required.", type: "table" });
+
+        if (!hasValidSyllabi) {
+            // Only add the generic error if no specific row errors were added
+            // (specific errors are already shown above)
+        }
     }
 
     return errors;

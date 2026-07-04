@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\RegisterController;
+use App\Http\Controllers\ReportController;
 
 // Public — portal (no auth)
 Route::get('/', function () {
@@ -99,18 +100,14 @@ Route::middleware('auth')->group(function () {
 });
 
 // Reports
-Route::get('/reports', [RegisterController::class, 'reportIndex'])->name('generate-report.report');
-Route::get('/reports/masterlist', [RegisterController::class, 'masterlistReport'])->name('generate-report.masterlist');
-Route::get('/reports/masterlist/data', [RegisterController::class, 'masterlistData'])->name('generate-report.masterlist.data');
-Route::get('/reports/masterlist/print', [RegisterController::class, 'masterlistPrint'])->name('generate-report.masterlist.print');
-Route::get('/reports/monitoring', [RegisterController::class, 'monitoringReport'])->name('generate-report.monitoring');
-Route::get('/reports/opcr', [RegisterController::class, 'opcrReport'])->name('generate-report.opcr');
-Route::get('/reports/other', [RegisterController::class, 'otherReport'])->name('generate-report.other');
+Route::get('/reports', [App\Http\Controllers\ReportController::class, 'index'])->name('reports.index');
+Route::get('/reports/data', [App\Http\Controllers\ReportController::class, 'data'])->name('reports.data');
+Route::get('/reports/export', [App\Http\Controllers\ReportController::class, 'export'])->name('reports.export');
 
+//stamping
 Route::get('/stamping', [RegisterController::class, 'stampingIndex'])->name('stamping.index');
 
-
-
+//database
 Route::get('/database', [RegisterController::class, 'databaseIndex'])->name('database.index');
 Route::get('/database/data', [RegisterController::class, 'databaseData'])->name('database.data');
 Route::get('/database/export', [RegisterController::class, 'databaseExport'])->name('database.export');

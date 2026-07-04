@@ -64,18 +64,16 @@
     
 <main class="db-page">
 
-    {{-- PAGE HEADER --}}
     <header class="db-header">
         <div class="db-header-left">
+            <div class="db-breadcrumb">Document Control System / <span>Inventory</span></div>
             <h1>Inventory</h1>
-            <p>Official index of all controlled documents</p>
         </div>
         <div class="db-header-right">
             <span class="db-count-badge" id="docCount">Loading...</span>
         </div>
     </header>
 
-    {{-- CONTROLS --}}
     <section class="db-controls">
         <div class="db-type-grid" id="docTypeGrid">
             <button class="db-type-btn active" data-type-id="all">ALL</button>

@@ -18,6 +18,13 @@
     --reg-error-bg: #fef2f2;
     --reg-error-border: #fecaca;
 }
+
+.reg-revision-table {
+    padding-top: 15px;
+}
+.reg-grid-2{
+    padding-top: 15px;
+}
 .reg-current-file {
     display: flex;
     align-items: center;

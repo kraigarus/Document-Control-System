@@ -53,7 +53,7 @@
 
     <div class="reg-header">
         <div class="reg-header-text">
-            <p class="reg-breadcrumb">Document Control System / Registration</p>
+            <p class="reg-breadcrumb">Document Control System / <span>Registration</span></p>
             <h1 class="reg-title">Register Document</h1>
         </div>
     </div>
@@ -363,13 +363,20 @@
                     <div class="reg-field">
                         <label>Source Unit / Originator</label>
                         <div class="reg-source-wrap">
+                            <input type="hidden" id="masterlistOfficeId" name="masterlistOfficeId" value="">
                             <input type="text" id="masterlistSourceUnit" name="masterlistSourceUnit"
-                                placeholder="Separate multiple with commas"
+                                value="{{ old('masterlistSourceUnit', $masterlistSourceUnit ?? '') }}"
+                                placeholder="e.g. Office of the President, Juan dela Cruz"
                                 autocomplete="off"
                                 oninput="handleSourceSearch(this, 'masterlistSourceResults')"
                                 onfocus="handleSourceSearch(this, 'masterlistSourceResults')">
-                            <div id="masterlistSourceResults" class="reg-source-suggestions" style="display:none;"></div>
+                            <div id="masterlistSourceResults" class="reg-source-suggestions"
+                                style="display:none;"></div>
                         </div>
+                        <small style="color:#888; font-size:12px; margin-top:4px; display:block;">
+                            Separate multiple entries with commas. Select an office from suggestions
+                            or type a person's name.
+                        </small>
                     </div>
                 </div>
 

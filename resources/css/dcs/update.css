@@ -42,6 +42,10 @@ body {
 
 .upd-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 24px; }
 .upd-breadcrumb { font-size: 0.78rem; color: var(--upd-text-subtle); margin-bottom: 4px; }
+.upd-breadcrumb span {
+    font-weight: 600;
+    color: var(--db-text-sec);
+}
 .upd-title { font-size: 1.6rem; font-weight: 800; color: var(--upd-text); letter-spacing: -0.02em; }
 
 /* ── Search ── */

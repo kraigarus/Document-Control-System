@@ -37,16 +37,27 @@
     --db-col-retrieval: #fff7ed;
 }
 
+body {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    background-color: var(--db-bg);
+    overflow-x: hidden;
+    overflow-y: auto;
+    margin: 0;
+}
+
+
 /* ── PAGE ── */
 .db-page {
     position: fixed;
     top: 70px;
-    left: 273px;
     right: 0;
     bottom: 0;
     padding: 28px 32px;
     background-color: var(--db-bg);
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
     display: flex;
     flex-direction: column;
     transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -54,16 +65,41 @@
 
 .db-header {
     display: flex;
-    align-items: center;
     justify-content: space-between;
-    margin-bottom: 20px;
-    flex-shrink: 0;
+    align-items: flex-end;
+    margin-bottom: 24px;
 }
-.db-header h1 { font-size: 22px; font-weight: 700; }
-.db-header p { font-size: 13px; color: var(--db-text-muted); margin-top: 2px; }
+
+.db-breadcrumb {
+    font-size: 0.78rem;
+    color: var(--db-text-muted);
+    font-weight: 400;
+    margin-bottom: 4px;
+}
+.db-breadcrumb span {
+    font-weight: 600;
+    color: var(--db-text-sec);
+}
+
+.db-header h1 {
+    font-size: 1.6rem;
+    font-weight: 800;
+    color: var(--db-text);
+    letter-spacing: -0.02em;
+}
 .db-count-badge {
     font-size: 12px; font-weight: 600; color: var(--db-primary);
     background: var(--db-accent-light); padding: 4px 12px; border-radius: 20px;
+}
+
+.db-status-latest {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.db-status-obsolete {
+    background: #fee2e2;
+    color: #b91c1c;
 }
 
 /* ── CONTROLS ── */
@@ -312,13 +348,51 @@
     padding: 8px 10px;
     border-bottom: 1px solid var(--db-border);
     border-right: 1px solid var(--db-border);
-    vertical-align: middle;
+    vertical-align: top;
     white-space: nowrap;
     overflow: hidden;
-    text-overflow: ellipsis;
     max-width: 300px;
     background-clip: padding-box;
+    line-height: 1.4;
 }
+
+/* to delete later */
+.db-table td:nth-child(4) { max-width: 300px; }
+.db-table td:nth-child(6) { max-width: 200px; }
+
+.db-table th,
+.db-table td {
+    white-space: normal;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    max-width: none;
+    min-width: 0;
+}
+
+.db-table td span,
+.db-table td a,
+.db-table td div {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    max-width: none;
+}
+
+[class^="col-group-"] {
+    white-space: normal;
+    max-width: none;
+    min-width: fit-content;
+}
+
+.db-sticky-col {
+    white-space: nowrap;
+}
+
+.db-sticky-1 { min-width: 80px; }
+.db-sticky-2 { min-width: 140px; }
+.db-sticky-3 { min-width: 50px; }
+.db-sticky-4 { min-width: 200px; }
+
 .db-table td:last-child { border-right: none; }
 
 /* ── Summary body cells (collapsed column indicator) ── */
@@ -381,7 +455,7 @@ td.sticky-col-4 {
     left: 270px; z-index: 15;
     width: 300px; min-width: 300px; max-width: 300px;
     background: var(--db-white); background-clip: padding-box;
-    font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-weight: 500; overflow: hidden; white-space: nowrap;
 }
 
 td.sticky-col-4::after {

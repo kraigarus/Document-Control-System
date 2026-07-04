@@ -336,7 +336,7 @@
                     </div>
 
                     <!-- Revision Table -->
-                    <div class="reg-field">
+                    <div class="reg-field reg-revision-table">
                         <label>Document Revisions</label>
                         <div class="reg-table-wrap">
                             <table class="reg-table">
@@ -464,13 +464,21 @@
                         </div>
                         <div class="reg-field">
                             <label>Source Unit / Originator</label>
-                            <input type="text" id="masterlistSourceUnit" name="masterlistSourceUnit"
-                                placeholder="Separate multiple with commas"
-                                autocomplete="off"
-                                value="{{ $masterlist->originator_name ?? '' }}"
-                                oninput="handleSourceSearch(this, 'masterlistSourceResults')"
-                                onfocus="handleSourceSearch(this, 'masterlistSourceResults')">
-                            <div id="masterlistSourceResults" class="reg-source-suggestions" style="display:none;"></div>
+                            <div class="reg-source-wrap">
+                                <input type="hidden" id="masterlistOfficeId" name="masterlistOfficeId" value="">
+                                <input type="text" id="masterlistSourceUnit" name="masterlistSourceUnit"
+                                    value="{{ old('masterlistSourceUnit', $masterlistSourceUnit ?? '') }}"
+                                    placeholder="e.g. Office of the President, Juan dela Cruz"
+                                    autocomplete="off"
+                                    oninput="handleSourceSearch(this, 'masterlistSourceResults')"
+                                    onfocus="handleSourceSearch(this, 'masterlistSourceResults')">
+                                <div id="masterlistSourceResults" class="reg-source-suggestions"
+                                    style="display:none;"></div>
+                            </div>
+                            <small style="color:#888; font-size:12px; margin-top:4px; display:block;">
+                                Separate multiple entries with commas. Select an office from suggestions
+                                or type a person's name.
+                            </small>
                         </div>
                     </div>
                     <div class="reg-grid-2">

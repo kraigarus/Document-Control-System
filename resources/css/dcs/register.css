@@ -248,6 +248,11 @@ body {
     letter-spacing: -0.02em;
 }
 
+.reg-breadcrumb span {
+    font-weight: 600;
+    color: var(--reg-text-sec);
+}
+
 /* ══════════════════════════════════════════════
    TOP PANEL
    ══════════════════════════════════════════════ */
