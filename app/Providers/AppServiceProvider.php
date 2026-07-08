@@ -26,5 +26,9 @@ class AppServiceProvider extends ServiceProvider
         if ($this->app->environment('production')) {
             URL::forceScheme('https');
         }
+
+        view()->composer('partials.inactivity-modal', function ($view) {
+            $view->with('session_remaining', config('session.lifetime') * 60);
+        });
     }
 }

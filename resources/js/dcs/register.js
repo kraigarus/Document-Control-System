@@ -251,7 +251,6 @@ document.addEventListener("DOMContentLoaded", async function () {
     applyRevisionMode();
 });
 
-
 // ══════════════════════════════════════════════
 // REVISION MODE HELPERS
 // ══════════════════════════════════════════════
@@ -316,7 +315,6 @@ function setSaveEnabled(enabled) {
     }
 }
 
-
 // ══════════════════════════════════════════════
 // SOURCE UNIT — autocomplete for Masterlist
 // ══════════════════════════════════════════════
@@ -376,7 +374,6 @@ document.addEventListener("click", function (e) {
     if (dd && !dd.parentElement.contains(e.target)) dd.style.display = "none";
 });
 
-
 // ══════════════════════════════════════════════
 // SELECT PROTECTION
 // ══════════════════════════════════════════════
@@ -413,7 +410,6 @@ function initSelectProtection() {
         });
     });
 }
-
 
 // ══════════════════════════════════════════════
 // FILE INPUTS
@@ -671,7 +667,6 @@ function validateTableFile(input) {
     }
 }
 
-
 // ══════════════════════════════════════════════
 // VERSION CHANGE
 // ══════════════════════════════════════════════
@@ -714,7 +709,6 @@ async function handleVersionChange() {
 
     updateRegistrationMode();
 }
-
 
 // ══════════════════════════════════════════════
 // DOC TYPE CHANGE
@@ -874,7 +868,6 @@ function handleDocTypeChange() {
     }
 }
 
-
 // ══════════════════════════════════════════════
 // SUB-TYPE CHANGE
 // ══════════════════════════════════════════════
@@ -909,7 +902,6 @@ function validateChecklistState() {
         lockChecklist();
     }
 }
-
 
 // ══════════════════════════════════════════════
 // CHECKLIST
@@ -989,7 +981,6 @@ function unlockChecklist() {
     setTimeout(initFileInputs, 100);
 }
 
-
 // ══════════════════════════════════════════════
 // TOGGLE SECTIONS
 // ══════════════════════════════════════════════
@@ -1013,7 +1004,6 @@ window.toggleSection = function (checklistId, show) {
     }
 };
 
-
 // ══════════════════════════════════════════════
 // FORM ACTIONS
 // ══════════════════════════════════════════════
@@ -1026,7 +1016,6 @@ function hideFormActions() {
     const el = document.getElementById("formActions");
     if (el) el.style.display = "none";
 }
-
 
 // ══════════════════════════════════════════════
 // AUTO TIME SPENT CALCULATION
@@ -1442,7 +1431,6 @@ document.addEventListener("change", function (e) {
     }
 });
 
-
 // ══════════════════════════════════════════════
 // CONFIRM SAVE
 // ══════════════════════════════════════════════
@@ -1612,7 +1600,6 @@ window.handleGenerateReport = function () {
     alert("Report generation coming soon.");
 };
 
-
 function addReviewSection(container, title, fields) {
     const visibleFields = fields.filter(f => f.value && f.value.trim() !== "" && f.value !== "N/A");
     if (visibleFields.length === 0) return;
@@ -1678,7 +1665,6 @@ function getOfficeList(tbodyId) {
     });
     return offices;
 }
-
 
 // ══════════════════════════════════════════════
 // APPROVAL

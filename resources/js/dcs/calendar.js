@@ -1,4 +1,3 @@
-console.log("calendar.js loaded");
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",

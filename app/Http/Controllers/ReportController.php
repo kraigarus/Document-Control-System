@@ -25,16 +25,16 @@ class ReportController extends Controller
     {
         return [
             'masterlist' => [
-                'label' => 'Masterlist',
-                'icon'  => 'fa-solid fa-list-check',
-                'subs'  => [
-                    'internal_docs'  => 'Internal Documented Information',
-                    'external_docs'  => 'External Documented Information',
-                    'internal_forms' => 'Internal Forms',
-                    'forms'          => 'Forms',
-                    'logbooks'       => 'Logbooks',
-                ],
+            'label' => 'Document Masterlist',
+            'icon'  => 'fa-solid fa-clipboard-list',
+            'subs'  => [
+                'internal_docs'  => 'Internal',
+                'external_docs'  => 'External',
+                'internal_forms' => 'Internal Forms',
+                'forms'          => 'Forms',
+                'logbooks'       => 'Logbooks',
             ],
+        ],
             'monitoring' => [
                 'label' => 'Monitoring Reports',
                 'icon'  => 'fa-solid fa-chart-line',
@@ -654,48 +654,146 @@ class ReportController extends Controller
     // EXPORT — Print-friendly HTML
     // ════════════════════════════════════════════
 
-    public function export(Request $request)
+        public function export(Request $request)
     {
-        $category = $request->input('category');
-        $sub      = $request->input('sub');
-        $dateFrom = $request->input('date_from');
-        $dateTo   = $request->input('date_to');
+        $category = $request->get('category');
+        $sub      = $request->get('sub');
+        $dateFrom = $request->get('date_from');
+        $dateTo   = $request->get('date_to');
+        $format   = $request->get('format', 'html');
 
-        // Call data method internally
-        $response = $this->data($request);
-        $json = $response->getData(true);
-
-        if (isset($json['error'])) {
-            return back()->with('error', 'Failed to generate report.');
+        if (!$category) {
+            abort(400, 'Category is required.');
         }
 
-        $rows    = $json['rows'];
-        $columns = $json['columns'];
-        $title   = $json['title'];
+        $data = $this->fetchReportData($category, $sub, $dateFrom, $dateTo);
+
         $categories = $this->getReportCategories();
-        $categoryLabel = $categories[$category]['label'] ?? ucfirst($category);
-        $subLabel = $categories[$category]['subs'][$sub] ?? '';
+        $catLabel   = $categories[$category]['label'] ?? '';
+        $subLabel   = ($sub && isset($categories[$category]['subs'][$sub]))
+                        ? $categories[$category]['subs'][$sub] : '';
 
-        return view('pages.dcs.reports.export', compact(
-            'rows', 'columns', 'title', 'categoryLabel', 'subLabel',
-            'dateFrom', 'dateTo'
-        ));
+        $filename = 'report-' . $category . '-' . now()->format('Y-m-d');
+
+        $viewData = [
+            'title'              => $data['title'],
+            'columns'            => $data['columns'],
+            'rows'               => $data['rows'],
+            'categoryLabel'      => $catLabel,
+            'subLabel'           => $subLabel,
+            'dateFrom'           => $dateFrom,
+            'dateTo'             => $dateTo,
+            'activeSub'          => $sub,
+            'republic'           => 'Republic of the Philippines',
+            'institutionName'    => 'Camarines Sur Polytechnic Colleges',
+            'institutionAddress' => 'Naga City, Camarines Sur',
+            'letterNumber'       => 'CSPC-QA-F001',
+            'formNumber'         => 'CSPC-QA-F001',
+            'footerLeft'         => 'Effectivity Date:',
+            'footerCenter'       => 'Rev:',
+            'footerRight'        => 'Fn: CSPC-QA-F001',
+        ];
+
+        // ── CSV ──
+        if ($format === 'xlsx' || $format === 'csv') {
+            return $this->generateCsv($data['columns'], $data['rows'], $filename . '.csv');
+        }
+
+        // ── PDF (print page with auto-print) ──
+        if ($format === 'pdf') {
+            $viewData['autoPrint'] = true;
+        }
+
+        return view('pages.dcs.reports.export', $viewData);
     }
 
-    // ════════════════════════════════════════════
-    // HELPER
+        // ════════════════════════════════════════════
+    // SHARED DATA FETCHER — used by both data() and export()
+    // Calls the existing private methods and extracts the array
     // ════════════════════════════════════════════
 
-    private function formatTime($value)
+    private function fetchReportData(string $category, ?string $sub, ?string $dateFrom, ?string $dateTo): array
     {
-        if (!$value) return null;
-        if (is_string($value) && !str_contains($value, 'T') && !str_contains($value, '-')) {
-            return $value;
+        switch ($category) {
+            case 'masterlist':
+                $response = $this->masterlistData($sub, $dateFrom, $dateTo);
+                break;
+            case 'monitoring':
+                $response = $this->monitoringData($sub, $dateFrom, $dateTo);
+                break;
+            case 'opcr':
+                $response = $response = $this->opcrData($sub, $dateFrom, $dateTo);
+                break;
+            case 'others':
+                $response = $this->othersData($dateFrom, $dateTo);
+                break;
+            default:
+                return [
+                    'title'      => 'Report',
+                    'columns'    => [],
+                    'rows'       => collect(),
+                    'total_rows' => 0,
+                ];
         }
+
+        // Extract the JSON data from the response
+        $data = $response->getData(true);
+
+        return [
+            'title'      => $data['title'] ?? 'Report',
+            'columns'    => $data['columns'] ?? [],
+            'rows'       => collect($data['rows'] ?? []),
+            'total_rows' => $data['total_rows'] ?? 0,
+        ];
+    }
+
+    private function generateCsv(array $columns, $rows, string $filename): \Symfony\Component\HttpFoundation\StreamedResponse
+    {
+        $colKeys = array_keys($columns);
+
+        if ($rows instanceof \Illuminate\Support\Collection) {
+            $rows = $rows->toArray();
+        }
+
+        $response = new \Symfony\Component\HttpFoundation\StreamedResponse(function () use ($columns, $rows, $colKeys) {
+            $handle = fopen('php://output', 'w');
+
+            // UTF-8 BOM for Excel
+            fprintf($handle, chr(0xEF) . chr(0xBB) . chr(0xBF));
+
+            fputcsv($handle, array_values($columns));
+
+            foreach ($rows as $row) {
+                $line = [];
+                foreach ($colKeys as $key) {
+                    $val = is_array($row) ? ($row[$key] ?? '') : ($row->$key ?? '');
+                    if ($key === 'pdf_path' && $val) {
+                        $val = 'View File';
+                    }
+                    $line[] = $val;
+                }
+                fputcsv($handle, $line);
+            }
+
+            fclose($handle);
+        });
+
+        $response->headers->set('Content-Type', 'text/csv; charset=UTF-8');
+        $response->headers->set('Content-Disposition', 'attachment; filename="' . $filename . '"');
+        $response->headers->set('Cache-Control', 'no-cache, no-store, must-revalidate');
+
+        return $response;
+    }
+    
+    private function formatTime($time): string
+    {
+        if (!$time) return '';
+
         try {
-            return \Carbon\Carbon::parse($value)->format('h:i A');
+            return \Carbon\Carbon::parse($time)->format('h:i A');
         } catch (\Exception $e) {
-            return $value;
+            return (string) $time;
         }
     }
+    
 }
