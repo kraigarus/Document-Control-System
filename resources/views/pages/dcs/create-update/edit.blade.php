@@ -44,7 +44,7 @@
 @include('partials.sidebar')
 @include('partials.inactivity-modal')
 
-    <div class="reg-container">
+    <div class="reg-container main-content">
         <!-- Header -->
         <div class="reg-header">
             <div>

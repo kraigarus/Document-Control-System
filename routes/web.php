@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\RegisterController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\StampingController;
 
 // Public — portal (no auth)
 Route::get('/', fn () => view('pages.portal.portal'));
@@ -95,7 +96,10 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::get('/register/history/{docNo}', [RegisterController::class, 'history'])->name('register.history');
 
     // Stamping
-    Route::get('/stamping', [RegisterController::class, 'stampingIndex'])->name('stamping.index');
+    Route::get('/stamping', [StampingController::class, 'index'])->name('stamping.index');
+    Route::post('/stamp/apply',    [StampingController::class, 'apply'])->name('dcs.stamp.apply');
+    Route::post('/stamp/download', [StampingController::class, 'download'])->name('dcs.stamp.download');
+    Route::post('/stamp/preview',  [StampingController::class, 'preview'])->name('dcs.stamp.preview');
 
     // Database
     Route::get('/database', [RegisterController::class, 'databaseIndex'])->name('database.index');

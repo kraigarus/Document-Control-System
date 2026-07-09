@@ -13,7 +13,7 @@
     @include('partials.sidebar')
     @include('partials.inactivity-modal')
 
-    <div class="upd-container">
+    <div class="upd-container main-content">
         <div class="upd-header">
             <div>
                 <div class="upd-breadcrumb">Document Control System / <span>Update</span></div>
