@@ -21,7 +21,6 @@
             <div>
                 <nav class="st-breadcrumb">Document Control System / <span>Stamp Document</span></nav>
                 <h1 class="st-title">Stamp Document</h1>
-                <p class="st-subtitle">Select a document to preview, configure, and apply stamps to PDF files.</p>
             </div>
             <div class="st-header-right">
                 <div class="st-stat-pill">
@@ -70,60 +69,93 @@
                                 $ml   = $doc->masterlistRegistration;
                                 $drf  = $doc->documentRequestForm;
                                 $dcn  = $doc->documentChangeNotice;
-                                $dist = $doc->distribution ?? null;
-                                $retr = $doc->retrieval ?? null;
+                                $dist = $doc->documentDistribution;
+                                $retr = $doc->documentRetrieval;
 
                                 $docNo   = $ml->doc_no ?? 'N/A';
                                 $title   = $ml->doc_title ?? $drf->doc_title ?? 'Untitled';
                                 $revNo   = $ml->revise_no ?? 0;
                                 $docType = $doc->docType->doc_type_name ?? 'N/A';
 
+                                // Build stamp lookup
+                                $stampMap = [];
+                                foreach ($doc->stamps as $stamp) {
+                                    $stampMap[$stamp->file_key] = $stamp;
+                                }
+
                                 $files = [];
-                                if ($ml && $ml->scanned_masterlist) {
+
+                                // Masterlist
+                                if ($ml && !empty($ml->scanned_masterlist)) {
+                                    $s = $stampMap['masterlist'] ?? null;
                                     $files[] = [
-                                        'key'   => 'masterlist',
-                                        'label' => 'Masterlist',
-                                        'abbr'  => 'ML',
-                                        'cls'   => 'ml',
-                                        'path'  => $ml->scanned_masterlist,
+                                        'key'        => 'masterlist',
+                                        'label'      => 'Masterlist',
+                                        'abbr'       => 'ML',
+                                        'cls'        => 'ml',
+                                        'path'       => $ml->scanned_masterlist,
+                                        'stamped'    => !!$s,
+                                        'stamp_type' => $s?->stamp_type,
                                     ];
                                 }
-                                if ($drf && $drf->scanned_drf) {
+
+                                // DRF
+                                if ($drf && !empty($drf->scanned_drf)) {
+                                    $s = $stampMap['drf'] ?? null;
                                     $files[] = [
-                                        'key'   => 'drf',
-                                        'label' => 'Document Request Form',
-                                        'abbr'  => 'DRF',
-                                        'cls'   => 'drf',
-                                        'path'  => $drf->scanned_drf,
+                                        'key'        => 'drf',
+                                        'label'      => 'Document Request Form',
+                                        'abbr'       => 'DRF',
+                                        'cls'        => 'drf',
+                                        'path'       => $drf->scanned_drf,
+                                        'stamped'    => !!$s,
+                                        'stamp_type' => $s?->stamp_type,
                                     ];
                                 }
-                                if ($dcn && $dcn->scanned_dcn) {
+
+                                // DCN
+                                if ($dcn && !empty($dcn->scanned_dcn)) {
+                                    $s = $stampMap['dcn'] ?? null;
                                     $files[] = [
-                                        'key'   => 'dcn',
-                                        'label' => 'Document Change Notice',
-                                        'abbr'  => 'DCN',
-                                        'cls'   => 'dcn',
-                                        'path'  => $dcn->scanned_dcn,
+                                        'key'        => 'dcn',
+                                        'label'      => 'Document Change Notice',
+                                        'abbr'       => 'DCN',
+                                        'cls'        => 'dcn',
+                                        'path'       => $dcn->scanned_dcn,
+                                        'stamped'    => !!$s,
+                                        'stamp_type' => $s?->stamp_type,
                                     ];
                                 }
-                                if ($dist && $dist->scanned_distribution) {
+
+                                // Distribution
+                                if ($dist && !empty($dist->scanned_distribution)) {
+                                    $s = $stampMap['distribution'] ?? null;
                                     $files[] = [
-                                        'key'   => 'distribution',
-                                        'label' => 'Distribution',
-                                        'abbr'  => 'DIST',
-                                        'cls'   => 'dist',
-                                        'path'  => $dist->scanned_distribution,
+                                        'key'        => 'distribution',
+                                        'label'      => 'Distribution',
+                                        'abbr'       => 'DIST',
+                                        'cls'        => 'dist',
+                                        'path'       => $dist->scanned_distribution,
+                                        'stamped'    => !!$s,
+                                        'stamp_type' => $s?->stamp_type,
                                     ];
                                 }
-                                if ($retr && $retr->scanned_retrieval) {
+
+                                // Retrieval
+                                if ($retr && !empty($retr->scanned_retrieval)) {
+                                    $s = $stampMap['retrieval'] ?? null;
                                     $files[] = [
-                                        'key'   => 'retrieval',
-                                        'label' => 'Retrieval',
-                                        'abbr'  => 'RETR',
-                                        'cls'   => 'retr',
-                                        'path'  => $retr->scanned_retrieval,
+                                        'key'        => 'retrieval',
+                                        'label'      => 'Retrieval',
+                                        'abbr'       => 'RETR',
+                                        'cls'        => 'retr',
+                                        'path'       => $retr->scanned_retrieval,
+                                        'stamped'    => !!$s,
+                                        'stamp_type' => $s?->stamp_type,
                                     ];
                                 }
+
+                                $anyStamped = collect($files)->contains(fn($f) => $f['stamped']);
                             @endphp
                             <tr data-search="{{ strtolower($docNo . ' ' . $title . ' ' . $docType) }}">
                                 <td class="col-idx">{{ $documents->firstItem() + $i }}</td>
@@ -135,14 +167,25 @@
                                     @if(count($files) > 0)
                                         <div class="st-files-group">
                                             @foreach($files as $file)
-                                                <a href="/storage/{{ $file['path'] }}"
-                                                   target="_blank"
-                                                   rel="noopener"
-                                                   class="st-file-tag st-file-{{ $file['cls'] }}"
-                                                   title="Preview {{ $file['label'] }}">
-                                                    <i class="fa-solid fa-file-pdf"></i>
-                                                    {{ $file['abbr'] }}
-                                                </a>
+                                                <div class="st-file-tag-wrap">
+                                                    <a href="/storage/{{ $file['path'] }}"
+                                                       target="_blank"
+                                                       rel="noopener"
+                                                       class="st-file-tag st-file-{{ $file['cls'] }} {{ $file['stamped'] ? 'st-file-stamped' : '' }}"
+                                                       title="{{ $file['label'] }}{{ $file['stamped'] ? ' — ' . strtoupper(str_replace('_',' ',$file['stamp_type'])) : '' }}">
+                                                        @if($file['stamped'])
+                                                            <i class="fa-solid fa-stamp"></i>
+                                                        @else
+                                                            <i class="fa-solid fa-file-pdf"></i>
+                                                        @endif
+                                                        {{ $file['abbr'] }}
+                                                    </a>
+                                                    @if($file['stamped'])
+                                                        <span class="st-stamp-badge" title="{{ strtoupper(str_replace('_',' ',$file['stamp_type'])) }}">
+                                                            <i class="fa-solid fa-lock"></i>
+                                                        </span>
+                                                    @endif
+                                                </div>
                                             @endforeach
                                         </div>
                                     @else
@@ -150,13 +193,19 @@
                                     @endif
                                 </td>
                                 <td class="col-action">
-                                    <button type="button" class="st-btn-stamp"
+                                    <button type="button" class="st-btn-stamp {{ $anyStamped ? 'st-btn-stamp-change' : '' }}"
                                         data-files='@json($files)'
+                                        data-request-id="{{ $doc->request_id }}"
                                         data-title="{{ $title }}"
                                         data-doc-no="{{ $docNo }}"
                                         data-rev="{{ $revNo }}">
-                                        <i class="fa-solid fa-stamp"></i>
-                                        <span>Stamp</span>
+                                        @if($anyStamped)
+                                            <i class="fa-solid fa-pen-to-square"></i>
+                                            <span>Change</span>
+                                        @else
+                                            <i class="fa-solid fa-stamp"></i>
+                                            <span>Stamp</span>
+                                        @endif
                                     </button>
                                 </td>
                             </tr>

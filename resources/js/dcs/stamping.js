@@ -78,12 +78,44 @@ document.addEventListener('DOMContentLoaded', function () {
     function filterRows() {
         const q    = searchInput.value.toLowerCase().trim();
         const type = typeFilter.value;
+        let visibleCount = 0;
+
         document.querySelectorAll('#stTableBody tr[data-search]').forEach(row => {
             const text = row.dataset.search || '';
             const matchType  = type === 'all' || text.includes(type);
             const matchQuery = !q || text.includes(q);
-            row.style.display = (matchType && matchQuery) ? '' : 'none';
+            const show = matchType && matchQuery;
+            row.style.display = show ? '' : 'none';
+            if (show) visibleCount++;
         });
+
+        // Show/hide no-results message
+        let noResultsRow = document.getElementById('stNoResults');
+        const tbody = document.getElementById('stTableBody');
+
+        if (visibleCount === 0) {
+            if (!noResultsRow) {
+                noResultsRow = document.createElement('tr');
+                noResultsRow.id = 'stNoResults';
+                noResultsRow.innerHTML = `
+                    <td colspan="7">
+                        <div class="st-empty">
+                            <div class="st-empty-icon">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                            </div>
+                            <h3>No documents found</h3>
+                            <p>No documents match your current search or filter. Try adjusting your criteria.</p>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(noResultsRow);
+            }
+            noResultsRow.style.display = '';
+        } else {
+            if (noResultsRow) {
+                noResultsRow.style.display = 'none';
+            }
+        }
     }
 
     searchInput.addEventListener('input', filterRows);
@@ -98,7 +130,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // OPEN MODAL
     // ═══════════════════════════════════════════
 
-    document.addEventListener('click', function (e) {
+        document.addEventListener('click', function (e) {
         const btn = e.target.closest('.st-btn-stamp');
         if (!btn) return;
 
@@ -110,16 +142,26 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        state.files      = files;
-        state.selectedFile = files[0];
-        state.docTitle   = btn.dataset.title || '';
-        state.docNo      = btn.dataset.docNo || '';
-        state.rev        = btn.dataset.rev   || '0';
-        state.stampType  = null;
-        state.position   = 'bottom-right';
-        state.allPages   = true;
-        state.certBy     = '';
-        state.desig      = '';
+        state.files       = files;
+        state.requestId   = parseInt(btn.dataset.requestId) || 0;
+        state.docTitle    = btn.dataset.title || '';
+        state.docNo       = btn.dataset.docNo || '';
+        state.rev         = btn.dataset.rev   || '0';
+        state.allPages    = true;
+        state.certBy      = '';
+        state.desig       = '';
+        state.position    = 'bottom-right';
+
+        // Find the first file — prefer unstamped, fallback to first stamped
+        let defaultFile = files.find(f => !f.stamped) || files[0];
+        state.selectedFile = defaultFile;
+
+        // If file is already stamped, pre-select that stamp type
+        if (defaultFile.stamped && defaultFile.stamp_type) {
+            state.stampType = defaultFile.stamp_type;
+        } else {
+            state.stampType = null;
+        }
 
         // Header info
         modalDocInfo.textContent = state.docNo + ' — ' + state.docTitle + ' (Rev ' + state.rev + ')';
@@ -127,8 +169,26 @@ document.addEventListener('DOMContentLoaded', function () {
         // Build file selector
         buildFileSelector();
 
-        // Reset config UI
+        // Reset config UI (but preserve stamp type if pre-selected)
         resetConfigUI();
+
+        // If stamp was pre-selected, apply it
+        if (state.stampType) {
+            const pill = document.querySelector('.st-type-pill[data-type="' + state.stampType + '"]');
+            if (pill) {
+                pill.classList.add('selected');
+                if (state.stampType === 'certified_true_copy') {
+                    certifiedFields.style.display = 'block';
+                }
+            }
+            updateOverlay();
+            checkReady();
+        }
+
+        // Update modal title
+        const hasPreSelected = state.stampType;
+        const headerH3 = document.querySelector('.st-modal-header h3');
+        headerH3.textContent = hasPreSelected ? 'Change Stamp' : 'Apply Stamp';
 
         // Load first preview
         loadPreview();
@@ -159,11 +219,15 @@ document.addEventListener('DOMContentLoaded', function () {
             radio.type    = 'radio';
             radio.name    = 'stampFile';
             radio.value   = idx;
-            if (idx === 0) radio.checked = true;
+            if (file === state.selectedFile) radio.checked = true;
 
             const span = document.createElement('span');
             span.className = 'st-file-option-label';
-            span.innerHTML = '<i class="fa-solid fa-file-pdf"></i> ' + file.label;
+            if (file.stamped) {
+                span.innerHTML = '<i class="fa-solid fa-stamp" style="color:var(--st-accent)"></i> ' + file.label + ' <small style="color:var(--st-text-subtle);margin-left:auto">(' + file.stamp_type.replace(/_/g, ' ') + ')</small>';
+            } else {
+                span.innerHTML = '<i class="fa-solid fa-file-pdf"></i> ' + file.label;
+            }
 
             lbl.appendChild(radio);
             lbl.appendChild(span);
@@ -172,6 +236,18 @@ document.addEventListener('DOMContentLoaded', function () {
             radio.addEventListener('change', function () {
                 if (this.checked) {
                     state.selectedFile = state.files[idx];
+
+                    // Pre-select stamp type if file is already stamped
+                    if (file.stamped && file.stamp_type) {
+                        state.stampType = file.stamp_type;
+                        document.querySelectorAll('.st-type-pill').forEach(p => p.classList.remove('selected'));
+                        const pill = document.querySelector('.st-type-pill[data-type="' + file.stamp_type + '"]');
+                        if (pill) pill.classList.add('selected');
+                        certifiedFields.style.display = file.stamp_type === 'certified_true_copy' ? 'block' : 'none';
+                        updateOverlay();
+                        checkReady();
+                    }
+
                     loadPreview();
                 }
             });
@@ -395,10 +471,11 @@ document.addEventListener('DOMContentLoaded', function () {
     // BUILD REQUEST PAYLOAD
     // ═══════════════════════════════════════════
 
-        function buildPayload() {
+    function buildPayload() {
         return {
             file_path:    state.selectedFile.path,
             file_key:     state.selectedFile.key,
+            request_id:   state.requestId,
             doc_no:       state.docNo,
             doc_title:    state.docTitle,
             rev:          String(state.rev),

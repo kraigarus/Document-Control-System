@@ -100,6 +100,8 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::post('/stamp/apply',    [StampingController::class, 'apply'])->name('dcs.stamp.apply');
     Route::post('/stamp/download', [StampingController::class, 'download'])->name('dcs.stamp.download');
     Route::post('/stamp/preview',  [StampingController::class, 'preview'])->name('dcs.stamp.preview');
+    Route::post('/stamp/check',  [StampingController::class, 'checkStamp'])->name('dcs.stamp.check');
+    Route::post('/stamp/remove', [StampingController::class, 'remove'])->name('dcs.stamp.remove');
 
     // Database
     Route::get('/database', [RegisterController::class, 'databaseIndex'])->name('database.index');

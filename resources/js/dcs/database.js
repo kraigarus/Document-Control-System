@@ -368,16 +368,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function groupCell(group, value, isLink) {
-        const hidden = groupState[group] ? '' : ' style="display:none"';
-        if (!value || value === 'N/A') {
-            return '<td class="col-group-' + group + ' col-bg-' + group + '"' + hidden + '><span class="db-na">\u2014</span></td>';
-        }
-        if (isLink) {
-            return '<td class="col-group-' + group + ' col-bg-' + group + '"' + hidden + '>' +
-                '<a href="' + value + '" class="db-scan-link" target="_blank" rel="noopener">View</a></td>';
-        }
-        return '<td class="col-group-' + group + ' col-bg-' + group + '"' + hidden + '>' + esc(value) + '</td>';
+    const hidden = groupState[group] ? '' : ' style="display:none"';
+    if (!value || value === 'N/A') {
+        return '<td class="col-group-' + group + ' col-bg-' + group + '"' + hidden + '><span class="db-na">—</span></td>';
     }
+    if (isLink) {
+        return '<td class="col-group-' + group + ' col-bg-' + group + '"' + hidden + ' style="text-align:center">' +
+            pdfLink(value) + '</td>';
+    }
+    return '<td class="col-group-' + group + ' col-bg-' + group + '"' + hidden + '>' + esc(value) + '</td>';
+}
 
     function statusBadge(status) {
         const s = (status || 'active').toLowerCase();

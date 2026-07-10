@@ -18,7 +18,7 @@
 }
 
 body {
-    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+    font-family: Arial, Helvetica, sans-serif;
     background: var(--st-bg);
     color: var(--st-text);
     -webkit-font-smoothing: antialiased;
@@ -75,12 +75,6 @@ body {
     line-height: 1.2;
 }
 
-.st-subtitle {
-    font-size: 0.84rem;
-    color: var(--st-text-muted);
-    margin-top: 4px;
-    font-weight: 400;
-}
 
 .st-header-right { flex-shrink: 0; }
 
@@ -141,7 +135,6 @@ body {
     border-radius: var(--st-radius-sm);
     padding: 0 14px 0 40px;
     font-size: 0.85rem;
-    font-family: inherit;
     color: var(--st-text);
     background: var(--st-surface);
     outline: none;
@@ -164,7 +157,6 @@ body {
     border-radius: var(--st-radius-sm);
     padding: 0 14px;
     font-size: 0.85rem;
-    font-family: inherit;
     color: var(--st-text);
     background: var(--st-surface);
     outline: none;
@@ -189,7 +181,6 @@ body {
     color: var(--st-text-muted);
     font-size: 0.85rem;
     font-weight: 600;
-    font-family: inherit;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
@@ -456,7 +447,6 @@ body {
     color: #fff;
     font-size: 0.78rem;
     font-weight: 700;
-    font-family: inherit;
     cursor: pointer;
     transition: all 0.2s ease;
     white-space: nowrap;
@@ -472,6 +462,61 @@ body {
     transform: translateY(0);
     box-shadow: 0 2px 6px rgba(0, 0, 128, 0.2);
 }
+
+.st-btn-stamp-change {
+    background: linear-gradient(135deg, #475569 0%, #334155 100%);
+}
+
+.st-btn-stamp-change:hover {
+    background: linear-gradient(135deg, #334155 0%, #1e293b 100%);
+    box-shadow: 0 4px 16px rgba(51, 65, 85, 0.35);
+}
+
+/* ── Stamped file indicator ── */
+
+.st-file-tag-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.st-file-stamped {
+    opacity: 0.65;
+    padding-right: 6px;
+}
+
+.st-stamp-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--st-accent);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.4rem;
+    box-shadow: 0 1px 3px rgba(0,0,128,0.3);
+}
+
+/* ── Stamped complete status ── */
+
+.st-stamped-complete {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    background: #ecfdf5;
+    color: #065f46;
+    font-size: 0.78rem;
+    font-weight: 700;
+    border: 1px solid #a7f3d0;
+}
+
+.st-stamped-complete i { font-size: 0.72rem; }
 
 .st-btn-stamp i { font-size: 0.72rem; }
 
@@ -575,7 +620,6 @@ body {
     position: fixed;
     inset: 0;
     background: rgba(15,23,42,0.5);
-    backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -713,7 +757,6 @@ body {
     color: var(--st-text-muted);
     font-size: 0.72rem;
     font-weight: 600;
-    font-family: inherit;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -866,7 +909,6 @@ body {
     cursor: pointer;
     font-size: 0.75rem;
     font-weight: 600;
-    font-family: inherit;
     color: var(--st-text-muted);
     transition: all 0.15s;
     white-space: nowrap;
@@ -903,7 +945,6 @@ body {
     border-radius: var(--st-radius-sm);
     padding: 0 12px;
     font-size: 0.82rem;
-    font-family: inherit;
     color: var(--st-text);
     background: var(--st-surface);
     outline: none;
@@ -1001,7 +1042,6 @@ body {
 
 .st-checkbox-custom::after {
     content: '\f00c';
-    font-family: 'Font Awesome 6 Free';
     font-weight: 900;
     font-size: 0.55rem;
     color: #fff;
@@ -1042,7 +1082,6 @@ body {
     padding: 3px;
     min-width: 120px;
     box-shadow: 0 2px 12px rgba(0,0,0,0.12);
-    backdrop-filter: blur(2px);
 }
 
 .st-stamp-inner {
@@ -1131,7 +1170,6 @@ body {
     color: var(--st-text-muted);
     font-size: 0.82rem;
     font-weight: 600;
-    font-family: inherit;
     cursor: pointer;
     transition: all 0.15s;
 }
@@ -1150,7 +1188,6 @@ body {
     color: var(--st-accent);
     font-size: 0.82rem;
     font-weight: 600;
-    font-family: inherit;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -1180,7 +1217,6 @@ body {
     color: #fff;
     font-size: 0.82rem;
     font-weight: 600;
-    font-family: inherit;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -1210,7 +1246,6 @@ body {
     position: fixed;
     inset: 0;
     background: rgba(15,23,42,0.55);
-    backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1269,7 +1304,6 @@ body {
     color: var(--st-text-muted);
     font-size: 0.84rem;
     font-weight: 600;
-    font-family: inherit;
     cursor: pointer;
     transition: all 0.15s;
 }
@@ -1288,7 +1322,6 @@ body {
     color: #fff;
     font-size: 0.84rem;
     font-weight: 600;
-    font-family: inherit;
     cursor: pointer;
     display: flex;
     align-items: center;
