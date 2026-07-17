@@ -1244,6 +1244,7 @@ function validateForm() {
         if (!document.getElementById("distributionFormTime").value) errors.push({ field: "distributionFormTime", message: "Distribution Form Time is required." });
         if (!document.getElementById("distributionDate").value) errors.push({ field: "distributionDate", message: "Distribution Date is required." });
         if (!document.getElementById("distributionTime").value) errors.push({ field: "distributionTime", message: "Distribution Time is required." });
+        if (!document.getElementById("distributionRemarks").value) errors.push({ field: "distributionRemarks", message: "Distribution Remarks is required." });
 
         const distTimeDisplay = document.getElementById("distributionTimeSpentDisplay");
         if (distTimeDisplay.value === "Invalid") {

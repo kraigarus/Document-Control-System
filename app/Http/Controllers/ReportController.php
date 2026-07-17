@@ -39,8 +39,8 @@ class ReportController extends Controller
                 'label' => 'Monitoring Reports',
                 'icon'  => 'fa-solid fa-chart-line',
                 'subs'  => [
-                    'internal_docs'  => 'Internal Documented Information',
-                    'external_docs'  => 'External Documented Information',
+                    'internal_docs'  => 'Internal',
+                    'external_docs'  => 'External',
                     'internal_forms' => 'Internal Forms',
                     'forms'          => 'Forms',
                     'logbooks'       => 'Logbooks',
@@ -74,8 +74,8 @@ class ReportController extends Controller
     private function getDocTypeMapping(): array
     {
         return [
-            'internal_docs'  => ['Internal Documented Information'],
-            'external_docs'  => ['External Documented Information'],
+            'internal_docs'  => ['Internal'],
+            'external_docs'  => ['External'],
             'internal_forms' => ['Internal Forms'],
             'forms'          => ['Forms'],
             'logbooks'       => ['Logbooks'],
@@ -207,7 +207,7 @@ class ReportController extends Controller
         return response()->json([
             'rows'       => $rows,
             'columns'    => $columns,
-            'title'      => 'Masterlist Report',
+            'title'      => 'Document Masterlist',
             'total_rows' => $rows->count(),
         ]);
     }
@@ -216,7 +216,7 @@ class ReportController extends Controller
     // MONITORING REPORT
     // ════════════════════════════════════════════
 
-    private function monitoringData(?string $sub, ?string $dateFrom, ?string $dateTo)
+        private function monitoringData(?string $sub, ?string $dateFrom, ?string $dateTo)
     {
         // DRF-specific report
         if ($sub === 'drf') {
@@ -228,7 +228,12 @@ class ReportController extends Controller
             return $this->dcnReport($dateFrom, $dateTo);
         }
 
-        // Doc-type-based monitoring
+        // Internal Monitoring Log (matches the image layout)
+        if ($sub === 'internal_docs') {
+            return $this->internalMonitoringLog($dateFrom, $dateTo);
+        }
+
+        // Doc-type-based monitoring for other subs
         $docTypeNames = $this->getDocTypeMapping()[$sub] ?? null;
 
         $query = DocumentRequest::with([
@@ -322,6 +327,150 @@ class ReportController extends Controller
             'rows'       => $rows,
             'columns'    => $columns,
             'title'      => 'Monitoring Report',
+            'total_rows' => $rows->count(),
+        ]);
+    }
+
+    /**
+     * Internal Monitoring Log — matches the document receipt/registration tracking format
+     */
+    private function internalMonitoringLog(?string $dateFrom, ?string $dateTo)
+    {
+        $query = DocumentRequest::with([
+            'masterlistRegistration',
+            'masterlistRegistration.origins.office',
+            'documentRequestForm',
+            'documentChangeNotice',
+            'docType',
+        ])
+        ->whereHas('docType', function ($q) {
+            $q->where('doc_type_name', 'Internal');
+        })
+        ->whereHas('masterlistRegistration', function ($q) {
+            $q->whereNotNull('doc_no')->where('doc_no', '!=', '');
+        });
+
+        if ($dateFrom) {
+            $query->whereHas('masterlistRegistration', function ($q) use ($dateFrom) {
+                $q->where('effectivity_date', '>=', $dateFrom);
+            });
+        }
+        if ($dateTo) {
+            $query->whereHas('masterlistRegistration', function ($q) use ($dateTo) {
+                $q->where('effectivity_date', '<=', $dateTo);
+            });
+        }
+
+        $docs = $query->orderBy('request_id', 'desc')->get();
+
+        $rows = $docs->map(function ($doc, $index) {
+            $ml  = $doc->masterlistRegistration;
+            $drf = $doc->documentRequestForm;
+            $dcn = $doc->documentChangeNotice;
+
+            // DRF reference
+            $drfRef = $drf && $drf->drf_no ? $drf->drf_no : null;
+
+            // Date received document + time
+            $dateReceived = $drf && $drf->drf_date
+                ? \Carbon\Carbon::parse($drf->drf_date)->format('M d, Y') : null;
+            $timeReceived = $drf && $drf->drf_receipt_time
+                ? $this->formatTime($drf->drf_receipt_time) : null;
+
+            // Registered to masterlist + time
+            $dateRegistered = $ml && $ml->doc_registered_date
+                ? \Carbon\Carbon::parse($ml->doc_registered_date)->format('M d, Y') : null;
+            $timeRegistered = null;
+            if ($ml && $ml->doc_registered_date) {
+                try {
+                    $timeRegistered = \Carbon\Carbon::parse($ml->doc_registered_date)->format('h:i A');
+                } catch (\Exception $e) {
+                    $timeRegistered = null;
+                }
+            }
+
+            // Minutes spent (between receipt and registration)
+            $minsSpent = null;
+            if ($drf && $drf->drf_receipt_time && $ml && $ml->doc_registered_date) {
+                try {
+                    $start = \Carbon\Carbon::parse($drf->drf_date . ' ' . $drf->drf_receipt_time);
+                    $end   = \Carbon\Carbon::parse($ml->doc_registered_date);
+                    $minsSpent = (int) $start->diffInMinutes($end);
+                } catch (\Exception $e) {
+                    $minsSpent = null;
+                }
+            }
+
+            // Source (originator office)
+            $source = $ml && $ml->origins->count() > 0
+                ? $ml->origins->map(fn($o) => $o->office ? $o->office->office_name : $o->originator_name)
+                    ->filter()->implode(', ')
+                : null;
+
+            // Subject matter = document title
+            $subjectMatter = $ml ? $ml->doc_title : ($drf ? $drf->doc_title : null);
+
+            // Effectivity date
+            $effectivityDate = $ml && $ml->effectivity_date
+                ? \Carbon\Carbon::parse($ml->effectivity_date)->format('M d, Y') : null;
+
+            // Days spent (receipt to effectivity)
+            $daysSpent = null;
+            if ($drf && $drf->drf_date && $ml && $ml->effectivity_date) {
+                try {
+                    $start = \Carbon\Carbon::parse($drf->drf_date);
+                    $end   = \Carbon\Carbon::parse($ml->effectivity_date);
+                    $daysSpent = (int) $start->diffInDays($end);
+                } catch (\Exception $e) {
+                    $daysSpent = null;
+                }
+            }
+
+            return [
+                'no'                => $index + 1,
+                'drf'               => $drfRef,
+                'date_received'     => $dateReceived,
+                'time_received'     => $timeReceived,
+                'date_registered'   => $dateRegistered,
+                'time_registered'   => $timeRegistered,
+                'mins_spent'        => $minsSpent,
+                'source'            => $source,
+                'in_charge'         => null, // Add field if available
+                'control_number'    => $ml ? $ml->doc_no : null,
+                'subject_matter'    => $subjectMatter,
+                'effectivity_date'  => $effectivityDate,
+                'deadline'          => null, // Add field if available
+                'date_released'     => null, // Add field if available
+                'days_spent'        => $daysSpent,
+                'remarks'           => $dcn && $dcn->dcn_no ? 'DCN: ' . $dcn->dcn_no : null,
+                'pdf_path'          => $ml && $ml->scanned_masterlist
+                    ? '/storage/' . $ml->scanned_masterlist : null,
+            ];
+        })->values();
+
+        $columns = [
+            'no'                => 'No.',
+            'drf'               => 'DRF',
+            'date_received'     => 'Date Received Document',
+            'time_received'     => 'Time',
+            'date_registered'   => 'Registered to Masterlist',
+            'time_registered'   => 'Time',
+            'mins_spent'        => 'Mins. Spent',
+            'source'            => 'SOURCE',
+            'in_charge'         => 'In-Charge',
+            'control_number'    => 'Control Number',
+            'subject_matter'    => 'Subject Matter',
+            'effectivity_date'  => 'Effectivity Date',
+            'deadline'          => 'DEADLINE',
+            'date_released'     => 'Date Released',
+            'days_spent'        => 'Days Spent',
+            'remarks'           => 'Remarks',
+        ];
+
+        return response()->json([
+            'rows'       => $rows,
+            'columns'    => $columns,
+            'title'      => 'Internal Document Monitoring Log',
             'total_rows' => $rows->count(),
         ]);
     }
@@ -654,7 +803,7 @@ class ReportController extends Controller
     // EXPORT — Print-friendly HTML
     // ════════════════════════════════════════════
 
-        public function export(Request $request)
+    public function export(Request $request)
     {
         $category = $request->get('category');
         $sub      = $request->get('sub');
@@ -668,6 +817,35 @@ class ReportController extends Controller
 
         $data = $this->fetchReportData($category, $sub, $dateFrom, $dateTo);
 
+        // ── Restrict to checked rows only, if the user selected specific
+        //    rows in the UI before exporting. Indices refer to the row's
+        //    position in the same filtered/sorted result set returned by
+        //    /reports/data, so they line up with what's re-fetched here. ──
+                $allRows = $data['rows']->values();
+        $totalCount = $allRows->count();
+
+        if (!$request->has('rows')) {
+            // No rows parameter at all — return all
+            $rows = $allRows;
+            $isFiltered = false;
+        } elseif ($request->get('rows') === 'none' || $request->get('rows') === '') {
+            // User exported with nothing checked — return empty
+            $rows = collect();
+            $isFiltered = true;
+        } else {
+            // Filter to selected indices only
+            $selectedIndices = collect(explode(',', $request->get('rows')))
+                ->map(fn($v) => trim($v))
+                ->filter(fn($v) => $v !== '' && is_numeric($v))
+                ->map(fn($v) => (int) $v)
+                ->values();
+
+            $rows = $allRows->filter(function ($row, $idx) use ($selectedIndices) {
+                return $selectedIndices->contains($idx);
+            })->values();
+            $isFiltered = true;
+        }
+
         $categories = $this->getReportCategories();
         $catLabel   = $categories[$category]['label'] ?? '';
         $subLabel   = ($sub && isset($categories[$category]['subs'][$sub]))
@@ -678,32 +856,83 @@ class ReportController extends Controller
         $viewData = [
             'title'              => $data['title'],
             'columns'            => $data['columns'],
-            'rows'               => $data['rows'],
-            'categoryLabel'      => $catLabel,
-            'subLabel'           => $subLabel,
+            'rows'               => $rows,
+            'isFiltered'         => $isFiltered,
+            'selectedCount'      => $rows->count(),
+            'totalCount'         => $totalCount,
             'dateFrom'           => $dateFrom,
             'dateTo'             => $dateTo,
             'activeSub'          => $sub,
+            'activeCategory'     => $category,
             'republic'           => 'Republic of the Philippines',
             'institutionName'    => 'Camarines Sur Polytechnic Colleges',
-            'institutionAddress' => 'Naga City, Camarines Sur',
+            'institutionAddress' => 'Nabua, Camarines Sur',
             'letterNumber'       => 'CSPC-QA-F001',
-            'formNumber'         => 'CSPC-QA-F001',
             'footerLeft'         => 'Effectivity Date:',
-            'footerCenter'       => 'Rev:',
-            'footerRight'        => 'Fn: CSPC-QA-F001',
+            'footerCenter'       => 'Rev.',
+            'footerRight'        => '',
         ];
 
         // ── CSV ──
         if ($format === 'xlsx' || $format === 'csv') {
-            return $this->generateCsv($data['columns'], $data['rows'], $filename . '.csv');
+            return $this->generateCsv($data['columns'], $rows, $filename . '.csv');
         }
 
         // ── PDF (print page with auto-print) ──
+                // ── PDF via Dompdf ──
+                // ── PDF via Dompdf ──
+                // ── PDF via Dompdf ──
+                // ── PDF via Dompdf ──
         if ($format === 'pdf') {
-            $viewData['autoPrint'] = true;
+            $viewData['isPdf'] = true;
+
+            $html = view('pages.dcs.reports.export', $viewData)->render();
+
+            $options = new \Dompdf\Options();
+            $options->set('isHtml5ParserEnabled', true);
+            $options->set('isRemoteEnabled', false);
+            $options->set('defaultFont', 'DejaVu Sans');
+            $options->set('dpi', 96);
+
+            $dompdf = new \Dompdf\Dompdf($options);
+            $dompdf->loadHtml($html);
+            $dompdf->setPaper('a4', 'portrait');
+            $dompdf->render();
+
+            // ── Footer: register page text AFTER render ──
+                        // ── Footer via canvas ──
+            $canvas  = $dompdf->getCanvas();
+            $fm      = $dompdf->getFontMetrics();
+            $font    = $fm->getFont('DejaVu Sans');
+            $w       = $canvas->get_width();
+            $h       = $canvas->get_height();
+
+            // Text position near very bottom
+            $footerY = $h - 18;
+
+            // Line ABOVE the text (smaller Y = higher on page)
+            $canvas->line(40, $footerY - 14, $w - 40, $footerY - 14, [13/255, 42/255, 122/255], 1.5);
+
+            // Left
+            $canvas->page_text(40, $footerY, 'Effectivity Date:', $font, 9, [0, 0, 0], 0, 1, '');
+
+            // Center
+            $centerText = 'Rev.';
+            $centerW    = $fm->getTextWidth($centerText, $font, 9);
+            $canvas->page_text(($w - $centerW) / 2, $footerY, $centerText, $font, 9, [0, 0, 0], 0, 1, '');
+
+            // Right
+            $canvas->page_text($w - 130, $footerY, 'Page {PAGE_NUM} of {PAGE_COUNT}', $font, 9, [0, 0, 0], 0, 1, '');
+            $output = $dompdf->output();
+
+            return response($output, 200, [
+                'Content-Type'        => 'application/pdf',
+                'Content-Disposition' => 'attachment; filename="' . $filename . '.pdf"',
+                'Cache-Control'       => 'no-cache, no-store, must-revalidate',
+            ]);
         }
 
+        // ── HTML (browser view or auto-print) ──
         return view('pages.dcs.reports.export', $viewData);
     }
 
@@ -722,7 +951,10 @@ class ReportController extends Controller
                 $response = $this->monitoringData($sub, $dateFrom, $dateTo);
                 break;
             case 'opcr':
-                $response = $response = $this->opcrData($sub, $dateFrom, $dateTo);
+                // Fixed: this was previously "$response = $response = ..." (a duplicate
+                // self-assignment typo left over from an edit — harmless in PHP, but a
+                // sign of a copy/paste mistake worth cleaning up).
+                $response = $this->opcrData($sub, $dateFrom, $dateTo);
                 break;
             case 'others':
                 $response = $this->othersData($dateFrom, $dateTo);
@@ -784,7 +1016,7 @@ class ReportController extends Controller
 
         return $response;
     }
-    
+
     private function formatTime($time): string
     {
         if (!$time) return '';
@@ -795,5 +1027,5 @@ class ReportController extends Controller
             return (string) $time;
         }
     }
-    
+
 }
