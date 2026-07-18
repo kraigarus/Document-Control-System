@@ -86,12 +86,40 @@ class ReportController extends Controller
     // INDEX — Report selection page
     // ════════════════════════════════════════════
 
-    public function index()
+        public function index()
     {
         $categories = $this->getReportCategories();
         $docTypes   = DocType::whereNull('parent_id')->orderBy('doc_type_name')->get();
-
         return view('pages.dcs.reports.index', compact('categories', 'docTypes'));
+    }
+
+    public function masterlist()
+    {
+        $categories = $this->getReportCategories();
+        $docTypes   = DocType::whereNull('parent_id')->orderBy('doc_type_name')->get();
+        $activeCategory = 'masterlist';
+        return view('pages.dcs.reports.type', compact('categories', 'docTypes', 'activeCategory'));
+    }
+
+    public function monitoring()
+    {
+        return view('pages.dcs.reports.monitoring');
+    }
+
+    public function opcr()
+    {
+        $categories = $this->getReportCategories();
+        $docTypes   = DocType::whereNull('parent_id')->orderBy('doc_type_name')->get();
+        $activeCategory = 'opcr';
+        return view('pages.dcs.reports.type', compact('categories', 'docTypes', 'activeCategory'));
+    }
+
+    public function othersReport()
+    {
+        $categories = $this->getReportCategories();
+        $docTypes   = DocType::whereNull('parent_id')->orderBy('doc_type_name')->get();
+        $activeCategory = 'others';
+        return view('pages.dcs.reports.type', compact('categories', 'docTypes', 'activeCategory'));
     }
 
     // ════════════════════════════════════════════
@@ -216,7 +244,7 @@ class ReportController extends Controller
     // MONITORING REPORT
     // ════════════════════════════════════════════
 
-        private function monitoringData(?string $sub, ?string $dateFrom, ?string $dateTo)
+    private function monitoringData(?string $sub, ?string $dateFrom, ?string $dateTo)
     {
         // DRF-specific report
         if ($sub === 'drf') {
@@ -228,12 +256,195 @@ class ReportController extends Controller
             return $this->dcnReport($dateFrom, $dateTo);
         }
 
-        // Internal Monitoring Log (matches the image layout)
+        // Internal Monitoring Log
         if ($sub === 'internal_docs') {
-            return $this->internalMonitoringLog($dateFrom, $dateTo);
+            return $this->documentMonitoringLog('Internal', $dateFrom, $dateTo);
         }
 
-        // Doc-type-based monitoring for other subs
+        // External Monitoring Log
+        if ($sub === 'external_docs') {
+            return $this->documentMonitoringLog('External', $dateFrom, $dateTo);
+        }
+
+        // Fallback for other subs (forms, logbooks, internal_forms)
+        return $this->genericMonitoringData($sub, $dateFrom, $dateTo);
+    }
+
+    /**
+     * Shared monitoring log for Internal & External documents.
+     * Matches the layout: No, Date Received, Document Time,
+     * Registered Masterlist Time, Source, In-Charge, Control Number,
+     * Subject Matter, Effectivity Date, DEADLINE, Date Released,
+     * Days Spent, Remarks
+     */
+        private function documentMonitoringLog(string $docTypeName, ?string $dateFrom, ?string $dateTo)
+    {
+        $query = DocumentRequest::with([
+            'masterlistRegistration',
+            'masterlistRegistration.origins.office',
+            'documentRequestForm',
+            'documentChangeNotice',
+            'docType',
+        ])
+        ->whereHas('docType', function ($q) use ($docTypeName) {
+            $q->where('doc_type_name', $docTypeName);
+        });
+
+        if ($dateFrom) {
+            $query->whereDate('created_at', '>=', $dateFrom);
+        }
+        if ($dateTo) {
+            $query->whereDate('created_at', '<=', $dateTo);
+        }
+
+        $docs = $query->orderBy('request_id', 'desc')->get();
+
+        $rows = $docs->map(function ($doc, $index) {
+            $ml  = $doc->masterlistRegistration;
+            $drf = $doc->documentRequestForm;
+            $dcn = $doc->documentChangeNotice;
+
+            // DRF reference number
+            $drfRef = $drf && $drf->drf_no ? $drf->drf_no : null;
+
+            // Date received (document date)
+            $dateReceived = $drf && $drf->drf_date
+                ? \Carbon\Carbon::parse($drf->drf_date)->format('m/d/Y') : null;
+
+            // Time received
+            $timeReceived = $drf && $drf->drf_receipt_time
+                ? $this->formatTime($drf->drf_receipt_time) : null;
+
+            // Registered to masterlist - date
+            $dateRegistered = $ml && $ml->doc_registered_date
+                ? \Carbon\Carbon::parse($ml->doc_registered_date)->format('m/d/Y') : null;
+
+            // Registered to masterlist - time
+            $timeRegistered = $ml && $ml->doc_registered_date
+                ? \Carbon\Carbon::parse($ml->doc_registered_date)->format('h:i A') : null;
+
+            // Minutes spent (between receipt and registration)
+            $minsSpent = null;
+            if ($drf && $drf->drf_date && $drf->drf_receipt_time && $ml && $ml->doc_registered_date) {
+                try {
+                    $start = \Carbon\Carbon::parse($drf->drf_date . ' ' . $drf->drf_receipt_time);
+                    $end   = \Carbon\Carbon::parse($ml->doc_registered_date);
+                    $minsSpent = (int) $start->diffInMinutes($end);
+                } catch (\Exception $e) {
+                    $minsSpent = null;
+                }
+            }
+
+            // Source (originator)
+            $source = $ml && $ml->origins->count() > 0
+                ? $ml->origins->map(fn($o) => $o->office ? $o->office->office_name : $o->originator_name)
+                    ->filter()->implode(', ')
+                : null;
+
+            // Control number
+            $controlNumber = $ml ? $ml->doc_no : null;
+
+            // Subject matter
+            $subjectMatter = $ml ? $ml->doc_title : ($drf ? $drf->doc_title : null);
+
+            // Effectivity date
+            $effectivityDate = $ml && $ml->effectivity_date
+                ? \Carbon\Carbon::parse($ml->effectivity_date)->format('m/d/Y') : null;
+
+            // Days spent
+            $daysSpent = null;
+            if ($drf && $drf->drf_date && $ml && $ml->effectivity_date) {
+                try {
+                    $start = \Carbon\Carbon::parse($drf->drf_date);
+                    $end   = \Carbon\Carbon::parse($ml->effectivity_date);
+                    $daysSpent = (int) $start->diffInDays($end);
+                } catch (\Exception $e) {
+                    $daysSpent = null;
+                }
+            }
+
+            return [
+                'no'               => $index + 1,
+                'drf_no'           => $drfRef,
+                'date_received'    => $dateReceived,
+                'time_received'    => $timeReceived,
+                'date_registered'  => $dateRegistered,
+                'time_registered'  => $timeRegistered,
+                'mins_spent'       => $minsSpent,
+                'source'           => $source,
+                'in_charge'        => $ml ? $ml->in_charge : null,
+                'control_number'   => $controlNumber,
+                'subject_matter'   => $subjectMatter,
+                'effectivity_date' => $effectivityDate,
+                'deadline'         => $ml && $ml->deadline
+                    ? \Carbon\Carbon::parse($ml->deadline)->format('m/d/Y') : null,
+                'date_released'    => $ml && $ml->date_released
+                    ? \Carbon\Carbon::parse($ml->date_released)->format('m/d/Y') : null,
+                'days_spent'       => $daysSpent,
+                'remarks'          => $dcn && $dcn->dcn_no ? 'DCN: ' . $dcn->dcn_no : null,
+                'pdf_path'         => $ml && $ml->scanned_masterlist
+                    ? '/storage/' . $ml->scanned_masterlist : null,
+            ];
+        })->values();
+
+        $title = $docTypeName === 'Internal'
+            ? 'Monitoring Reports (Internal Documents)'
+            : 'Monitoring Reports (External Documents)';
+
+        // Row 2 — main column names
+        $columns = [
+            'no'               => 'No.',
+            'drf_no'           => 'DRF',
+            'date_received'    => 'Document',
+            'time_received'    => 'Time',
+            'date_registered'  => 'Date',
+            'time_registered'  => 'Time',
+            'mins_spent'       => 'Mins Spent',
+            'source'           => 'Source',
+            'in_charge'        => 'In charge',
+            'control_number'   => 'Control Number',
+            'subject_matter'   => 'Subject Matter',
+            'effectivity_date' => 'Effectivity Date',
+            'deadline'         => 'DEADLINE',
+            'date_released'    => 'Date Released',
+            'days_spent'       => 'Days Spent',
+            'remarks'          => 'Remarks',
+        ];
+
+        // Row 1 — group headers (null = standalone, spans 2 rows)
+        $groupHeaders = [
+            'no'               => null,
+            'drf_no'           => 'Date Received',
+            'date_received'    => 'Date Received',
+            'time_received'    => 'Date Received',
+            'date_registered'  => 'Registered to Masterlist',
+            'time_registered'  => 'Registered to Masterlist',
+            'mins_spent'       => 'Registered to Masterlist',
+            'source'           => null,
+            'in_charge'        => null,
+            'control_number'   => null,
+            'subject_matter'   => null,
+            'effectivity_date' => null,
+            'deadline'         => null,
+            'date_released'    => null,
+            'days_spent'       => null,
+            'remarks'          => null,
+        ];
+
+        return response()->json([
+            'rows'          => $rows,
+            'columns'       => $columns,
+            'group_headers' => $groupHeaders,
+            'title'         => $title,
+            'total_rows'    => $rows->count(),
+        ]);
+    }
+
+    /**
+     * Generic monitoring for forms, logbooks, internal_forms
+     */
+    private function genericMonitoringData(?string $sub, ?string $dateFrom, ?string $dateTo)
+    {
         $docTypeNames = $this->getDocTypeMapping()[$sub] ?? null;
 
         $query = DocumentRequest::with([

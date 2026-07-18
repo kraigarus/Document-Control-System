@@ -95,6 +95,15 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::delete('/register/{id}', [RegisterController::class, 'destroy'])->name('register.destroy');
     Route::get('/register/history/{docNo}', [RegisterController::class, 'history'])->name('register.history');
 
+    // Reports
+    Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
+    Route::get('/reports/masterlist', [ReportController::class, 'masterlist'])->name('reports.masterlist');
+    Route::get('/reports/monitoring', [ReportController::class, 'monitoring'])->name('reports.monitoring');
+    Route::get('/reports/opcr', [ReportController::class, 'opcr'])->name('reports.opcr');
+    Route::get('/reports/others', [ReportController::class, 'othersReport'])->name('reports.others');
+    Route::get('/reports/data', [ReportController::class, 'data'])->name('reports.data');
+    Route::get('/reports/export', [ReportController::class, 'export'])->name('reports.export');
+
     // Stamping
     Route::get('/stamping', [StampingController::class, 'index'])->name('stamping.index');
     Route::post('/stamp/apply',    [StampingController::class, 'apply'])->name('dcs.stamp.apply');
@@ -107,11 +116,6 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::get('/database', [RegisterController::class, 'databaseIndex'])->name('database.index');
     Route::get('/database/data', [RegisterController::class, 'databaseData'])->name('database.data');
     Route::get('/database/export', [RegisterController::class, 'databaseExport'])->name('database.export');
-
-    // Reports
-    Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
-    Route::get('/reports/data', [ReportController::class, 'data'])->name('reports.data');
-    Route::get('/reports/export', [ReportController::class, 'export'])->name('reports.export');
 });
 
 // Catch-all: redirect unknown routes to login

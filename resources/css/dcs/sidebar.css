@@ -581,3 +581,36 @@
     background: var(--accent);
     box-shadow: 0 0 0 3px var(--accent-subtle);
 }
+
+/* ─── Active Sub-Dropdown: Gold highlight (#FFB800) ─── */
+.sub-dropdown li a.active-sub {
+    color: #FFB800;
+    font-weight: 600;
+    background: var(--accent-subtle);
+}
+
+.sub-dropdown li a.active-sub .sub-dot {
+    background: #FFB800;
+}
+
+.sub-dropdown li a:hover,
+.sub-dropdown li a.active-sub:hover {
+    color: #FFB800;
+}
+
+/* Collapsed state float */
+.side-nav.collapsed .dropdown-float a.active-sub {
+    color: #FFB800;
+    font-weight: 600;
+    background: var(--surface-active);
+}
+
+.side-nav.collapsed .dropdown-float a.active-sub .sub-dot {
+    background: #FFB800;
+    box-shadow: 0 0 0 3px rgba(255, 184, 0, 0.15);
+}
+
+.side-nav.collapsed .dropdown-float a:hover,
+.side-nav.collapsed .dropdown-float a.active-sub:hover {
+    color: #FFB800;
+}

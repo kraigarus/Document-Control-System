@@ -1,10 +1,10 @@
 const CATEGORIES = window.CATEGORIES;
 
-let currentCategory = null;
+let currentCategory = window.ACTIVE_CATEGORY || null;
 let currentSub = null;
 let lastGeneratedParams = null;
 let isGenerating = false;
-let selectedRows = new Set(); // indices of currently selected rows in the last-rendered report
+let selectedRows = new Set();
 let lastRenderedRowCount = 0;
 
 const $ = (id) => document.getElementById(id);
@@ -39,9 +39,7 @@ function getISO(d) {
 
 function applyPreset(months) {
     const today = new Date();
-
     if (months === 0) {
-        // All Time — clear dates
         dateFromInput.value = '';
         dateToInput.value = '';
     } else {
@@ -52,7 +50,6 @@ function applyPreset(months) {
     }
 }
 
-// Initialize with 6-month default
 applyPreset(6);
 
 presetBtns.forEach(btn => {
@@ -63,7 +60,6 @@ presetBtns.forEach(btn => {
     });
 });
 
-// Clear active preset when user manually edits dates
 dateFromInput.addEventListener('input', () => {
     presetBtns.forEach(b => b.classList.remove('active'));
 });
@@ -72,7 +68,15 @@ dateToInput.addEventListener('input', () => {
 });
 
 // ═══════════════════════════════════════════
-// CATEGORY SELECTION
+// AUTO-SELECT CATEGORY (from window.ACTIVE_CATEGORY)
+// ═══════════════════════════════════════════
+if (currentCategory && CATEGORIES[currentCategory]) {
+    renderSubs();
+    filterBar.classList.add('visible');
+}
+
+// ═══════════════════════════════════════════
+// CATEGORY SELECTION (kept for backward compat)
 // ═══════════════════════════════════════════
 categoryCards.addEventListener('click', (e) => {
     const card = e.target.closest('.rpt-cat');
@@ -167,7 +171,7 @@ function showToast(type, message) {
 // GENERATE REPORT
 // ═══════════════════════════════════════════
 generateBtn.addEventListener('click', async () => {
-    if (isGenerating) return; // guard against double-submits
+    if (isGenerating) return;
     if (!currentCategory) {
         showToast('error', 'Please select a report category first.');
         return;
@@ -212,10 +216,42 @@ generateBtn.addEventListener('click', async () => {
         const cols = json.columns;
         const colKeys = Object.keys(cols);
 
-        reportHead.innerHTML = '<tr>' +
-            '<th class="rpt-th-check"><input type="checkbox" id="selectAllRows" title="Select all"></th>' +
-            Object.values(cols).map(h => '<th>' + esc(h) + '</th>').join('') +
-            '</tr>';
+        // Build header — support two-row headers (sub_headers)
+        const subHeaders = json.sub_headers || {};
+        const hasSubHeaders = Object.keys(subHeaders).length > 0;
+
+        let row1 = '<tr>';
+        row1 += '<th class="rpt-th-check"' + (hasSubHeaders ? ' rowspan="2"' : '') + '>';
+        row1 += '<input type="checkbox" id="selectAllRows" title="Select all"></th>';
+
+        colKeys.forEach(key => {
+            if (hasSubHeaders) {
+                if (subHeaders[key]) {
+                    // This column HAS a sub-header — single row, no rowspan
+                    row1 += '<th>' + esc(cols[key]) + '</th>';
+                } else {
+                    // This column has NO sub-header — spans both rows
+                    row1 += '<th rowspan="2">' + esc(cols[key]) + '</th>';
+                }
+            } else {
+                row1 += '<th>' + esc(cols[key]) + '</th>';
+            }
+        });
+        row1 += '</tr>';
+
+        let row2 = '';
+        if (hasSubHeaders) {
+            row2 = '<tr>';
+            colKeys.forEach(key => {
+                if (subHeaders[key]) {
+                    // Only output <th> for columns that have sub-headers
+                    row2 += '<th>' + esc(subHeaders[key]) + '</th>';
+                }
+            });
+            row2 += '</tr>';
+        }
+
+        reportHead.innerHTML = row1 + row2;
 
         if (!json.rows || json.rows.length === 0) {
             reportBody.innerHTML =
@@ -224,7 +260,6 @@ generateBtn.addEventListener('click', async () => {
                 '<h4>No records found</h4>' +
                 '<p>Try adjusting your filters or date range</p>' +
                 '</div></td></tr>';
-            // Still set params so export works (will export empty)
             lastGeneratedParams = params.toString();
             return;
         }
@@ -280,14 +315,10 @@ function syncSelectAllState() {
     selectAll.indeterminate = selectedRows.size > 0 && selectedRows.size < total;
 }
 
-// Select-all checkbox lives inside reportHead, which is fully replaced on
-// every generate — so listen via delegation instead of binding directly.
 reportHead.addEventListener('change', (e) => {
     if (e.target.id !== 'selectAllRows') return;
-
     const checked = e.target.checked;
     const rowChecks = reportBody.querySelectorAll('.rpt-row-check');
-
     rowChecks.forEach(cb => {
         cb.checked = checked;
         const idx = parseInt(cb.dataset.rowIndex, 10);
@@ -300,18 +331,14 @@ reportHead.addEventListener('change', (e) => {
             if (tr) tr.classList.remove('rpt-row-selected');
         }
     });
-
     updateSelectionCount();
 });
 
-// Individual row checkboxes — also delegated since rows are rebuilt each generate
 reportBody.addEventListener('change', (e) => {
     const cb = e.target.closest('.rpt-row-check');
     if (!cb) return;
-
     const idx = parseInt(cb.dataset.rowIndex, 10);
     const tr = cb.closest('tr');
-
     if (cb.checked) {
         selectedRows.add(idx);
         if (tr) tr.classList.add('rpt-row-selected');
@@ -319,12 +346,10 @@ reportBody.addEventListener('change', (e) => {
         selectedRows.delete(idx);
         if (tr) tr.classList.remove('rpt-row-selected');
     }
-
     syncSelectAllState();
     updateSelectionCount();
 });
 
-// Clicking anywhere on a row (outside a link) toggles its checkbox too
 reportBody.addEventListener('click', (e) => {
     if (e.target.closest('.rpt-row-check') || e.target.closest('a')) return;
     const tr = e.target.closest('tr[data-row-index]');
@@ -336,7 +361,7 @@ reportBody.addEventListener('click', (e) => {
 });
 
 // ═══════════════════════════════════════════
-// EXPORT DROPDOWN — toggle
+// EXPORT DROPDOWN
 // ═══════════════════════════════════════════
 exportBtn.addEventListener('click', function (e) {
     e.stopPropagation();
@@ -349,7 +374,6 @@ exportBtn.addEventListener('click', function (e) {
     }
 });
 
-// Close on outside click
 document.addEventListener('click', function (e) {
     if (!exportDropdown.contains(e.target)) {
         exportMenu.classList.remove('open');
@@ -357,7 +381,6 @@ document.addEventListener('click', function (e) {
     }
 });
 
-// Close on Escape
 document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
         exportMenu.classList.remove('open');
@@ -365,12 +388,6 @@ document.addEventListener('keydown', function (e) {
     }
 });
 
-// ═══════════════════════════════════════════
-// EXPORT ACTIONS — server-side generation
-// (single delegated handler — previously this logic was duplicated in a
-//  second listener, which caused every export click to fire twice: two
-//  downloads, two print dialogs, two toasts)
-// ═══════════════════════════════════════════
 exportMenu.addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-format]');
     if (!btn) return;
@@ -392,12 +409,10 @@ exportMenu.addEventListener('click', (e) => {
         const indices = Array.from(selectedRows).sort((a, b) => a - b).join(',');
         url += '&rows=' + indices;
     } else {
-        // No rows checked — tell server to export empty
         url += '&rows=none';
     }
 
-        if (format === 'print') {
-        // Open the same export page as PDF, but in HTML mode with auto-print
+    if (format === 'print') {
         showToast('success', 'Opening print view...' + selectionNote);
         const printUrl = url.replace('format=pdf', 'format=html') + '&autoPrint=1';
         window.open(printUrl, '_blank');
@@ -405,7 +420,6 @@ exportMenu.addEventListener('click', (e) => {
     }
 
     if (format === 'pdf') {
-        // Open the print-friendly page in a new tab (browser's Save as PDF)
         showToast('success', 'Opening print view...' + selectionNote);
         window.open(url, '_blank');
         return;
@@ -427,20 +441,16 @@ exportMenu.addEventListener('click', (e) => {
 // RESET
 // ═══════════════════════════════════════════
 resetBtn.addEventListener('click', () => {
-    currentCategory = null;
     currentSub = null;
     lastGeneratedParams = null;
     selectedRows.clear();
     lastRenderedRowCount = 0;
-    document.querySelectorAll('.rpt-cat').forEach(c => c.classList.remove('active'));
-    subTabs.innerHTML = '';
-    subTabs.classList.remove('visible');
-    filterBar.classList.remove('visible');
     resultsPanel.classList.remove('visible');
     exportDropdown.classList.remove('open');
     exportMenu.classList.remove('open');
-    dateFromInput.value = '';
-    dateToInput.value = '';
+
+    // Re-render subs (resets to first tab)
+    renderSubs();
 
     // Reset presets to 6-month default
     presetBtns.forEach(b => b.classList.remove('active'));
@@ -458,10 +468,6 @@ function esc(str) {
     d.textContent = String(str);
     return d.innerHTML;
 }
-
-window.addEventListener('afterprint', () => {
-    if (reportTable) reportTable.classList.remove('rpt-selection-filter');
-});
 
 // ═══════════════════════════════════════════
 // SIDEBAR SYNC

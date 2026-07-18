@@ -30,21 +30,28 @@
         <li class="nav-item dropdown">
             <span class="dropdown-trigger">
                 <i class="fa-regular fa-pen-to-square"></i>
-                <span>Document Registration</span> 
+                <span>Document Registration</span>
                 <i class="fas fa-caret-down arrow"></i>
                 <span class="tooltip">Document Registration</span>
             </span>
             <ul class="sub-dropdown">
-                <li><a href="/register"><span class="sub-dot"></span>Register</a></li>
-                <li><a href="/register/update"><span class="sub-dot"></span>Update</a></li>
+                <li><a href="/register" class="{{ request()->is('register') ? 'active-sub' : '' }}"><span class="sub-dot"></span>Register</a></li>
+                <li><a href="/register/update" class="{{ request()->is('register/update') ? 'active-sub' : '' }}"><span class="sub-dot"></span>Update</a></li>
             </ul>
         </li>
-        <li class="nav-item">
-            <a href="/reports">
+        <li class="nav-item dropdown {{ request()->is('reports*') ? 'active' : '' }}">
+            <span class="dropdown-trigger">
                 <i class="fa-regular fa-file-lines"></i>
                 <span>Generate Report</span>
+                <i class="fas fa-caret-down arrow"></i>
                 <span class="tooltip">Generate Report</span>
-            </a>
+            </span>
+            <ul class="sub-dropdown">
+                <li><a href="/reports/masterlist" class="{{ request()->is('reports/masterlist') ? 'active-sub' : '' }}"><span class="sub-dot"></span>Masterlists</a></li>
+                <li><a href="/reports/monitoring" class="{{ request()->is('reports/monitoring') ? 'active-sub' : '' }}"><span class="sub-dot"></span>Monitoring Reports</a></li>
+                <li><a href="/reports/opcr" class="{{ request()->is('reports/opcr') ? 'active-sub' : '' }}"><span class="sub-dot"></span>OPCR Targets</a></li>
+                <li><a href="/reports/others" class="{{ request()->is('reports/others') ? 'active-sub' : '' }}"><span class="sub-dot"></span>Others</a></li>
+            </ul>
         </li>
         <li class="nav-item">
             <a href="/stamping">
