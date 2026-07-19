@@ -33,8 +33,9 @@ export default defineConfig({
                 'resources/js/dcs/history.js',
 
                 'resources/css/dcs/reports.css',
-                'resources/js/dcs/reports.js',
                 'resources/css/dcs/export.css',
+                'resources/js/dcs/reports.js',
+                'resources/js/dcs/opcr.js',
 
                 'resources/css/dcs/stamping.css',
                 'resources/js/dcs/stamping.js',

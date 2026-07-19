@@ -103,6 +103,7 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::get('/reports/others', [ReportController::class, 'othersReport'])->name('reports.others');
     Route::get('/reports/data', [ReportController::class, 'data'])->name('reports.data');
     Route::get('/reports/export', [ReportController::class, 'export'])->name('reports.export');
+    Route::post('/reports/opcr/save', [ReportController::class, 'saveOpcrRatings'])->name('reports.opcr.save');
 
     // Stamping
     Route::get('/stamping', [StampingController::class, 'index'])->name('stamping.index');

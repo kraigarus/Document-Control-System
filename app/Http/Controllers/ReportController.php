@@ -106,14 +106,6 @@ class ReportController extends Controller
         return view('pages.dcs.reports.monitoring');
     }
 
-    public function opcr()
-    {
-        $categories = $this->getReportCategories();
-        $docTypes   = DocType::whereNull('parent_id')->orderBy('doc_type_name')->get();
-        $activeCategory = 'opcr';
-        return view('pages.dcs.reports.type', compact('categories', 'docTypes', 'activeCategory'));
-    }
-
     public function othersReport()
     {
         $categories = $this->getReportCategories();
@@ -244,7 +236,7 @@ class ReportController extends Controller
     // MONITORING REPORT
     // ════════════════════════════════════════════
 
-    private function monitoringData(?string $sub, ?string $dateFrom, ?string $dateTo)
+        private function monitoringData(?string $sub, ?string $dateFrom, ?string $dateTo)
     {
         // DRF-specific report
         if ($sub === 'drf') {
@@ -266,8 +258,195 @@ class ReportController extends Controller
             return $this->documentMonitoringLog('External', $dateFrom, $dateTo);
         }
 
-        // Fallback for other subs (forms, logbooks, internal_forms)
+        // Forms & Logbooks Monitoring Log
+        if (in_array($sub, ['internal_forms', 'forms', 'logbooks'])) {
+            return $this->formsLogbooksMonitoringLog($sub, $dateFrom, $dateTo);
+        }
+
+        // Fallback
         return $this->genericMonitoringData($sub, $dateFrom, $dateTo);
+    }
+
+    /**
+     * Forms & Logbooks monitoring — matches the 3-row grouped header layout
+     */
+        private function formsLogbooksMonitoringLog(string $sub, ?string $dateFrom, ?string $dateTo)
+    {
+        $docTypeMap = [
+            'internal_forms' => 'Internal Forms',
+            'forms'          => 'Forms',
+            'logbooks'       => 'Logbooks',
+        ];
+        $docTypeName = $docTypeMap[$sub] ?? 'Forms';
+
+        $query = DocumentRequest::with([
+            'masterlistRegistration',
+            'masterlistRegistration.origins.office',
+            'documentRequestForm',
+            'documentChangeNotice',
+            'docType',
+        ])
+        ->whereHas('docType', function ($q) use ($docTypeName) {
+            $q->where('doc_type_name', $docTypeName);
+        });
+
+        if ($dateFrom) {
+            $query->whereDate('created_at', '>=', $dateFrom);
+        }
+        if ($dateTo) {
+            $query->whereDate('created_at', '<=', $dateTo);
+        }
+
+        $docs = $query->orderBy('request_id', 'desc')->get();
+
+        $rows = $docs->map(function ($doc, $index) {
+            $ml  = $doc->masterlistRegistration;
+            $drf = $doc->documentRequestForm;
+            $dcn = $doc->documentChangeNotice;
+
+            // Date received
+            $dateReceived = $drf && $drf->drf_date
+                ? \Carbon\Carbon::parse($drf->drf_date)->format('m/d/Y') : null;
+
+            // Time received
+            $timeReceived = $drf && $drf->drf_receipt_time
+                ? $this->formatTime($drf->drf_receipt_time) : null;
+
+            // Source
+            $source = $ml && $ml->origins->count() > 0
+                ? $ml->origins->map(fn($o) => $o->office ? $o->office->office_name : $o->originator_name)
+                    ->filter()->implode(', ')
+                : null;
+
+            // Document number
+            $docNumber = $ml ? $ml->doc_no : null;
+
+            // Description
+            $description = $ml ? $ml->doc_title : ($drf ? $drf->doc_title : null);
+
+            // Category
+            $category = $doc->docType->doc_type_name ?? null;
+
+            // Masterlist registration date
+            $mlRegDate = $ml && $ml->doc_registered_date
+                ? \Carbon\Carbon::parse($ml->doc_registered_date)->format('m/d/Y') : null;
+
+            // Masterlist registration time
+            $mlRegTime = $ml && $ml->doc_registered_date
+                ? \Carbon\Carbon::parse($ml->doc_registered_date)->format('h:i A') : null;
+
+            // Time spent 1 (mins) — receipt to registration
+            $timeSpent1 = null;
+            if ($drf && $drf->drf_date && $drf->drf_receipt_time && $ml && $ml->doc_registered_date) {
+                try {
+                    $start = \Carbon\Carbon::parse($drf->drf_date . ' ' . $drf->drf_receipt_time);
+                    $end   = \Carbon\Carbon::parse($ml->doc_registered_date);
+                    $timeSpent1 = (int) $start->diffInMinutes($end);
+                } catch (\Exception $e) {
+                    $timeSpent1 = null;
+                }
+            }
+
+            // Time released date
+            $dateReleased = $ml && $ml->date_released
+                ? \Carbon\Carbon::parse($ml->date_released)->format('m/d/Y') : null;
+
+            // Time released time
+            $timeReleased = $ml && $ml->date_released
+                ? \Carbon\Carbon::parse($ml->date_released)->format('h:i A') : null;
+
+            // Time spent 2 (mins) — registration to release
+            $timeSpent2 = null;
+            if ($ml && $ml->doc_registered_date && $ml->date_released) {
+                try {
+                    $start = \Carbon\Carbon::parse($ml->doc_registered_date);
+                    $end   = \Carbon\Carbon::parse($ml->date_released);
+                    $timeSpent2 = (int) $start->diffInMinutes($end);
+                } catch (\Exception $e) {
+                    $timeSpent2 = null;
+                }
+            }
+
+            // Forwarded for DRR
+            $forwardedDRR = null;
+
+            // Remarks
+            $remarks = $dcn && $dcn->dcn_no ? 'DCN: ' . $dcn->dcn_no : null;
+
+            return [
+                'no'            => $index + 1,
+                'date_received' => $dateReceived,
+                'time_received' => $timeReceived,
+                'source'        => $source,
+                'doc_number'    => $docNumber,
+                'description'   => $description,
+                'category'      => $category,
+                'ml_reg_date'   => $mlRegDate,
+                'ml_reg_time'   => $mlRegTime,
+                'time_spent1'   => $timeSpent1,
+                'date_released' => $dateReleased,
+                'time_released' => $timeReleased,
+                'time_spent2'   => $timeSpent2,
+                'forwarded_drr' => $forwardedDRR,
+                'remarks'       => $remarks,
+                'pdf_path'      => $ml && $ml->scanned_masterlist
+                    ? '/storage/' . $ml->scanned_masterlist : null,
+            ];
+        })->values();
+
+        $subLabels = [
+            'internal_forms' => 'Internal Forms',
+            'forms'          => 'Forms',
+            'logbooks'       => 'Logbooks',
+        ];
+
+        $title = 'Monitoring Reports (' . ($subLabels[$sub] ?? 'Forms') . ')';
+
+        // Row 2 — sub-labels (for grouped columns only)
+        $columns = [
+            'no'            => 'No',
+            'date_received' => 'Date',
+            'time_received' => 'Time',
+            'source'        => 'Source',
+            'doc_number'    => 'Document Number',
+            'description'   => 'Description',
+            'category'      => 'Category',
+            'ml_reg_date'   => 'Date',
+            'ml_reg_time'   => 'Time',
+            'time_spent1'   => 'Time Spent (Mins)',
+            'date_released' => 'Date',
+            'time_released' => 'Time',
+            'time_spent2'   => 'Time Spent (Mins)',
+            'forwarded_drr' => 'Forwarded for DRR?',
+            'remarks'       => 'Remarks',
+        ];
+
+        // Row 1 — group headers (null = standalone, rowspan=2)
+        $groupHeaders = [
+            'no'            => null,
+            'date_received' => 'Date Received',
+            'time_received' => 'Date Received',
+            'source'        => null,
+            'doc_number'    => null,
+            'description'   => null,
+            'category'      => null,
+            'ml_reg_date'   => 'Masterlist Registration',
+            'ml_reg_time'   => 'Masterlist Registration',
+            'time_spent1'   => null,
+            'date_released' => 'Time Released',
+            'time_released' => 'Time Released',
+            'time_spent2'   => null,
+            'forwarded_drr' => null,
+            'remarks'       => null,
+        ];
+
+        return response()->json([
+            'rows'          => $rows,
+            'columns'       => $columns,
+            'group_headers' => $groupHeaders,
+            'title'         => $title,
+            'total_rows'    => $rows->count(),
+        ]);
     }
 
     /**
@@ -796,146 +975,176 @@ class ReportController extends Controller
     // ════════════════════════════════════════════
     // OPCR TARGETS
     // ════════════════════════════════════════════
+    public function opcr()
+    {
+        return view('pages.dcs.reports.opcr');
+    }
 
     private function opcrData(?string $sub, ?string $dateFrom, ?string $dateTo)
     {
         $startDate = $dateFrom ? \Carbon\Carbon::parse($dateFrom) : \Carbon\Carbon::now()->startOfYear();
         $endDate   = $dateTo   ? \Carbon\Carbon::parse($dateTo)   : \Carbon\Carbon::now();
 
-        $rows = collect();
         $subLabel = $this->getReportCategories()['opcr']['subs'][$sub] ?? 'OPCR Targets';
 
         switch ($sub) {
             case 'update_masterlist':
-                $rows = $this->opcrMasterlistUpdates($startDate, $endDate);
+                $docs = $this->getOpcrDocs($startDate, $endDate, null);
                 break;
             case 'issuance_internal':
-                $rows = $this->opcrIssuance($startDate, $endDate, ['Internal Documented Information']);
+                $docs = $this->getOpcrDocs($startDate, $endDate, ['Internal Documented Information']);
                 break;
             case 'issuance_external':
-                $rows = $this->opcrIssuance($startDate, $endDate, ['External Documented Information']);
+                $docs = $this->getOpcrDocs($startDate, $endDate, ['External Documented Information']);
                 break;
             case 'control_forms':
-                $rows = $this->opcrControlled($startDate, $endDate, ['Forms']);
+                $docs = $this->getOpcrDocs($startDate, $endDate, ['Forms']);
                 break;
             case 'control_logbooks':
-                $rows = $this->opcrControlled($startDate, $endDate, ['Logbooks']);
+                $docs = $this->getOpcrDocs($startDate, $endDate, ['Logbooks']);
                 break;
             case 'control_internal_forms':
-                $rows = $this->opcrControlled($startDate, $endDate, ['Internal Forms']);
+                $docs = $this->getOpcrDocs($startDate, $endDate, ['Internal Forms']);
                 break;
             default:
-                $rows = $this->opcrMasterlistUpdates($startDate, $endDate);
+                $docs = $this->getOpcrDocs($startDate, $endDate, null);
                 break;
         }
 
+        $rows = $docs->map(function ($doc, $index) use ($sub) {
+            $ml = $doc->masterlistRegistration;
+
+            $dateReceived = $ml && $ml->doc_registered_date
+                ? \Carbon\Carbon::parse($ml->doc_registered_date)->format('m/d/Y') : null;
+
+            $dateReleased = $ml && $ml->date_released
+                ? \Carbon\Carbon::parse($ml->date_released)->format('m/d/Y') : null;
+
+            // Calculate days advanced/delayed
+            $daysDiff = null;
+            $daysType = null;
+            if ($ml && $ml->effectivity_date && $ml->date_released) {
+                try {
+                    $effectivity = \Carbon\Carbon::parse($ml->effectivity_date);
+                    $released    = \Carbon\Carbon::parse($ml->date_released);
+                    $diff        = $effectivity->diffInDays($released, false);
+                    if ($diff >= 0) {
+                        $daysDiff = $diff;
+                        $daysType = 'advanced';
+                    } else {
+                        $daysDiff = abs($diff);
+                        $daysType = 'delayed';
+                    }
+                } catch (\Exception $e) {
+                    $daysDiff = null;
+                    $daysType = null;
+                }
+            }
+
+                        // Load saved ratings
+            $opcrRating = null;
+            try {
+                if (\Schema::hasTable('opcr_ratings')) {
+                    $opcrRating = \DB::table('opcr_ratings')
+                        ->where('request_id', $doc->request_id)
+                        ->where('sub_type', $sub)
+                        ->first();
+                }
+            } catch (\Exception $e) {
+                $opcrRating = null;
+            }
+
+            return [
+                'no'            => $index + 1,
+                'request_id'    => $doc->request_id,
+                'doc_number'    => $ml ? $ml->doc_no : null,
+                'date_received' => $dateReceived,
+                'date_released' => $dateReleased,
+                'days_diff'     => $daysDiff,
+                'days_type'     => $daysType,
+                'rating_q'      => $opcrRating->rating_q ?? null,
+                'rating_e'      => $opcrRating->rating_e ?? null,
+                'rating_t'      => $opcrRating->rating_t ?? null,
+                'rating_a'      => $opcrRating->rating_a ?? null,
+                'pdf_path'      => $ml && $ml->scanned_masterlist
+                    ? '/storage/' . $ml->scanned_masterlist : null,
+            ];
+        })->values();
+
         $columns = [
-            'item_no'          => 'ITEM NO.',
-            'doc_no'           => 'DOCUMENT NO.',
-            'doc_title'        => 'DOCUMENT TITLE',
-            'rev_no'           => 'REV.',
-            'effectivity_date' => 'EFFECTIVITY DATE',
-            'date_registered'  => 'DATE REGISTERED',
-            'doc_type'         => 'DOC TYPE',
-            'status'           => 'STATUS',
+            'no'            => 'No',
+            'doc_number'    => 'Document Number',
+            'date_received' => 'Date Received',
+            'date_released' => 'Date Released',
+            'days_diff'     => 'Days Advanced (+) / Delayed (-)',
+            'rating_q'      => 'Q',
+            'rating_e'      => 'E',
+            'rating_t'      => 'T',
+            'rating_a'      => 'A',
         ];
 
         return response()->json([
             'rows'       => $rows,
             'columns'    => $columns,
+            'group_headers' => [
+                'no'            => null,
+                'doc_number'    => null,
+                'date_received' => null,
+                'date_released' => null,
+                'days_diff'     => null,
+                'rating_q'      => 'Ratings',
+                'rating_e'      => 'Ratings',
+                'rating_t'      => 'Ratings',
+                'rating_a'      => 'Ratings',
+            ],
             'title'      => $subLabel,
             'total_rows' => $rows->count(),
         ]);
     }
 
-    private function opcrMasterlistUpdates($startDate, $endDate)
+    private function getOpcrDocs($startDate, $endDate, ?array $docTypeNames)
     {
-        $docs = DocumentRequest::with(['masterlistRegistration', 'masterlistRegistration.origins.office', 'docType'])
+        $query = DocumentRequest::with(['masterlistRegistration', 'docType'])
             ->whereHas('masterlistRegistration', function ($q) use ($startDate, $endDate) {
                 $q->whereNotNull('doc_no')
                     ->where('doc_no', '!=', '')
                     ->whereBetween('doc_registered_date', [$startDate, $endDate]);
-            })
-            ->orderBy('request_id', 'desc')
-            ->get();
+            });
 
-        return $docs->map(function ($doc, $index) {
-            $ml = $doc->masterlistRegistration;
-            return [
-                'item_no'          => $index + 1,
-                'doc_no'           => $ml->doc_no,
-                'doc_title'        => $ml->doc_title,
-                'rev_no'           => (int) $ml->revise_no,
-                'effectivity_date' => $ml->effectivity_date
-                    ? \Carbon\Carbon::parse($ml->effectivity_date)->format('M d, Y') : null,
-                'date_registered'  => $ml->doc_registered_date
-                    ? \Carbon\Carbon::parse($ml->doc_registered_date)->format('M d, Y') : null,
-                'doc_type'         => $doc->docType->doc_type_name ?? 'N/A',
-                'status'           => 'Accomplished',
-            ];
-        })->values();
+        if ($docTypeNames) {
+            $query->whereHas('docType', function ($q) use ($docTypeNames) {
+                $q->whereIn('doc_type_name', $docTypeNames);
+            });
+        }
+
+        return $query->orderBy('request_id', 'desc')->get();
     }
 
-    private function opcrIssuance($startDate, $endDate, array $docTypeNames)
+    public function saveOpcrRatings(Request $request)
     {
-        $docs = DocumentRequest::with(['masterlistRegistration', 'docType'])
-            ->whereHas('docType', function ($q) use ($docTypeNames) {
-                $q->whereIn('doc_type_name', $docTypeNames);
-            })
-            ->whereHas('masterlistRegistration', function ($q) use ($startDate, $endDate) {
-                $q->whereNotNull('doc_no')
-                    ->where('doc_no', '!=', '')
-                    ->whereBetween('doc_registered_date', [$startDate, $endDate]);
-            })
-            ->orderBy('request_id', 'desc')
-            ->get();
+        $request->validate([
+            'request_id' => 'required|integer',
+            'sub'        => 'required|string',
+            'rating_q'   => 'nullable|numeric|min:0|max:10',
+            'rating_e'   => 'nullable|numeric|min:0|max:10',
+            'rating_t'   => 'nullable|numeric|min:0|max:10',
+            'rating_a'   => 'nullable|numeric|min:0|max:10',
+        ]);
 
-        return $docs->map(function ($doc, $index) {
-            $ml = $doc->masterlistRegistration;
-            return [
-                'item_no'          => $index + 1,
-                'doc_no'           => $ml->doc_no,
-                'doc_title'        => $ml->doc_title,
-                'rev_no'           => (int) $ml->revise_no,
-                'effectivity_date' => $ml->effectivity_date
-                    ? \Carbon\Carbon::parse($ml->effectivity_date)->format('M d, Y') : null,
-                'date_registered'  => $ml->doc_registered_date
-                    ? \Carbon\Carbon::parse($ml->doc_registered_date)->format('M d, Y') : null,
-                'doc_type'         => $doc->docType->doc_type_name ?? 'N/A',
-                'status'           => 'Issued',
-            ];
-        })->values();
-    }
+        \App\Models\OpcrRating::updateOrCreate(
+            [
+                'request_id' => $request->request_id,
+                'sub_type'   => $request->sub,
+            ],
+            [
+                'rating_q' => $request->rating_q,
+                'rating_e' => $request->rating_e,
+                'rating_t' => $request->rating_t,
+                'rating_a' => $request->rating_a,
+            ]
+        );
 
-    private function opcrControlled($startDate, $endDate, array $docTypeNames)
-    {
-        $docs = DocumentRequest::with(['masterlistRegistration', 'docType'])
-            ->whereHas('docType', function ($q) use ($docTypeNames) {
-                $q->whereIn('doc_type_name', $docTypeNames);
-            })
-            ->whereHas('masterlistRegistration', function ($q) use ($startDate, $endDate) {
-                $q->whereNotNull('doc_no')
-                    ->where('doc_no', '!=', '')
-                    ->whereBetween('doc_registered_date', [$startDate, $endDate]);
-            })
-            ->orderBy('request_id', 'desc')
-            ->get();
-
-        return $docs->map(function ($doc, $index) {
-            $ml = $doc->masterlistRegistration;
-            return [
-                'item_no'          => $index + 1,
-                'doc_no'           => $ml->doc_no,
-                'doc_title'        => $ml->doc_title,
-                'rev_no'           => (int) $ml->revise_no,
-                'effectivity_date' => $ml->effectivity_date
-                    ? \Carbon\Carbon::parse($ml->effectivity_date)->format('M d, Y') : null,
-                'date_registered'  => $ml->doc_registered_date
-                    ? \Carbon\Carbon::parse($ml->doc_registered_date)->format('M d, Y') : null,
-                'doc_type'         => $doc->docType->doc_type_name ?? 'N/A',
-                'status'           => 'Controlled',
-            ];
-        })->values();
+        return response()->json(['success' => true]);
     }
 
     // ════════════════════════════════════════════

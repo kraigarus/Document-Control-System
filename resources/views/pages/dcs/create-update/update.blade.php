@@ -16,7 +16,7 @@
     <div class="upd-container main-content">
         <div class="upd-header">
             <div>
-                <div class="upd-breadcrumb">Document Control System / <span>Update</span></div>
+                <div class="upd-breadcrumb">Document Control System / Document Registration / <span>Update</span></div>
                 <div class="upd-title">Update Documents</div>
             </div>
             <div class="upd-header-stats">

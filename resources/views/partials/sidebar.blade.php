@@ -35,8 +35,8 @@
                 <span class="tooltip">Document Registration</span>
             </span>
             <ul class="sub-dropdown">
-                <li><a href="/register" class="{{ request()->is('register') ? 'active-sub' : '' }}"><span class="sub-dot"></span>Register</a></li>
-                <li><a href="/register/update" class="{{ request()->is('register/update') ? 'active-sub' : '' }}"><span class="sub-dot"></span>Update</a></li>
+                <li><a href="/register" class="{{ request()->is('register') ? 'active-sub' : '' }}">Register</a></li>
+                <li><a href="/register/update" class="{{ request()->is('register/update') ? 'active-sub' : '' }}">Update</a></li>
             </ul>
         </li>
         <li class="nav-item dropdown {{ request()->is('reports*') ? 'active' : '' }}">
@@ -47,10 +47,10 @@
                 <span class="tooltip">Generate Report</span>
             </span>
             <ul class="sub-dropdown">
-                <li><a href="/reports/masterlist" class="{{ request()->is('reports/masterlist') ? 'active-sub' : '' }}"><span class="sub-dot"></span>Masterlists</a></li>
-                <li><a href="/reports/monitoring" class="{{ request()->is('reports/monitoring') ? 'active-sub' : '' }}"><span class="sub-dot"></span>Monitoring Reports</a></li>
-                <li><a href="/reports/opcr" class="{{ request()->is('reports/opcr') ? 'active-sub' : '' }}"><span class="sub-dot"></span>OPCR Targets</a></li>
-                <li><a href="/reports/others" class="{{ request()->is('reports/others') ? 'active-sub' : '' }}"><span class="sub-dot"></span>Others</a></li>
+                <li><a href="/reports/masterlist" class="{{ request()->is('reports/masterlist') ? 'active-sub' : '' }}">Masterlists</a></li>
+                <li><a href="/reports/monitoring" class="{{ request()->is('reports/monitoring') ? 'active-sub' : '' }}">Monitoring Reports</a></li>
+                <li><a href="/reports/opcr" class="{{ request()->is('reports/opcr') ? 'active-sub' : '' }}">OPCR Targets</a></li>
+                <li><a href="/reports/others" class="{{ request()->is('reports/others') ? 'active-sub' : '' }}">Others</a></li>
             </ul>
         </li>
         <li class="nav-item">

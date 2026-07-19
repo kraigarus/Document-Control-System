@@ -53,7 +53,7 @@
 
     <div class="reg-header">
         <div class="reg-header-text">
-            <p class="reg-breadcrumb">Document Control System / <span>Registration</span></p>
+            <p class="reg-breadcrumb">Document Control System / Document Registration / <span>Register</span></p>
             <h1 class="reg-title">Register Document</h1>
         </div>
     </div>

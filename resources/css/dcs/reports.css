@@ -399,6 +399,60 @@ body {
 .rpt-toast.toast-success i { color: #4ade80; }
 .rpt-toast.toast-error i { color: #f87171; }
 
+        /* ── OPCR Rating Inputs ── */
+        .opcr-rating-th {
+            min-width: 50px;
+            max-width: 60px;
+        }
+
+        .opcr-rating-td {
+            padding: 4px 6px !important;
+        }
+
+        .opcr-rating-input {
+            width: 100%;
+            max-width: 60px;
+            height: 30px;
+            padding: 4px 6px;
+            border: 1.5px solid var(--rpt-border);
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--rpt-text);
+            text-align: center;
+            background: #fff;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+
+        .opcr-rating-input:focus {
+            outline: none;
+            border-color: var(--rpt-accent);
+            box-shadow: 0 0 0 3px rgba(13, 42, 122, 0.1);
+        }
+
+        .opcr-rating-input::placeholder {
+            color: var(--rpt-text-subtle);
+            font-weight: 400;
+        }
+
+        .opcr-rating-input::-webkit-inner-spin-button,
+        .opcr-rating-input::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        /* Days Advanced/Delayed colors */
+        .opcr-days-advanced {
+            color: #059669;
+            font-weight: 700;
+        }
+
+        .opcr-days-delayed {
+            color: #dc2626;
+            font-weight: 700;
+        }
+        
 /* ── Print ── */
 @media print {
     body { background: #fff; }

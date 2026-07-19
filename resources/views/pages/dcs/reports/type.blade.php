@@ -20,7 +20,7 @@
 
     <header class="rpt-hdr">
         <div>
-            <div class="rpt-crumb">Document Control System / <span>{{ $categories[$activeCategory]['label'] }}</span></div>
+            <div class="rpt-crumb">Document Control System / Generate Report / <span>{{ $categories[$activeCategory]['label'] }}</span></div>
             <h1>{{ $categories[$activeCategory]['label'] }}</h1>
         </div>
     </header>

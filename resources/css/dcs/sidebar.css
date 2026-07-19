@@ -324,6 +324,7 @@
     list-style: none;
     max-height: 0;
     overflow: hidden;
+    text-decoration: none;
     transition: max-height var(--transition-slow), opacity var(--transition);
     opacity: 0;
     padding: 0;
@@ -351,15 +352,6 @@
     border-radius: var(--radius-sm);
     transition: all var(--transition-fast);
     position: relative;
-}
-
-.sub-dot {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: var(--border);
-    flex-shrink: 0;
-    transition: background var(--transition-fast), transform var(--transition-fast);
 }
 
 .sub-dropdown li a:hover {
