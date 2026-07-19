@@ -253,11 +253,11 @@ class RegisterController extends Controller
             'doc_type_id'     => 'required|integer|exists:doc_types,doc_type_id',
             'version_id'      => 'required|integer|exists:version_type,version_id',
             'approval_status' => 'required|in:applicable,not_applicable',
-            'drfFile'         => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
-            'dcnFile'         => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
-            'uploadScannedCopy' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
-            'scannedRet'      => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
-            'scanneddist'     => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'drfFile' => 'nullable|file|mimes:pdf,docx|max:10240',
+            'dcnFile' => 'nullable|file|mimes:pdf,docx|max:10240',
+            'uploadScannedCopy' => 'nullable|file|mimes:pdf,docx|max:10240',
+            'scannedRet' => 'nullable|file|mimes:pdf,docx|max:10240',
+            'scanneddist' => 'nullable|file|mimes:pdf,docx|max:10240'
         ]);
 
         $subType   = \App\Models\DocType::find($request->sub_type_id);

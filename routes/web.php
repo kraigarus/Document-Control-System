@@ -6,6 +6,8 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\RegisterController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\StampingController;
+use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\ProfileController;
 
 // Public — portal (no auth)
 Route::get('/', fn () => view('pages.portal.portal'));
@@ -117,6 +119,34 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::get('/database', [RegisterController::class, 'databaseIndex'])->name('database.index');
     Route::get('/database/data', [RegisterController::class, 'databaseData'])->name('database.data');
     Route::get('/database/export', [RegisterController::class, 'databaseExport'])->name('database.export');
+
+    Route::prefix('settings')->name('settings.')->group(function () {
+        Route::get('/', [SettingsController::class, 'index'])->name('index');
+
+        // Document Types & Sub-types
+        Route::post('/doc-types', [SettingsController::class, 'storeDocType'])->name('doctypes.store');
+        Route::put('/doc-types/{id}', [SettingsController::class, 'updateDocType'])->name('doctypes.update');
+        Route::delete('/doc-types/{id}', [SettingsController::class, 'destroyDocType'])->name('doctypes.destroy');
+
+        // Offices
+        Route::post('/offices', [SettingsController::class, 'storeOffice'])->name('offices.store');
+        Route::put('/offices/{id}', [SettingsController::class, 'updateOffice'])->name('offices.update');
+        Route::post('/offices/{id}/toggle-status', [SettingsController::class, 'toggleOfficeStatus'])->name('offices.toggle');
+        Route::delete('/offices/{id}', [SettingsController::class, 'destroyOffice'])->name('offices.destroy');
+
+        // Version Types
+        Route::post('/version-types', [SettingsController::class, 'storeVersionType'])->name('versiontypes.store');
+        Route::put('/version-types/{id}', [SettingsController::class, 'updateVersionType'])->name('versiontypes.update');
+        Route::delete('/version-types/{id}', [SettingsController::class, 'destroyVersionType'])->name('versiontypes.destroy');
+    });
+
+    Route::middleware('auth')->prefix('profile')->name('profile.')->group(function () {
+        Route::get('/', [ProfileController::class, 'index'])->name('index');
+        Route::put('/info', [ProfileController::class, 'updateInfo'])->name('info.update');
+        Route::put('/password', [ProfileController::class, 'updatePassword'])->name('password.update');
+        Route::post('/photo', [ProfileController::class, 'updatePhoto'])->name('photo.update');
+        Route::delete('/photo', [ProfileController::class, 'destroyPhoto'])->name('photo.destroy');
+    });
 });
 
 // Catch-all: redirect unknown routes to login

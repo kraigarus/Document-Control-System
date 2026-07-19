@@ -36,12 +36,16 @@ export default defineConfig({
                 'resources/css/dcs/export.css',
                 'resources/js/dcs/reports.js',
                 'resources/js/dcs/opcr.js',
+                'resources/js/dcs/monitoring.js',
 
                 'resources/css/dcs/stamping.css',
                 'resources/js/dcs/stamping.js',
 
                 'resources/css/dcs/database.css',
                 'resources/js/dcs/database.js',
+
+                'resources/css/dcs/settings.css',
+                'resources/js/dcs/settings.js',
             ],
             refresh: true,
         }),

@@ -8,6 +8,7 @@ class Office extends Model
 {
     protected $table = 'offices';
     protected $primaryKey = 'office_id';
+    public $timestamps = false;
 
     protected $fillable = [
         'office_name',
