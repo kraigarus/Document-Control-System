@@ -322,6 +322,7 @@ document.addEventListener('DOMContentLoaded', () => {
             '<td style="text-align:center">' + statusBadge(r.status) + '</td>' +
             '<td style="text-align:center">' + pdfLink(r.pdf_path) + '</td>' +
             '<td>' + esc(r.source_unit) + '</td>' +
+            '<td>' + relatedDocsCell(r.related) + '</td>' +
             // ── Approval ──
             summaryCell('approval', r) +
             groupCell('approval', r.approval_no) +
@@ -368,16 +369,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function groupCell(group, value, isLink) {
-    const hidden = groupState[group] ? '' : ' style="display:none"';
-    if (!value || value === 'N/A') {
-        return '<td class="col-group-' + group + ' col-bg-' + group + '"' + hidden + '><span class="db-na">—</span></td>';
+        const hidden = groupState[group] ? '' : ' style="display:none"';
+        if (!value || value === 'N/A') {
+            return '<td class="col-group-' + group + ' col-bg-' + group + '"' + hidden + '><span class="db-na">—</span></td>';
+        }
+        if (isLink) {
+            return '<td class="col-group-' + group + ' col-bg-' + group + '"' + hidden + ' style="text-align:center">' +
+                pdfLink(value) + '</td>';
+        }
+        return '<td class="col-group-' + group + ' col-bg-' + group + '"' + hidden + '>' + esc(value) + '</td>';
     }
-    if (isLink) {
-        return '<td class="col-group-' + group + ' col-bg-' + group + '"' + hidden + ' style="text-align:center">' +
-            pdfLink(value) + '</td>';
+
+    function relatedDocsCell(related) {
+        if (!related || related.length === 0) return '<span class="db-na">—</span>';
+        return related.map(d =>
+            '<span class="db-related-tag" title="' + esc(d.doc_no || '') + '">' + esc(d.title) + '</span>'
+        ).join(' ');
     }
-    return '<td class="col-group-' + group + ' col-bg-' + group + '"' + hidden + '>' + esc(value) + '</td>';
-}
 
     function statusBadge(status) {
         const s = (status || 'active').toLowerCase();

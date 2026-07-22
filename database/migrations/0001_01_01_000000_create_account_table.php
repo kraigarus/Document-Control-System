@@ -2,15 +2,12 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-    */
-
-
     public function up(): void
     {
         Schema::create('accounts', function (Blueprint $table) {
@@ -33,6 +30,15 @@ return new class extends Migration
             $table->longText('payload');
             $table->integer('last_activity')->index();
         });
+
+        DB::table('accounts')->insert([
+            'email'          => 'admin@admin.dcs',
+            'password'       => Hash::make('123123123'),
+            'account_role'   => 'admin',
+            'account_active' => true,
+            'date_created'   => now(),
+            'date_modified'  => now(),
+        ]);
     }
 
     public function down(): void

@@ -18,7 +18,6 @@ class DocumentRequestForm extends Model
         'drf_date',
         'drf_receipt_date',
         'drf_receipt_time',
-        'office_id',
         'doc_title',
         'scanned_drf',
         'created_by',
@@ -50,9 +49,9 @@ class DocumentRequestForm extends Model
         return $this->belongsTo(DocType::class, 'doc_type_id');
     }
 
-    public function office()
+    public function drfOffices()
     {
-        return $this->belongsTo(Office::class, 'office_id');
+        return $this->hasMany(DrfOffice::class, 'request_id', 'request_id');
     }
 
     public function creator()

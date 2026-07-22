@@ -1,8 +1,94 @@
+// ══════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════
 let allOffices = [];
 let allDocTypes = [];
+let drfSourceSelected = [];
+let drfSourcePanelOpen = false;
+let syllabiGroupCounter = 0;
+let syllabiCurrentStep = 1;
+let relatedDocsCache = [];
+let relatedDocsSelected = window.__existingRelatedDocs || [];
+let relatedDocsSelectedPanelOpen = false;
+let docNoDuplicate = false;
+
 
 const ALLOWED_EXTENSIONS = ['pdf', 'docx'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+// ══════════════════════════════════════════════
+// SHARED HELPERS
+// (previously duplicated across upload / time / office-search code)
+// ══════════════════════════════════════════════
+
+/** Validate a File against the allowed extension / size rules. */
+function checkFile(file) {
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!ALLOWED_EXTENSIONS.includes(ext)) {
+        return { valid: false, ext, reason: 'type' };
+    }
+    if (file.size > MAX_FILE_SIZE) {
+        return { valid: false, ext, reason: 'size', sizeMB: (file.size / (1024 * 1024)).toFixed(1) };
+    }
+    return { valid: true, ext };
+}
+
+function fileTypeErrorMessage(check, file) {
+    return check.reason === 'type'
+        ? '"' + check.ext + '" is not allowed. Only .pdf and .docx files are accepted.'
+        : '"' + file.name + '" is ' + check.sizeMB + 'MB. Maximum file size is 10MB.';
+}
+
+/** Set a widget's icon to the pdf/docx glyph for the given extension. */
+function setFileIcon(icon, ext) {
+    icon.className = ext === 'pdf' ? 'fa-solid fa-file-pdf' : 'fa-solid fa-file-word';
+    icon.style.color = ext === 'pdf' ? 'var(--reg-error)' : 'var(--reg-accent)';
+}
+
+function clearFileIcon(icon, label, originalText) {
+    icon.className = 'fa-solid fa-cloud-arrow-up';
+    icon.style.color = '';
+    label.textContent = originalText;
+    label.style.color = '';
+    label.style.fontWeight = '';
+}
+
+/** Compute a start→end duration in minutes; null = incomplete inputs, {invalid:true} = end before start. */
+function computeDuration(startDate, startTime, endDate, endTime) {
+    if (!startDate || !startTime || !endDate || !endTime) return null;
+    const start = new Date(startDate + "T" + startTime);
+    const end = new Date(endDate + "T" + endTime);
+    const diffMs = end - start;
+    if (diffMs < 0) return { invalid: true };
+    return { invalid: false, totalMinutes: Math.floor(diffMs / 60000) };
+}
+
+function formatDuration(totalMinutes) {
+    const days = Math.floor(totalMinutes / 1440);
+    const hours = Math.floor((totalMinutes % 1440) / 60);
+    const minutes = totalMinutes % 60;
+    if (days > 0) return days + "d " + hours + "hr " + minutes + "min";
+    if (hours > 0) return hours + "hr " + minutes + "min";
+    return minutes + " min";
+}
+
+function filterOffices(query) {
+    const q = query.trim().toLowerCase();
+    if (q.length < 1) return [];
+    return allOffices.filter(o => o.office_name.toLowerCase().includes(q));
+}
+
+function emptyOfficeRowHTML() {
+    return '<tr class="reg-empty-row">' +
+                '<td colspan="3">' +
+                    '<div class="reg-empty-state">' +
+                        '<i class="fa-solid fa-building-circle-xmark"></i>' +
+                        '<span>No offices added yet</span>' +
+                    '</div>' +
+                '</td>' +
+            '</tr>';
+}
+
 
 // ══════════════════════════════════════════════
 // DOM READY — single consolidated handler
@@ -29,7 +115,7 @@ document.addEventListener("DOMContentLoaded", async function () {
             docTypeSelect.add(new Option(d.doc_type_name, d.doc_type_id));
         });
 
-        ["drfSourceUnit", "dcnSourceUnit"].forEach(id => {
+        ["dcnSourceUnit"].forEach(id => {
             const sel = document.getElementById(id);
             if (sel) offices.forEach(o => sel.add(new Option(o.office_name, o.office_id)));
         });
@@ -46,19 +132,6 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     // ── Lock revision field for new registrations ──
     const revField = document.getElementById('masterlistRevisionNo');
-    if (revField) {
-        revField.value = 0;
-        revField.readOnly = true;
-        revField.style.background = '#f1f5f9';
-        revField.style.cursor = 'not-allowed';
-
-        revField.addEventListener('input', () => {
-            if (parseInt(revField.value) > 0) {
-                revField.value = 0;
-                showToast('error', 'Cannot set revision higher than 0 for a new document. Use Revised Registration instead.');
-            }
-        });
-    }
 
     // ── Version type change → apply revision mode ──
     const versionTypeEl = document.getElementById('versionType');
@@ -69,187 +142,182 @@ document.addEventListener("DOMContentLoaded", async function () {
     }
 
     // ── Document No. live lookup (both modes) ──
-    const docNoInput = document.getElementById('masterlistDocNo');
-    const hintEl = document.getElementById('docNoHint');
-    let docNoTimer = null;
-
-    if (docNoInput) {
-        docNoInput.addEventListener('input', () => {
-            clearTimeout(docNoTimer);
-            const docNo = docNoInput.value.trim();
-
-            // ── Empty field ──
-            if (!docNo) {
-                if (isRevisedMode()) {
-                    if (hintEl) {
-                        hintEl.innerHTML = '<span style="color:#94a3b8"><i class="fa-solid fa-circle-info"></i> Enter an existing document number to continue</span>';
-                        hintEl.style.color = '';
-                        hintEl.dataset.valid = '';
-                    }
-                    if (revField) {
-                        revField.value = '';
-                        revField.readOnly = false;
-                        revField.style.background = '';
-                        revField.style.cursor = '';
-                    }
-                    setSaveEnabled(false);
-                } else {
-                    // New mode — empty is fine, validation catches it on submit
-                    if (hintEl) {
-                        hintEl.innerHTML = '';
-                        hintEl.dataset.valid = '';
-                    }
-                    setSaveEnabled(true);
-                }
-                return;
-            }
-
-            // ── Show loading spinner ──
-            if (hintEl) {
-                hintEl.innerHTML = '<span style="color:#94a3b8"><i class="fa-solid fa-spinner fa-spin"></i> Checking document...</span>';
-                hintEl.style.color = '';
-                hintEl.dataset.valid = '';
-            }
-            if (isRevisedMode()) {
-                setSaveEnabled(false);
-            }
-
-            // ── Debounced fetch ──
-            docNoTimer = setTimeout(async () => {
-                try {
-                    const docTypeId = document.getElementById('docType').value;
-                    const subTypeId = document.getElementById('subType').value;
-                    const url = '/register/check-docno?doc_no=' + encodeURIComponent(docNo) +
-                                (docTypeId ? '&doc_type_id=' + docTypeId : '') +
-                                (subTypeId ? '&sub_type_id=' + subTypeId : '');
-                    const res = await fetch(url);
-                    const data = await res.json();
-
-                    if (isRevisedMode()) {
-                        // ══════════════════════════════════
-                        // REVISED MODE — doc must EXIST
-                        // ══════════════════════════════════
-                        if (data.exists) {
-                            setSaveEnabled(true);
-
-                            if (revField) {
-                                revField.value = data.next_rev;
-                                revField.readOnly = true;
-                                revField.style.background = '#f0fdf4';
-                                revField.style.cursor = 'default';
-                            }
-
-                            const titleField = document.getElementById('masterlistDocTitle');
-                            if (titleField && data.latest_title && !titleField.value.trim()) {
-                                titleField.value = data.latest_title;
-                            }
-
-                            const originatorField = document.getElementById('masterlistSourceUnit');
-                            if (originatorField && data.latest_originator && !originatorField.value.trim()) {
-                                originatorField.value = data.latest_originator;
-                            }
-
-                            if (hintEl) {
-                                hintEl.innerHTML =
-                                    '<i class="fa-solid fa-circle-check"></i> ' +
-                                    data.message +
-                                    ' — Next revision: <strong>Rev ' + data.next_rev + '</strong>';
-                                hintEl.style.color = '#16a34a';
-                                hintEl.dataset.valid = 'true';
-                            }
-                        } else {
-                            setSaveEnabled(false);
-
-                            if (revField) {
-                                revField.value = '';
-                                revField.readOnly = false;
-                                revField.style.background = '';
-                                revField.style.cursor = '';
-                            }
-
-                            if (hintEl) {
-                                if (data.wrong_type) {
-                                    hintEl.innerHTML =
-                                        '<i class="fa-solid fa-triangle-exclamation"></i> ' +
-                                        data.message +
-                                        '<br><span style="font-weight:400;font-size:11px;">You cannot save until you enter a valid document number.</span>';
-                                    hintEl.style.color = '#d97706';
-                                    hintEl.dataset.valid = 'wrong_type';
-                                } else {
-                                    hintEl.innerHTML =
-                                        '<i class="fa-solid fa-circle-exclamation"></i> ' +
-                                        data.message +
-                                        '<br><span style="font-weight:400;font-size:11px;">You cannot save until you enter a valid document number.</span>';
-                                    hintEl.style.color = '#dc2626';
-                                    hintEl.dataset.valid = 'not_found';
-                                }
-                            }
-                        }
-
-                    } else {
-                        // ══════════════════════════════════
-                        // NEW MODE — doc must NOT EXIST
-                        // ══════════════════════════════════
-                        if (data.exists) {
-                            // Document already registered — BLOCK
-                            setSaveEnabled(false);
-
-                            if (revField) {
-                                revField.value = 0;
-                                revField.readOnly = true;
-                                revField.style.background = '#f1f5f9';
-                                revField.style.cursor = 'not-allowed';
-                            }
-
-                            if (hintEl) {
-                                hintEl.innerHTML =
-                                    '<i class="fa-solid fa-circle-exclamation"></i> ' +
-                                    'This document number is already registered under <strong>' +
-                                    (data.existing_type_name || 'this document type') +
-                                    '</strong>. Use <strong>Revised Registration</strong> to create a new revision.' +
-                                    '<br><span style="font-weight:400;font-size:11px;">You cannot save until you enter a unique document number.</span>';
-                                hintEl.style.color = '#dc2626';
-                                hintEl.dataset.valid = 'duplicate';
-                            }
-                        } else if (data.wrong_type) {
-                            // Doc exists under a DIFFERENT type — warn but allow
-                            setSaveEnabled(true);
-
-                            if (hintEl) {
-                                hintEl.innerHTML =
-                                    '<i class="fa-solid fa-triangle-exclamation"></i> ' +
-                                    data.message +
-                                    '<br><span style="font-weight:400;font-size:11px;">This number is registered under a different document type. You may continue.</span>';
-                                hintEl.style.color = '#d97706';
-                                hintEl.dataset.valid = 'different_type';
-                            }
-                        } else {
-                            // Doc does not exist — GOOD, allow save
-                            setSaveEnabled(true);
-
-                            if (hintEl) {
-                                hintEl.innerHTML =
-                                    '<i class="fa-solid fa-circle-check"></i> Document number is available.';
-                                hintEl.style.color = '#16a34a';
-                                hintEl.dataset.valid = 'available';
-                            }
-                        }
-                    }
-
-                } catch (e) {
-                    console.error('DocNo lookup failed:', e);
-                    // Don't lock the user out on network errors
-                    if (!isRevisedMode()) {
-                        setSaveEnabled(true);
-                    }
-                }
-            }, 500);
-        });
-    }
+    initDocNoLookup(revField);
 
     // ── Apply initial revision mode ──
     applyRevisionMode();
+
+    // ── Auto-copy DRF title to Masterlist title ──
+    const drfTitle = document.getElementById('drfTitle');
+    const mlTitle = document.getElementById('masterlistDocTitle');
+    if (drfTitle && mlTitle) {
+        drfTitle.addEventListener('input', () => {
+            mlTitle.value = drfTitle.value;
+        });
+    }
 });
+
+// ══════════════════════════════════════════════
+// DOCUMENT NO. LOOKUP
+// ══════════════════════════════════════════════
+function initDocNoLookup(revField) {
+    const docNoInput = document.getElementById('masterlistDocNo');
+    const hintEl = document.getElementById('docNoHint');
+    if (!docNoInput) return;
+
+    let docNoTimer = null;
+
+    docNoInput.addEventListener('input', () => {
+        clearTimeout(docNoTimer);
+        const docNo = docNoInput.value.trim();
+
+        if (!docNo) {
+            handleEmptyDocNo(hintEl, revField);
+            return;
+        }
+
+        if (hintEl) {
+            hintEl.innerHTML = '<span style="color:#94a3b8"><i class="fa-solid fa-spinner fa-spin"></i> Checking document...</span>';
+            hintEl.style.color = '';
+            hintEl.dataset.valid = '';
+        }
+
+        // ← CHANGED: disable save in BOTH modes while checking
+        setSaveEnabled(false);
+
+        docNoTimer = setTimeout(() => runDocNoLookup(docNo, hintEl, revField), 500);
+    });
+}
+
+function handleEmptyDocNo(hintEl, revField) {
+    if (isRevisedMode()) {
+        if (hintEl) {
+            hintEl.innerHTML = '<span style="color:#94a3b8"><i class="fa-solid fa-circle-info"></i> Enter an existing document number to continue</span>';
+            hintEl.style.color = '';
+            hintEl.dataset.valid = '';
+        }
+        if (revField) {
+            revField.value = '';
+            revField.readOnly = false;
+            revField.style.background = '';
+            revField.style.cursor = '';
+        }
+        setSaveEnabled(false);
+    } else {
+        docNoDuplicate = false; // ← ADD THIS
+        if (hintEl) {
+            hintEl.innerHTML = '';
+            hintEl.dataset.valid = '';
+        }
+        setSaveEnabled(true);
+    }
+}
+
+// NOTE: kept the exact original markup/coloring rules per-branch below,
+// since the hint styling differs subtly (span-wrapped vs colored <i> line) between states.
+async function runDocNoLookup(docNo, hintEl, revField) {
+    try {
+        const docTypeId = document.getElementById('docType').value;
+        const subTypeId = document.getElementById('subType').value;
+        const url = '/register/check-docno?doc_no=' + encodeURIComponent(docNo) +
+                    (docTypeId ? '&doc_type_id=' + docTypeId : '') +
+                    (subTypeId ? '&sub_type_id=' + subTypeId : '');
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (isRevisedMode()) {
+            applyRevisedModeLookupResult(data, hintEl, revField);
+        } else {
+            applyNewModeLookupResult(data, hintEl, revField);
+        }
+    } catch (e) {
+        console.error('DocNo lookup failed:', e);
+        if (!isRevisedMode()) setSaveEnabled(true);
+    }
+}
+
+function applyRevisedModeLookupResult(data, hintEl, revField) {
+    if (data.exists) {
+        setSaveEnabled(true);
+
+        if (revField) {
+            revField.value = data.next_rev;
+            revField.readOnly = false;
+            revField.style.background = '';
+            revField.style.cursor = '';
+            revField.setAttribute('min', data.next_rev);
+            revField.setAttribute('title', 'Suggested: Rev ' + data.next_rev + ' (latest is ' + data.latest_rev + ')');
+        }
+
+        const titleField = document.getElementById('masterlistDocTitle');
+        if (titleField && data.latest_title && !titleField.value.trim()) {
+            titleField.value = data.latest_title;
+        }
+
+        const originatorField = document.getElementById('masterlistSourceUnit');
+        if (originatorField && data.latest_originator && !originatorField.value.trim()) {
+            originatorField.value = data.latest_originator;
+        }
+
+        if (hintEl) {
+            hintEl.innerHTML = '<i class="fa-solid fa-circle-check"></i> ' + data.message;
+            hintEl.style.color = '#16a34a';
+            hintEl.dataset.valid = 'true';
+        }
+    } else {
+        setSaveEnabled(false);
+
+        if (revField) {
+            revField.value = '';
+            revField.readOnly = false;
+            revField.style.background = '';
+            revField.style.cursor = '';
+        }
+
+        if (hintEl) {
+            const icon = data.wrong_type ? 'fa-triangle-exclamation' : 'fa-circle-exclamation';
+            const color = data.wrong_type ? '#d97706' : '#dc2626';
+            hintEl.innerHTML = '<i class="fa-solid ' + icon + '"></i> ' + data.message +
+                '<br><span style="font-weight:400;font-size:11px;">You cannot save until you enter a valid document number.</span>';
+            hintEl.style.color = color;
+            hintEl.dataset.valid = data.wrong_type ? 'wrong_type' : 'not_found';
+        }
+    }
+}
+
+function applyNewModeLookupResult(data, hintEl, revField) {
+    if (data.exists) {
+        docNoDuplicate = true;
+        setSaveEnabled(false);
+
+        if (hintEl) {
+            hintEl.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' +
+                'This document number is already registered under <strong>' +
+                (data.existing_type_name || 'this document type') +
+                '</strong>. Use <strong>Revised Registration</strong> to create a new revision.' +
+                '<br><span style="font-weight:400;font-size:11px;">You cannot save until you enter a unique document number.</span>';
+            hintEl.style.color = '#dc2626';
+            hintEl.dataset.valid = 'duplicate';
+        }
+    } else if (data.wrong_type) {
+        docNoDuplicate = false;
+        setSaveEnabled(true);
+        if (hintEl) {
+            hintEl.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> ' + data.message +
+                '<br><span style="font-weight:400;font-size:11px;">This number is registered under a different document type. You may continue.</span>';
+            hintEl.style.color = '#d97706';
+            hintEl.dataset.valid = 'different_type';
+        }
+    } else {
+        docNoDuplicate = false;
+        setSaveEnabled(true);
+        if (hintEl) {
+            hintEl.innerHTML = '<i class="fa-solid fa-circle-check"></i> Document number is available.';
+            hintEl.style.color = '#16a34a';
+            hintEl.dataset.valid = 'available';
+        }
+    }
+}
 
 // ══════════════════════════════════════════════
 // REVISION MODE HELPERS
@@ -269,26 +337,30 @@ function applyRevisionMode() {
             revField.readOnly = false;
             revField.style.background = '';
             revField.style.cursor = '';
+            revField.removeAttribute('min');
+            revField.removeAttribute('title');
         }
         if (hintEl) {
             hintEl.innerHTML = '<span style="color:#94a3b8"><i class="fa-solid fa-circle-info"></i> Enter an existing document number to continue</span>';
             hintEl.style.color = '';
             hintEl.dataset.valid = '';
         }
-        setSaveEnabled(true);
     } else {
+        docNoDuplicate = false;
         if (revField) {
             revField.value = 0;
-            revField.readOnly = true;
-            revField.style.background = '#f1f5f9';
-            revField.style.cursor = 'not-allowed';
+            revField.readOnly = false;                   // ← editable
+            revField.style.background = '';               // ← no locked look
+            revField.style.cursor = '';                   // ← normal cursor
+            revField.removeAttribute('min');
+            revField.setAttribute('title', 'Suggested: 0 for new documents');
         }
         if (hintEl) {
             hintEl.innerHTML = '';
             hintEl.dataset.valid = '';
         }
-        setSaveEnabled(true);
     }
+    setSaveEnabled(true);
 }
 
 function updateRegistrationMode() {
@@ -297,21 +369,31 @@ function updateRegistrationMode() {
     if (!sel || !hidden) return;
 
     const text = sel.options[sel.selectedIndex]?.text?.toLowerCase() || '';
-    if (text.includes('revised') || text.includes('revision') || text.includes('revise')) {
-        hidden.value = 'revised';
-    } else {
-        hidden.value = 'new';
-    }
+    hidden.value = (text.includes('revised') || text.includes('revision') || text.includes('revise')) ? 'revised' : 'new';
     applyRevisionMode();
 }
 
 function setSaveEnabled(enabled) {
-    const saveBtn = document.querySelector('.reg-btn-save');
-    if (saveBtn) {
-        saveBtn.disabled = !enabled;
-        saveBtn.style.opacity = enabled ? '' : '0.5';
-        saveBtn.style.cursor = enabled ? '' : 'not-allowed';
-        saveBtn.style.pointerEvents = enabled ? '' : 'none';
+    // Don't re-enable if duplicate is detected
+    if (enabled && docNoDuplicate) return;
+
+    const saveBtn = document.getElementById('btnSaveDocument');
+    if (!saveBtn) return;
+
+    if (enabled) {
+        saveBtn.disabled = false;
+        saveBtn.removeAttribute('disabled');
+        saveBtn.style.opacity = '';
+        saveBtn.style.cursor = '';
+        saveBtn.style.pointerEvents = '';
+        saveBtn.style.filter = '';
+    } else {
+        saveBtn.disabled = true;
+        saveBtn.setAttribute('disabled', 'disabled');
+        saveBtn.style.opacity = '0.4';
+        saveBtn.style.cursor = 'not-allowed';
+        saveBtn.style.pointerEvents = 'none';
+        saveBtn.style.filter = 'grayscale(1)';
     }
 }
 
@@ -322,20 +404,11 @@ window.handleSourceSearch = function (input, dropdownId) {
     const dropdown = document.getElementById(dropdownId);
     if (!dropdown) return;
 
-    const fullValue = input.value;
-    const parts = fullValue.split(",");
-    const currentQuery = parts[parts.length - 1].trim().toLowerCase();
+    const parts = input.value.split(",");
+    const currentQuery = parts[parts.length - 1].trim();
+    const filtered = filterOffices(currentQuery);
 
-    if (currentQuery.length < 1) {
-        dropdown.style.display = "none";
-        return;
-    }
-
-    const filtered = allOffices.filter(o =>
-        o.office_name.toLowerCase().includes(currentQuery)
-    );
-
-    if (filtered.length === 0) {
+    if (currentQuery.length < 1 || filtered.length === 0) {
         dropdown.style.display = "none";
         return;
     }
@@ -358,7 +431,6 @@ window.pickSource = function (inputId, dropdownId, officeName, officeId) {
         parts[parts.length - 1] = " " + officeName;
         input.value = parts.join(",");
 
-        // Store the office ID in the hidden field
         const hiddenId = document.getElementById("masterlistOfficeId");
         if (hiddenId) hiddenId.value = officeId || "";
     } else {
@@ -375,7 +447,194 @@ document.addEventListener("click", function (e) {
 });
 
 // ══════════════════════════════════════════════
+// DRF SOURCE UNIT — searchable multi-select
+// ══════════════════════════════════════════════
+window.handleDrfSourceFocus = function () {
+    closeDrfSourceSelectedPanel();
+};
+
+window.handleDrfSourceSearch = function (input) {
+    const dropdown = document.getElementById('drfSourceResults');
+    closeDrfSourceSelectedPanel();
+
+    const q = input.value.trim();
+    if (q.length < 1) { dropdown.style.display = 'none'; return; }
+
+    const filtered = filterOffices(q).filter(o => !drfSourceSelected.some(s => s.office_id == o.office_id));
+
+    if (filtered.length === 0) {
+        dropdown.innerHTML = '<div class="reg-reldocs-noresult">No matching offices found</div>';
+        dropdown.style.display = 'block';
+        return;
+    }
+
+    dropdown.innerHTML = filtered.map(o =>
+        `<div onmousedown="pickDrfSource(${o.office_id})">${o.office_name}</div>`
+    ).join('');
+    dropdown.style.display = 'block';
+};
+
+window.pickDrfSource = function (id) {
+    const office = allOffices.find(o => o.office_id == id);
+    if (!office || drfSourceSelected.some(s => s.office_id == id)) return;
+    drfSourceSelected.push(office);
+    renderDrfSourceChips();
+
+    document.getElementById('drfSourceUnitSearch').value = '';
+    document.getElementById('drfSourceResults').style.display = 'none';
+};
+
+window.removeDrfSource = function (id, event) {
+    if (event) event.stopPropagation();
+    drfSourceSelected = drfSourceSelected.filter(s => s.office_id != id);
+    renderDrfSourceChips();
+};
+
+window.toggleDrfSourceSelected = function (e) {
+    if (e) e.stopPropagation();
+    document.getElementById('drfSourceResults').style.display = 'none';
+
+    drfSourcePanelOpen = !drfSourcePanelOpen;
+    const panel = document.getElementById('drfSourceSelectedPanel');
+    const icon = document.getElementById('drfSourceArrowIcon');
+    panel.style.display = drfSourcePanelOpen ? 'block' : 'none';
+    icon.style.transform = drfSourcePanelOpen ? 'rotate(180deg)' : '';
+};
+
+function closeDrfSourceSelectedPanel() {
+    drfSourcePanelOpen = false;
+    const panel = document.getElementById('drfSourceSelectedPanel');
+    const icon = document.getElementById('drfSourceArrowIcon');
+    if (panel) panel.style.display = 'none';
+    if (icon) icon.style.transform = '';
+}
+
+function renderDrfSourceChips() {
+    const container = document.getElementById('drfSourceChips');
+    if (!container) return;
+
+    if (drfSourceSelected.length === 0) {
+        container.innerHTML = '<div class="reg-reldocs-empty">No offices selected yet</div>';
+        return;
+    }
+
+    container.innerHTML = drfSourceSelected.map(o => `
+        <div class="reg-reldocs-chip">
+            <input type="hidden" name="drfSourceUnit[]" value="${o.office_id}">
+            <span class="reg-reldocs-chip-title">${o.office_name}</span>
+            <button type="button" onclick="removeDrfSource(${o.office_id}, event)"><i class="fa-solid fa-xmark"></i></button>
+        </div>`).join('');
+}
+
+document.addEventListener('click', function (e) {
+    const widget = document.getElementById('drfSourceUnitWidget');
+    if (widget && !widget.contains(e.target)) {
+        document.getElementById('drfSourceResults').style.display = 'none';
+        closeDrfSourceSelectedPanel();
+    }
+});
+
+document.addEventListener('DOMContentLoaded', renderRelatedDocsChips);
+
+window.handleRelatedDocFocus = function () {
+    closeRelatedDocsSelectedPanel();
+};
+
+window.handleRelatedDocSearch = function (input) {
+    clearTimeout(window.__relatedDocsTimer);
+    const q = input.value.trim();
+    const dropdown = document.getElementById('relatedDocsResults');
+
+    closeRelatedDocsSelectedPanel();
+
+    if (q.length < 1) { dropdown.style.display = 'none'; return; }
+
+    window.__relatedDocsTimer = setTimeout(async () => {
+        try {
+            const excludeId = document.getElementById('requestId')?.value || '';
+            const url = '/api/documents/search?q=' + encodeURIComponent(q)
+                + (excludeId ? '&exclude_request_id=' + excludeId : '');
+            const data = await fetch(url).then(r => r.json());
+            relatedDocsCache = data.filter(d => !relatedDocsSelected.some(s => s.masterlist_id === d.masterlist_id));
+
+            if (relatedDocsCache.length === 0) {
+                dropdown.innerHTML = '<div class="reg-reldocs-noresult">No matching documents found</div>';
+                dropdown.style.display = 'block';
+                return;
+            }
+            dropdown.innerHTML = relatedDocsCache
+                .map(d => `<div onmousedown="pickRelatedDoc(${d.masterlist_id})">${d.label}</div>`)
+                .join('');
+            dropdown.style.display = 'block';
+        } catch (e) { console.error('Related doc search failed:', e); }
+    }, 300);
+};
+
+window.pickRelatedDoc = function (id) {
+    const doc = relatedDocsCache.find(d => d.masterlist_id === id);
+    if (!doc || relatedDocsSelected.some(d => d.masterlist_id === id)) return;
+    relatedDocsSelected.push(doc);
+    renderRelatedDocsChips();
+
+    const input = document.getElementById('relatedDocsSearch');
+    input.value = '';
+    document.getElementById('relatedDocsResults').style.display = 'none';
+};
+
+window.removeRelatedDoc = function (id, event) {
+    if (event) event.stopPropagation();
+    relatedDocsSelected = relatedDocsSelected.filter(d => d.masterlist_id !== id);
+    renderRelatedDocsChips();
+};
+
+window.toggleRelatedDocsSelected = function (e) {
+    if (e) e.stopPropagation();
+    document.getElementById('relatedDocsResults').style.display = 'none';
+
+    relatedDocsSelectedPanelOpen = !relatedDocsSelectedPanelOpen;
+    const panel = document.getElementById('relatedDocsSelectedPanel');
+    const icon = document.getElementById('relatedDocsArrowIcon');
+    panel.style.display = relatedDocsSelectedPanelOpen ? 'block' : 'none';
+    icon.style.transform = relatedDocsSelectedPanelOpen ? 'rotate(180deg)' : '';
+};
+
+function closeRelatedDocsSelectedPanel() {
+    relatedDocsSelectedPanelOpen = false;
+    const panel = document.getElementById('relatedDocsSelectedPanel');
+    const icon = document.getElementById('relatedDocsArrowIcon');
+    if (panel) panel.style.display = 'none';
+    if (icon) icon.style.transform = '';
+}
+
+function renderRelatedDocsChips() {
+    const container = document.getElementById('relatedDocsChips');
+    if (!container) return;
+
+    if (relatedDocsSelected.length === 0) {
+        container.innerHTML = '<div class="reg-reldocs-empty">No documents selected yet</div>';
+        return;
+    }
+
+    container.innerHTML = relatedDocsSelected.map(d => `
+        <div class="reg-reldocs-chip">
+            <input type="hidden" name="relatedDocumentIds[]" value="${d.masterlist_id}">
+            <span class="reg-reldocs-chip-title">${d.doc_title}</span>
+            <span class="reg-reldocs-chip-no">${d.doc_no || ''}</span>
+            <button type="button" onclick="removeRelatedDoc(${d.masterlist_id}, event)"><i class="fa-solid fa-xmark"></i></button>
+        </div>`).join('');
+}
+
+document.addEventListener('click', function (e) {
+    const widget = document.getElementById('relatedDocsWidget');
+    if (widget && !widget.contains(e.target)) {
+        document.getElementById('relatedDocsResults').style.display = 'none';
+        closeRelatedDocsSelectedPanel();
+    }
+});
+
+// ══════════════════════════════════════════════
 // SELECT PROTECTION
+// (guards against selects being changed by anything other than a real user gesture)
 // ══════════════════════════════════════════════
 function initSelectProtection() {
     const selects = {
@@ -480,29 +739,12 @@ function processUploadAreaFile(input, container, icon, label, originalText) {
     }
 
     const file = input.files[0];
-    const ext = file.name.split('.').pop().toLowerCase();
+    const check = checkFile(file);
 
-    if (!ALLOWED_EXTENSIONS.includes(ext)) {
-        showUploadFieldError(container, '"' + ext + '" is not allowed. Only .pdf and .docx files are accepted.');
+    if (!check.valid) {
+        showUploadFieldError(container, fileTypeErrorMessage(check, file));
         container.classList.add('reg-upload-error');
-        icon.className = 'fa-solid fa-cloud-arrow-up';
-        icon.style.color = '';
-        label.textContent = originalText;
-        label.style.color = '';
-        label.style.fontWeight = '';
-        input.value = '';
-        return;
-    }
-
-    if (file.size > MAX_FILE_SIZE) {
-        const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
-        showUploadFieldError(container, '"' + file.name + '" is ' + sizeMB + 'MB. Maximum file size is 10MB.');
-        container.classList.add('reg-upload-error');
-        icon.className = 'fa-solid fa-cloud-arrow-up';
-        icon.style.color = '';
-        label.textContent = originalText;
-        label.style.color = '';
-        label.style.fontWeight = '';
+        clearFileIcon(icon, label, originalText);
         input.value = '';
         return;
     }
@@ -512,9 +754,7 @@ function processUploadAreaFile(input, container, icon, label, originalText) {
     container.style.background = 'var(--reg-success-bg)';
     container.style.borderStyle = 'solid';
 
-    icon.className = ext === 'pdf' ? 'fa-solid fa-file-pdf' : 'fa-solid fa-file-word';
-    icon.style.color = ext === 'pdf' ? 'var(--reg-error)' : 'var(--reg-accent)';
-
+    setFileIcon(icon, check.ext);
     label.textContent = file.name;
     label.style.color = 'var(--reg-success)';
     label.style.fontWeight = '600';
@@ -545,12 +785,7 @@ function resetUploadArea(container, icon, label, originalText) {
     container.style.borderStyle = '';
     container.style.animation = '';
 
-    icon.className = 'fa-solid fa-cloud-arrow-up';
-    icon.style.color = '';
-
-    label.textContent = originalText;
-    label.style.color = '';
-    label.style.fontWeight = '';
+    clearFileIcon(icon, label, originalText);
 
     removeExistingRemoveBtn(container);
     removeExistingError(container);
@@ -585,47 +820,29 @@ function removeExistingError(container) {
     if (old) old.remove();
 }
 
+function resetUploadCell(cell, icon, label, originalText) {
+    cell.classList.remove('reg-upload-cell-success', 'reg-upload-cell-error');
+    cell.style.borderColor = '';
+    cell.style.background = '';
+    clearFileIcon(icon, label, originalText);
+    removeExistingError(cell);
+}
+
 function processUploadCellFile(input, cell) {
     const label = cell.querySelector('span');
     const icon = cell.querySelector('i');
     const originalText = 'No file chosen';
 
-    cell.classList.remove('reg-upload-cell-success', 'reg-upload-cell-error');
-    cell.style.borderColor = '';
-    cell.style.background = '';
-    removeExistingError(cell);
+    resetUploadCell(cell, icon, label, originalText);
 
-    if (!input.files || !input.files[0]) {
-        icon.className = 'fa-solid fa-cloud-arrow-up';
-        icon.style.color = '';
-        label.textContent = originalText;
-        label.style.color = '';
-        label.style.fontWeight = '';
-        return;
-    }
+    if (!input.files || !input.files[0]) return;
 
     const file = input.files[0];
-    const ext = file.name.split('.').pop().toLowerCase();
+    const check = checkFile(file);
 
-    if (!ALLOWED_EXTENSIONS.includes(ext)) {
+    if (!check.valid) {
         showUploadFieldError(cell, '.pdf and .docx only');
-        icon.className = 'fa-solid fa-cloud-arrow-up';
-        icon.style.color = '';
-        label.textContent = originalText;
-        label.style.color = '';
-        label.style.fontWeight = '';
-        input.value = '';
-        return;
-    }
-
-    if (file.size > MAX_FILE_SIZE) {
-        const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
-        showUploadFieldError(cell, sizeMB + 'MB exceeds 10MB limit');
-        icon.className = 'fa-solid fa-cloud-arrow-up';
-        icon.style.color = '';
-        label.textContent = originalText;
-        label.style.color = '';
-        label.style.fontWeight = '';
+        clearFileIcon(icon, label, originalText);
         input.value = '';
         return;
     }
@@ -633,8 +850,7 @@ function processUploadCellFile(input, cell) {
     cell.classList.add('reg-upload-cell-success');
     cell.style.borderColor = 'var(--reg-success-border)';
     cell.style.background = 'var(--reg-success-bg)';
-    icon.className = ext === 'pdf' ? 'fa-solid fa-file-pdf' : 'fa-solid fa-file-word';
-    icon.style.color = ext === 'pdf' ? 'var(--reg-error)' : 'var(--reg-accent)';
+    setFileIcon(icon, check.ext);
     label.textContent = file.name;
     label.style.color = 'var(--reg-success)';
     label.style.fontWeight = '600';
@@ -647,21 +863,13 @@ function validateTableFile(input) {
     if (!input.files || !input.files[0]) return;
 
     const file = input.files[0];
-    const ext = file.name.split('.').pop().toLowerCase();
+    const check = checkFile(file);
 
-    if (!ALLOWED_EXTENSIONS.includes(ext)) {
+    if (!check.valid) {
         const errDiv = document.createElement('div');
         errDiv.className = 'reg-file-error';
-        errDiv.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> .pdf and .docx only';
-        td.appendChild(errDiv);
-        input.value = '';
-        return;
-    }
-
-    if (file.size > MAX_FILE_SIZE) {
-        const errDiv = document.createElement('div');
-        errDiv.className = 'reg-file-error';
-        errDiv.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> Max 10MB';
+        errDiv.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' +
+            (check.reason === 'type' ? '.pdf and .docx only' : 'Max 10MB');
         td.appendChild(errDiv);
         input.value = '';
     }
@@ -713,7 +921,34 @@ async function handleVersionChange() {
 // ══════════════════════════════════════════════
 // DOC TYPE CHANGE
 // ══════════════════════════════════════════════
+function resetTextLikeInputs(el) {
+    el.querySelectorAll('input[type="text"], input[type="number"], input[type="date"], input[type="time"], textarea').forEach(input => {
+        input.value = '';
+    });
+    el.querySelectorAll('select').forEach(sel => { sel.selectedIndex = 0; });
+}
+
+function resetFileWidgetsIn(el) {
+    el.querySelectorAll('input[type="file"]').forEach(file => {
+        file.value = '';
+        const container = file.closest('.reg-upload');
+        if (container) {
+            const icon = container.querySelector('i');
+            const label = container.querySelector('span');
+            if (icon && label) resetUploadArea(container, icon, label, 'Choose .pdf or .docx file');
+        }
+    });
+
+    el.querySelectorAll('.reg-upload-cell').forEach(cell => {
+        const icon = cell.querySelector('i');
+        const label = cell.querySelector('span');
+        if (icon && label) resetUploadCell(cell, icon, label, 'No file chosen');
+    });
+}
+
 function handleDocTypeChange() {
+    docNoDuplicate = false;
+    setSaveEnabled(true);
     const docTypeSelect = document.getElementById("docType");
     const docTypeId = parseInt(docTypeSelect.value);
     const subTypeSelect = document.getElementById("subType");
@@ -724,7 +959,6 @@ function handleDocTypeChange() {
 
     if (syllabiSection) syllabiSection.style.display = "none";
 
-    // Reset the doc no hint when doc type changes
     const hintEl = document.getElementById('docNoHint');
     if (hintEl) {
         hintEl.innerHTML = '';
@@ -736,52 +970,8 @@ function handleDocTypeChange() {
         const el = document.getElementById(id);
         if (el) {
             el.style.display = "none";
-            el.querySelectorAll('input[type="text"], input[type="number"], input[type="date"], input[type="time"], textarea').forEach(input => {
-                input.value = '';
-            });
-            el.querySelectorAll('select').forEach(sel => {
-                sel.selectedIndex = 0;
-            });
-            el.querySelectorAll('input[type="file"]').forEach(file => {
-                file.value = '';
-                const container = file.closest('.reg-upload');
-                if (container) {
-                    const icon = container.querySelector('i');
-                    const label = container.querySelector('span');
-                    if (icon) {
-                        icon.className = 'fa-solid fa-cloud-arrow-up';
-                        icon.style.color = '';
-                    }
-                    if (label) {
-                        label.textContent = 'Choose .pdf or .docx file';
-                        label.style.color = '';
-                        label.style.fontWeight = '';
-                    }
-                    container.classList.remove('reg-upload-success', 'reg-upload-error');
-                    container.style.borderColor = '';
-                    container.style.background = '';
-                    const removeBtn = container.querySelector('.reg-file-remove');
-                    if (removeBtn) removeBtn.remove();
-                    const errDiv = container.closest('.reg-field')?.querySelector('.reg-file-error');
-                    if (errDiv) errDiv.remove();
-                }
-            });
-            el.querySelectorAll('.reg-upload-cell').forEach(cell => {
-                const icon = cell.querySelector('i');
-                const label = cell.querySelector('span');
-                if (icon) {
-                    icon.className = 'fa-solid fa-cloud-arrow-up';
-                    icon.style.color = '';
-                }
-                if (label) {
-                    label.textContent = 'No file chosen';
-                    label.style.color = '';
-                    label.style.fontWeight = '';
-                }
-                cell.classList.remove('reg-upload-cell-success', 'reg-upload-cell-error');
-                cell.style.borderColor = '';
-                cell.style.background = '';
-            });
+            resetTextLikeInputs(el);
+            resetFileWidgetsIn(el);
         }
     });
 
@@ -797,19 +987,14 @@ function handleDocTypeChange() {
         if (el) el.value = '';
     });
 
+    drfSourceSelected = [];
+    renderDrfSourceChips();
+    const drfSearchInput = document.getElementById('drfSourceUnitSearch');
+    if (drfSearchInput) drfSearchInput.value = '';
+
     ['retrievalBody', 'distBody'].forEach(tbodyId => {
         const tbody = document.getElementById(tbodyId);
-        if (tbody) {
-            tbody.innerHTML =
-                '<tr class="reg-empty-row">' +
-                    '<td colspan="3">' +
-                        '<div class="reg-empty-state">' +
-                            '<i class="fa-solid fa-building-circle-xmark"></i>' +
-                            '<span>No offices added yet</span>' +
-                        '</div>' +
-                    '</td>' +
-                '</tr>';
-        }
+        if (tbody) tbody.innerHTML = emptyOfficeRowHTML();
     });
     ['totalRetrievalCopies', 'totalDistCopies'].forEach(id => {
         const el = document.getElementById(id);
@@ -828,26 +1013,30 @@ function handleDocTypeChange() {
                 '<td><input type="text" name="revisionPurpose[]" placeholder="Enter Purpose"></td>' +
                 '<td><button type="button" class="reg-row-del" onclick="this.closest(\'tr\').remove()"><i class="fa-solid fa-trash-can"></i></button></td>' +
             '</tr>';
-        const fileInput = revisionBody.querySelector('input[type="file"]');
-        fileInput.dataset.bound = "true";
-        fileInput.addEventListener('change', function () { validateTableFile(this); });
+        bindTableFileInput(revisionBody.querySelector('input[type="file"]'));
     }
 
     const syllabiBody = document.getElementById('syllabiTableBody');
     if (syllabiBody) {
-        syllabiBody.innerHTML =
-            '<tr>' +
-                '<td><input type="text" name="syllabiCourseName[]" placeholder="Enter course name"></td>' +
-                '<td><select name="syllabiAvailability[]"><option value="" disabled selected>Select</option><option value="available">Available</option><option value="not_available">Not Available</option></select></td>' +
-                '<td><input type="number" name="syllabiNoPages[]" min="0" placeholder="0"></td>' +
-                '<td><select name="syllabiDrfAvailability[]"><option value="" disabled selected>Select</option><option value="available">Available</option><option value="not_available">Not Available</option></select></td>' +
-                '<td><input type="text" name="syllabiDrfNo[]" placeholder="Enter Syllabi No."></td>' +
-                '<td><input type="date" name="syllabiDrfDate[]"></td>' +
-                '<td><input type="date" name="syllabiDrfReceived[]"></td>' +
-                '<td><label class="reg-upload-cell"><input type="file" name="syllabiScannedDrf[]" accept=".pdf,.docx"><i class="fa-solid fa-cloud-arrow-up"></i><span>No file chosen</span></label></td>' +
-                '<td><button type="button" class="reg-row-del" onclick="this.closest(\'tr\').remove()"><i class="fa-solid fa-trash-can"></i></button></td>' +
-            '</tr>';
+        syllabiBody.innerHTML = '';
+        syllabiGroupCounter = 0;
+        addSyllabiRow();
+        setSyllabiStep(1);
     }
+
+    ['syllabiDocNo', 'syllabiDocTitle', 'syllabiEffectivityDate', 'syllabiDeadline'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+
+    const collegeSel = document.getElementById('syllabiCollege');
+    const programSel = document.getElementById('syllabiProgram');
+    const semSel = document.getElementById('syllabiSemester');
+    const sySel = document.getElementById('syllabiSchoolYear');
+    if (collegeSel) collegeSel.selectedIndex = 0;
+    if (programSel) { programSel.innerHTML = '<option value="" selected disabled>Select program</option>'; programSel.disabled = true; }
+    if (semSel) { semSel.selectedIndex = 0; semSel.disabled = true; }
+    if (sySel) { sySel.selectedIndex = 0; sySel.disabled = true; }
 
     disableApproval();
     clearValidation();
@@ -868,6 +1057,12 @@ function handleDocTypeChange() {
     }
 }
 
+function bindTableFileInput(fileInput) {
+    if (!fileInput) return;
+    fileInput.dataset.bound = "true";
+    fileInput.addEventListener('change', function () { validateTableFile(this); });
+}
+
 // ══════════════════════════════════════════════
 // SUB-TYPE CHANGE
 // ══════════════════════════════════════════════
@@ -879,28 +1074,38 @@ function validateChecklistState() {
     const syllabiSection = document.getElementById("section-syllabi");
     if (syllabiSection) syllabiSection.style.display = "none";
 
-    if (subTypeId) {
-        unlockChecklist();
-        if (subTypeData && subTypeData.doc_type_name.toLowerCase() === "syllabi") {
-            if (syllabiSection) {
-                syllabiSection.style.display = "block";
-                setTimeout(() => {
-                    syllabiSection.querySelectorAll('.reg-upload-cell').forEach(cell => {
-                        const input = cell.querySelector('input[type="file"]');
-                        if (input && !input.dataset.bound) {
-                            input.setAttribute('accept', '.pdf,.docx');
-                            input.dataset.bound = "true";
-                            input.addEventListener('change', function () {
-                                processUploadCellFile(this, cell);
-                            });
-                        }
-                    });
-                }, 50);
-            }
-        }
-    } else {
+    if (!subTypeId) {
         lockChecklist();
+        return;
     }
+
+    unlockChecklist();
+    const isSyllabi = subTypeData && subTypeData.doc_type_name.toLowerCase() === "syllabi";
+    if (!isSyllabi) return;
+
+    const section3 = document.getElementById("section-3");
+    if (section3) section3.style.display = "none";
+
+    if (!syllabiSection) return;
+
+    syllabiSection.style.display = "block";
+    setSyllabiStep(1);
+    loadSyllabiContextDropdowns();
+    if (document.getElementById("syllabiTableBody").children.length === 0) {
+        addSyllabiRow();
+    }
+    setTimeout(() => {
+        syllabiSection.querySelectorAll('.reg-upload-cell').forEach(cell => {
+            const input = cell.querySelector('input[type="file"]');
+            if (input && !input.dataset.bound) {
+                input.setAttribute('accept', '.pdf,.docx');
+                input.dataset.bound = "true";
+                input.addEventListener('change', function () {
+                    processUploadCellFile(this, cell);
+                });
+            }
+        });
+    }, 50);
 }
 
 // ══════════════════════════════════════════════
@@ -985,23 +1190,15 @@ function unlockChecklist() {
 // TOGGLE SECTIONS
 // ══════════════════════════════════════════════
 window.toggleSection = function (checklistId, show) {
-    const sectionMap = {
-        1: "section-1",
-        2: "section-2",
-        3: "section-3",
-        4: "section-4",
-        5: "section-5",
-    };
+    const sectionMap = { 1: "section-1", 2: "section-2", 3: "section-3", 4: "section-4", 5: "section-5" };
     const sectionId = sectionMap[checklistId];
-    if (sectionId) {
-        const el = document.getElementById(sectionId);
-        if (el) {
-            el.style.display = show ? "block" : "none";
-            if (show) {
-                setTimeout(initFileInputs, 50);
-            }
-        }
-    }
+    if (!sectionId) return;
+
+    const el = document.getElementById(sectionId);
+    if (!el) return;
+
+    el.style.display = show ? "block" : "none";
+    if (show) setTimeout(initFileInputs, 50);
 };
 
 // ══════════════════════════════════════════════
@@ -1029,40 +1226,24 @@ function calcTimeDiff(startDateId, startTimeId, endDateId, endTimeId, displayId,
     const display = document.getElementById(displayId);
     const hidden = document.getElementById(hiddenId);
 
-    if (!startDate || !startTime || !endDate || !endTime) {
+    const result = computeDuration(startDate, startTime, endDate, endTime);
+
+    if (!result) {
         display.value = "--";
         display.style.color = "";
         hidden.value = "";
         return;
     }
-
-    const start = new Date(startDate + "T" + startTime);
-    const end = new Date(endDate + "T" + endTime);
-    const diffMs = end - start;
-
-    if (diffMs < 0) {
+    if (result.invalid) {
         display.value = "Invalid";
         display.style.color = "var(--reg-error)";
         hidden.value = "";
         return;
     }
 
-    const totalMinutes = Math.floor(diffMs / 60000);
-    const days = Math.floor(totalMinutes / 1440);
-    const hours = Math.floor((totalMinutes % 1440) / 60);
-    const minutes = totalMinutes % 60;
-
     display.style.color = "";
-
-    if (days > 0) {
-        display.value = days + "d " + hours + "hr " + minutes + "min";
-    } else if (hours > 0) {
-        display.value = hours + "hr " + minutes + "min";
-    } else {
-        display.value = minutes + " min";
-    }
-
-    hidden.value = String(totalMinutes);
+    display.value = formatDuration(result.totalMinutes);
+    hidden.value = String(result.totalMinutes);
 }
 
 window.calcRetrievalTimeSpent = function () {
@@ -1076,7 +1257,6 @@ window.calcDistributionTimeSpent = function () {
 window.calcMasterlistTimeSpent = function () {
     calcTimeDiff("masterlistReceiptDate", "masterlistReceiptTime", "masterlistRegisteredDate", "masterlistRegisteredTime", "masterlistTimeSpentDisplay", "masterlistTimeSpent");
 };
-
 
 // ══════════════════════════════════════════════
 // FORM VALIDATION
@@ -1099,8 +1279,8 @@ function markFieldError(fieldId, message) {
             parent.appendChild(err);
         }
     } else {
-        // Fallback for fields without IDs (like syllabi rows)
-        // Show a table-level error on the first occurrence only
+        // Fallback for fields without IDs (like syllabi rows) — show a
+        // table-level error, first occurrence only.
         const syllabiSection = document.getElementById("section-syllabi");
         if (syllabiSection && !syllabiSection.querySelector('.reg-field-error')) {
             const err = document.createElement("div");
@@ -1139,6 +1319,27 @@ function markSearchError(inputId, message) {
     }
 }
 
+function markChecklistError(message) {
+    const container = document.getElementById("dynamicCheckboxes");
+    if (!container) return;
+
+    const parent = container.closest(".reg-panel-bottom") || container.parentElement;
+    if (parent && !parent.querySelector(".reg-field-error")) {
+        const err = document.createElement("div");
+        err.className = "reg-field-error";
+        err.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' + message;
+        parent.appendChild(err);
+    }
+}
+
+/** Pushes an error into `errors` when a required text-like field is blank. */
+function requireField(errors, id, message) {
+    const el = document.getElementById(id);
+    const val = el ? (el.value || '').trim() : '';
+    if (!val) errors.push({ field: id, message });
+    return val;
+}
+
 function validateForm() {
     clearValidation();
     const errors = [];
@@ -1164,224 +1365,170 @@ function validateForm() {
         return errors;
     }
 
-    // Section 1: DRF
-    const section1 = document.getElementById("section-1");
-    if (section1 && section1.style.display !== "none") {
-        if (!document.getElementById("drfNo").value.trim()) errors.push({ field: "drfNo", message: "DRF No. is required." });
-        if (!document.getElementById("drfDate").value) errors.push({ field: "drfDate", message: "DRF Date is required." });
-        if (!document.getElementById("drfReceiptDate").value) errors.push({ field: "drfReceiptDate", message: "Date Receipt is required." });
-        if (!document.getElementById("drfTime").value) errors.push({ field: "drfTime", message: "Time Receipt is required." });
-        if (!document.getElementById("drfTitle").value.trim()) errors.push({ field: "drfTitle", message: "Document Title is required." });
-        if (!document.getElementById("drfSourceUnit").value) errors.push({ field: "drfSourceUnit", message: "Source Unit is required." });
-    }
-
-    // Section 2: DCN
-    const section2 = document.getElementById("section-2");
-    if (section2 && section2.style.display !== "none") {
-        if (!document.getElementById("dcnNumber").value.trim()) errors.push({ field: "dcnNumber", message: "DCN No. is required." });
-        if (!document.getElementById("noticeDate").value) errors.push({ field: "noticeDate", message: "DCN Date is required." });
-        if (!document.getElementById("receiptDate").value) errors.push({ field: "receiptDate", message: "DCN Receipt Date is required." });
-        if (!document.getElementById("receiptTime").value) errors.push({ field: "receiptTime", message: "DCN Receipt Time is required." });
-        if (!document.getElementById("dcnSourceUnit").value) errors.push({ field: "dcnSourceUnit", message: "Source Unit is required." });
-
-        let hasRevision = false;
-        document.querySelectorAll("#revisionTableBody tr").forEach(row => {
-            const title = row.querySelector('input[name="documentTitle[]"]');
-            if (title && title.value.trim()) hasRevision = true;
-        });
-        if (!hasRevision) errors.push({ field: "revisionTableBody", message: "At least one revision document is required.", type: "table" });
-    }
-
-    // Section 3: Masterlist
-    const section3 = document.getElementById("section-3");
-    if (section3 && section3.style.display !== "none") {
-        if (!document.getElementById("masterlistDocNo").value.trim()) errors.push({ field: "masterlistDocNo", message: "Document No. is required." });
-        if (!document.getElementById("masterlistDocTitle").value.trim()) errors.push({ field: "masterlistDocTitle", message: "Document Title is required." });
-        if (!document.getElementById("deadlineOfSubmission").value) errors.push({ field: "deadlineOfSubmission", message: "Deadline of Submission is required." });
-        if (!document.getElementById("masterlistReceiptDate").value) errors.push({ field: "masterlistReceiptDate", message: "Document Receipt Date is required." });
-        if (!document.getElementById("masterlistReceiptTime").value) errors.push({ field: "masterlistReceiptTime", message: "Document Receipt Time is required." });
-        if (!document.getElementById("masterlistRegisteredDate").value) errors.push({ field: "masterlistRegisteredDate", message: "Document Registered Date is required." });
-        if (!document.getElementById("masterlistRegisteredTime").value) errors.push({ field: "masterlistRegisteredTime", message: "Document Registered Time is required." });
-        if (!document.getElementById("masterlistEffectivityDate").value) errors.push({ field: "masterlistEffectivityDate", message: "Effectivity Date is required." });
-
-        const revVal = document.getElementById("masterlistRevisionNo").value.trim();
-        if (revVal === '' || (revVal !== '0' && isNaN(parseInt(revVal)))) {
-            errors.push({ field: "masterlistRevisionNo", message: "Revision No. is required." });
-        }
-
-        if (!document.getElementById("masterlistNoOfPages").value) errors.push({ field: "masterlistNoOfPages", message: "No. of Pages is required." });
-        if (!document.getElementById("masterlistInCharge").value.trim()) errors.push({ field: "masterlistInCharge", message: "In-charge is required." });
-        if (!document.getElementById("masterlistSourceUnit").value.trim()) errors.push({ field: "masterlistSourceUnit", message: "Source Unit / Originator is required." });
-        if (!document.getElementById("briefPurpose").value.trim()) errors.push({ field: "briefPurpose", message: "Brief Purpose is required." });
-
-        const mlTimeDisplay = document.getElementById("masterlistTimeSpentDisplay");
-        if (mlTimeDisplay.value === "Invalid") {
-            errors.push({ field: "masterlistRegisteredDate", message: "Time is invalid. Document Registered must be after Document Receipt." });
-        }
-    }
-
-    // Section 4: Retrieval
-    const section4 = document.getElementById("section-4");
-    if (section4 && section4.style.display !== "none") {
-        if (!document.getElementById("retrievalFormDate").value) errors.push({ field: "retrievalFormDate", message: "Retrieval Form Date is required." });
-        if (!document.getElementById("retrievalFormTime").value) errors.push({ field: "retrievalFormTime", message: "Retrieval Form Time is required." });
-        if (!document.getElementById("retrievalDate").value) errors.push({ field: "retrievalDate", message: "Retrieval Date is required." });
-        if (!document.getElementById("retrievalTime").value) errors.push({ field: "retrievalTime", message: "Retrieval Time is required." });
-
-        const retTimeDisplay = document.getElementById("retrievalTimeSpentDisplay");
-        if (retTimeDisplay.value === "Invalid") {
-            errors.push({ field: "retrievalDate", message: "Time is invalid. Retrieval Date must be after Form Date." });
-        }
-
-        const retOffices = document.querySelectorAll("#retrievalBody input[type='hidden']");
-        if (retOffices.length === 0) errors.push({ field: "retrievalSearch", message: "At least one retrieval office is required.", type: "search" });
-    }
-
-    // Section 5: Distribution
-    const section5 = document.getElementById("section-5");
-    if (section5 && section5.style.display !== "none") {
-        if (!document.getElementById("distributionFormDate").value) errors.push({ field: "distributionFormDate", message: "Distribution Form Date is required." });
-        if (!document.getElementById("distributionFormTime").value) errors.push({ field: "distributionFormTime", message: "Distribution Form Time is required." });
-        if (!document.getElementById("distributionDate").value) errors.push({ field: "distributionDate", message: "Distribution Date is required." });
-        if (!document.getElementById("distributionTime").value) errors.push({ field: "distributionTime", message: "Distribution Time is required." });
-        if (!document.getElementById("distributionRemarks").value) errors.push({ field: "distributionRemarks", message: "Distribution Remarks is required." });
-
-        const distTimeDisplay = document.getElementById("distributionTimeSpentDisplay");
-        if (distTimeDisplay.value === "Invalid") {
-            errors.push({ field: "distributionDate", message: "Time is invalid. Distribution Date must be after Form Date." });
-        }
-
-        const distOffices = document.querySelectorAll("#distBody input[type='hidden']");
-        if (distOffices.length === 0) errors.push({ field: "distSearch", message: "At least one distribution office is required.", type: "search" });
-    }
-
-    // Syllabi
-    const sectionSyllabi = document.getElementById("section-syllabi");
-    if (sectionSyllabi && sectionSyllabi.style.display !== "none") {
-        const syllabiRows = document.querySelectorAll("#syllabiTableBody tr");
-        let hasValidSyllabi = false;
-
-        syllabiRows.forEach((row, index) => {
-            const course    = row.querySelector('input[name="syllabiCourseName[]"]');
-            const avail     = row.querySelector('select[name="syllabiAvailability[]"]');
-            const pages     = row.querySelector('input[name="syllabiNoPages[]"]');
-            const drfAvail  = row.querySelector('select[name="syllabiDrfAvailability[]"]');
-            const drfNo     = row.querySelector('input[name="syllabiDrfNo[]"]');
-            const drfDate   = row.querySelector('input[name="syllabiDrfDate[]"]');
-            const drfRecv   = row.querySelector('input[name="syllabiDrfReceived[]"]');
-
-            const rowNum = index + 1;
-            let rowHasError = false;
-
-            // Course name — required
-            if (!course || !course.value.trim()) {
-                markFieldError(course?.id || 'syllabiTableBody',
-                    'Syllabi Row ' + rowNum + ': Course Name is required.');
-                if (course) course.classList.add('reg-input-error');
-                rowHasError = true;
-            }
-
-            // Availability — required
-            if (!avail || !avail.value) {
-                markFieldError(avail?.id || 'syllabiTableBody',
-                    'Syllabi Row ' + rowNum + ': Availability is required.');
-                if (avail) avail.classList.add('reg-input-error');
-                rowHasError = true;
-            }
-
-            // No. of Pages — required and must be > 0
-            if (!pages || !pages.value || parseInt(pages.value) <= 0) {
-                markFieldError(pages?.id || 'syllabiTableBody',
-                    'Syllabi Row ' + rowNum + ': No. of Pages is required and must be greater than 0.');
-                if (pages) pages.classList.add('reg-input-error');
-                rowHasError = true;
-            }
-
-            // DRF Availability — required
-            if (!drfAvail || !drfAvail.value) {
-                markFieldError(drfAvail?.id || 'syllabiTableBody',
-                    'Syllabi Row ' + rowNum + ': DRF Availability is required.');
-                if (drfAvail) drfAvail.classList.add('reg-input-error');
-                rowHasError = true;
-            }
-
-            // DRF No. — required
-            if (!drfNo || !drfNo.value.trim()) {
-                markFieldError(drfNo?.id || 'syllabiTableBody',
-                    'Syllabi Row ' + rowNum + ': DRF No. is required.');
-                if (drfNo) drfNo.classList.add('reg-input-error');
-                rowHasError = true;
-            }
-
-            // DRF Date — required
-            if (!drfDate || !drfDate.value) {
-                markFieldError(drfDate?.id || 'syllabiTableBody',
-                    'Syllabi Row ' + rowNum + ': DRF Date is required.');
-                if (drfDate) drfDate.classList.add('reg-input-error');
-                rowHasError = true;
-            }
-
-            // DRF Received — required
-            if (!drfRecv || !drfRecv.value) {
-                markFieldError(drfRecv?.id || 'syllabiTableBody',
-                    'Syllabi Row ' + rowNum + ': DRF Received Date is required.');
-                if (drfRecv) drfRecv.classList.add('reg-input-error');
-                rowHasError = true;
-            }
-
-            // Scanned DRF — required
-            const fileInput = row.querySelector('input[name="syllabiScannedDrf[]"]');
-            if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
-                const cell = fileInput?.closest('.reg-upload-cell') || fileInput?.closest('td');
-                if (cell && !cell.querySelector('.reg-file-error')) {
-                    const err = document.createElement('div');
-                    err.className = 'reg-file-error';
-                    err.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> Syllabi Row ' +
-                        rowNum + ': Scanned DRF is required.';
-                    cell.appendChild(err);
-                }
-                rowHasError = true;
-            }
-
-            if (!rowHasError) hasValidSyllabi = true;
-        });
-
-        if (!hasValidSyllabi) {
-            // Only add the generic error if no specific row errors were added
-            // (specific errors are already shown above)
-        }
-    }
+    validateDrfSection(errors);
+    validateDcnSection(errors);
+    validateMasterlistSection(errors);
+    validateRetrievalSection(errors);
+    validateDistributionSection(errors);
+    validateSyllabiSection(errors);
 
     return errors;
 }
 
-function showValidationErrors(errors) {
-    errors.forEach(err => {
-        if (err.type === "table") {
-            markTableError(err.field, err.message);
-        } else if (err.type === "search") {
-            markSearchError(err.field, err.message);
-        } else if (err.type === "checklist") {
-            markChecklistError(err.message);
-        } else {
-            markFieldError(err.field, err.message);
+function sectionVisible(id) {
+    const el = document.getElementById(id);
+    return el && el.style.display !== "none";
+}
+
+function validateDrfSection(errors) {
+    if (!sectionVisible("section-1")) return;
+    requireField(errors, "drfNo", "DRF No. is required.");
+    requireField(errors, "drfDate", "DRF Date is required.");
+    requireField(errors, "drfReceiptDate", "Date Receipt is required.");
+    requireField(errors, "drfTime", "Time Receipt is required.");
+    requireField(errors, "drfTitle", "Document Title is required.");
+
+    if (drfSourceSelected.length === 0) {
+        errors.push({ field: "drfSourceUnitSearch", message: "Source Unit is required." });
+    }
+}
+
+function validateDcnSection(errors) {
+    if (!sectionVisible("section-2")) return;
+    requireField(errors, "dcnNumber", "DCN No. is required.");
+    requireField(errors, "noticeDate", "DCN Date is required.");
+    requireField(errors, "receiptDate", "DCN Receipt Date is required.");
+    requireField(errors, "receiptTime", "DCN Receipt Time is required.");
+    requireField(errors, "dcnSourceUnit", "Source Unit is required.");
+
+    let hasRevision = false;
+    document.querySelectorAll("#revisionTableBody tr").forEach(row => {
+        const title = row.querySelector('input[name="documentTitle[]"]');
+        if (title && title.value.trim()) hasRevision = true;
+    });
+    if (!hasRevision) errors.push({ field: "revisionTableBody", message: "At least one revision document is required.", type: "table" });
+}
+
+function validateMasterlistSection(errors) {
+    if (!sectionVisible("section-3")) return;
+
+    requireField(errors, "masterlistDocNo", "Document No. is required.");
+    requireField(errors, "masterlistDocTitle", "Document Title is required.");
+    requireField(errors, "deadlineOfSubmission", "Deadline of Submission is required.");
+    requireField(errors, "masterlistReceiptDate", "Document Receipt Date is required.");
+    requireField(errors, "masterlistReceiptTime", "Document Receipt Time is required.");
+    requireField(errors, "masterlistRegisteredDate", "Document Registered Date is required.");
+    requireField(errors, "masterlistRegisteredTime", "Document Registered Time is required.");
+    requireField(errors, "masterlistEffectivityDate", "Effectivity Date is required.");
+
+    const revVal = document.getElementById("masterlistRevisionNo").value.trim();
+    if (revVal === '' || (revVal !== '0' && isNaN(parseInt(revVal)))) {
+        errors.push({ field: "masterlistRevisionNo", message: "Revision No. is required." });
+    }
+
+    requireField(errors, "masterlistNoOfPages", "No. of Pages is required.");
+    requireField(errors, "masterlistInCharge", "In-charge is required.");
+    requireField(errors, "masterlistSourceUnit", "Source Unit / Originator is required.");
+    requireField(errors, "briefPurpose", "Brief Purpose is required.");
+
+    const mlTimeDisplay = document.getElementById("masterlistTimeSpentDisplay");
+    if (mlTimeDisplay.value === "Invalid") {
+        errors.push({ field: "masterlistRegisteredDate", message: "Time is invalid. Document Registered must be after Document Receipt." });
+    }
+}
+
+function validateRetrievalSection(errors) {
+    if (!sectionVisible("section-4")) return;
+
+    requireField(errors, "retrievalFormDate", "Retrieval Form Date is required.");
+    requireField(errors, "retrievalFormTime", "Retrieval Form Time is required.");
+    requireField(errors, "retrievalDate", "Retrieval Date is required.");
+    requireField(errors, "retrievalTime", "Retrieval Time is required.");
+
+    const retTimeDisplay = document.getElementById("retrievalTimeSpentDisplay");
+    if (retTimeDisplay.value === "Invalid") {
+        errors.push({ field: "retrievalDate", message: "Time is invalid. Retrieval Date must be after Form Date." });
+    }
+
+    const retOffices = document.querySelectorAll("#retrievalBody input[type='hidden']");
+    if (retOffices.length === 0) errors.push({ field: "retrievalSearch", message: "At least one retrieval office is required.", type: "search" });
+}
+
+function validateDistributionSection(errors) {
+    if (!sectionVisible("section-5")) return;
+
+    requireField(errors, "distributionFormDate", "Distribution Form Date is required.");
+    requireField(errors, "distributionFormTime", "Distribution Form Time is required.");
+    requireField(errors, "distributionDate", "Distribution Date is required.");
+    requireField(errors, "distributionTime", "Distribution Time is required.");
+    requireField(errors, "distributionRemarks", "Distribution Remarks is required.");
+
+    const distTimeDisplay = document.getElementById("distributionTimeSpentDisplay");
+    if (distTimeDisplay.value === "Invalid") {
+        errors.push({ field: "distributionDate", message: "Time is invalid. Distribution Date must be after Form Date." });
+    }
+
+    const distOffices = document.querySelectorAll("#distBody input[type='hidden']");
+    if (distOffices.length === 0) errors.push({ field: "distSearch", message: "At least one distribution office is required.", type: "search" });
+}
+
+function validateSyllabiSection(errors) {
+    const sectionSyllabi = document.getElementById("section-syllabi");
+    if (!sectionSyllabi || sectionSyllabi.style.display === "none") return;
+
+    requireField(errors, "syllabiCollege", "College is required.");
+    requireField(errors, "syllabiProgram", "Program is required.");
+    requireField(errors, "syllabiSemester", "Semester is required.");
+    requireField(errors, "syllabiSchoolYear", "School Year is required.");
+    requireField(errors, "syllabiDocNo", "Document No. is required.");
+    requireField(errors, "syllabiDocTitle", "Document Title is required.");
+    requireField(errors, "syllabiEffectivityDate", "Effectivity Date is required.");
+    requireField(errors, "syllabiDeadline", "Deadline is required.");
+
+    document.querySelectorAll("#syllabiTableBody tr").forEach((row, index) => {
+        validateSyllabiRow(row, index + 1);
+    });
+}
+
+function validateSyllabiRow(row, rowNum) {
+    const fields = [
+        { el: row.querySelector('input[name="syllabiCourseName[]"]'), test: v => v.value.trim(), label: 'Course Name is required.' },
+        { el: row.querySelector('select[name="syllabiAvailability[]"]'), test: v => v.value, label: 'Availability is required.' },
+        { el: row.querySelector('input[name="syllabiNoPages[]"]'), test: v => v.value && parseInt(v.value) > 0, label: 'No. of Pages is required and must be greater than 0.' },
+        { el: row.querySelector('select[name="syllabiDrfAvailability[]"]'), test: v => v.value, label: 'DRF Availability is required.' },
+        { el: row.querySelector('input[name="syllabiDrfNo[]"]'), test: v => v.value.trim(), label: 'DRF No. is required.' },
+        { el: row.querySelector('input[name="syllabiDrfDate[]"]'), test: v => v.value, label: 'DRF Date is required.' },
+        { el: row.querySelector('input[name="syllabiDrfReceived[]"]'), test: v => v.value, label: 'DRF Received Date is required.' },
+    ];
+
+    fields.forEach(({ el, test, label }) => {
+        if (!el || !test(el)) {
+            markFieldError(el?.id || 'syllabiTableBody', 'Syllabi Row ' + rowNum + ': ' + label);
+            if (el) el.classList.add('reg-input-error');
         }
     });
 
-    scrollToField(errors[0].field);
+    const fileInput = row.querySelector('input[name="syllabiScannedDrf[]"]');
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        const cell = fileInput?.closest('.reg-upload-cell') || fileInput?.closest('td');
+        if (cell && !cell.querySelector('.reg-file-error')) {
+            const err = document.createElement('div');
+            err.className = 'reg-file-error';
+            err.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> Syllabi Row ' + rowNum + ': Scanned DRF is required.';
+            cell.appendChild(err);
+        }
+    }
 }
 
-function markChecklistError(message) {
-    const container = document.getElementById("dynamicCheckboxes");
-    if (!container) return;
+function showValidationErrors(errors) {
+    errors.forEach(err => {
+        if (err.type === "table") markTableError(err.field, err.message);
+        else if (err.type === "search") markSearchError(err.field, err.message);
+        else if (err.type === "checklist") markChecklistError(err.message);
+        else markFieldError(err.field, err.message);
+    });
 
-    const parent = container.closest(".reg-panel-bottom") || container.parentElement;
-    if (parent && !parent.querySelector(".reg-field-error")) {
-        const err = document.createElement("div");
-        err.className = "reg-field-error";
-        err.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' + message;
-        parent.appendChild(err);
-    }
+    scrollToField(errors[0].field);
 }
 
 window.scrollToField = function (fieldId) {
@@ -1394,9 +1541,7 @@ window.scrollToField = function (fieldId) {
     field.scrollIntoView({ behavior: "smooth", block: "center" });
 
     setTimeout(() => {
-        if (field.tagName === "SELECT" || field.tagName === "INPUT") {
-            field.focus();
-        }
+        if (field.tagName === "SELECT" || field.tagName === "INPUT") field.focus();
     }, 400);
 };
 
@@ -1433,209 +1578,8 @@ document.addEventListener("change", function (e) {
 });
 
 // ══════════════════════════════════════════════
-// CONFIRM SAVE
+// CONFIRM SAVE / REVIEW
 // ══════════════════════════════════════════════
-window.confirmSave = function () {
-    const errors = validateForm();
-
-    if (errors.length > 0) {
-        showValidationErrors(errors);
-        return;
-    }
-
-    clearValidation();
-
-    const reviewContent = document.getElementById("reviewContent");
-    reviewContent.innerHTML = "";
-
-    // ── Syllabi ──
-    const ss = document.getElementById("section-syllabi");
-    if (ss && ss.style.display !== "none") {
-        document.querySelectorAll("#syllabiTableBody tr").forEach((r) => {
-            const course = r.querySelector('input[name="syllabiCourseName[]"]');
-            if (!course || !course.value.trim()) return;
-
-            const avail = r.querySelector('select[name="syllabiAvailability[]"]');
-            const pages = r.querySelector('input[name="syllabiNoPages[]"]');
-            const drfAvail = r.querySelector('select[name="syllabiDrfAvailability[]"]');
-            const drfNo = r.querySelector('input[name="syllabiDrfNo[]"]');
-            const drfDate = r.querySelector('input[name="syllabiDrfDate[]"]');
-            const drfReceived = r.querySelector('input[name="syllabiDrfReceived[]"]');
-            const fileInput = r.querySelector('input[name="syllabiScannedDrf[]"]');
-
-            const fmtDate = (val) => {
-                if (!val) return "";
-                const d = new Date(val + "T00:00:00");
-                if (isNaN(d.getTime())) return val;
-                return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
-            };
-
-            const selText = (sel) => {
-                if (!sel || sel.selectedIndex <= 0) return "";
-                return sel.options[sel.selectedIndex].text;
-            };
-
-            addReviewSection(reviewContent, "Syllabi — " + course.value.trim(), [
-                { label: "Availability", value: selText(avail) },
-                { label: "No. of Pages", value: pages?.value || "" },
-                { label: "DRF Availability", value: selText(drfAvail) },
-                { label: "DRF No.", value: drfNo?.value?.trim() || "" },
-                { label: "DRF Date", value: fmtDate(drfDate?.value) },
-                { label: "DRF Received", value: fmtDate(drfReceived?.value) },
-                { label: "Scanned DRF", value: fileInput?.files?.length > 0 ? fileInput.files[0].name : null, isFile: true },
-            ]);
-        });
-    }
-
-    // ── DRF ──
-    const s1 = document.getElementById("section-1");
-    if (s1 && s1.style.display !== "none") {
-        const f = document.getElementById("drfFile").files;
-        addReviewSection(reviewContent, "Document Request Form", [
-            { label: "DRF No.", value: getInputVal("drfNo") },
-            { label: "DRF Date", value: formatInputDate("drfDate") },
-            { label: "Receipt", value: formatInputDate("drfReceiptDate") + " " + getInputVal("drfTime") },
-            { label: "Title", value: getInputVal("drfTitle") },
-            { label: "Source Unit", value: getSelectText("drfSourceUnit") },
-            { label: "File", value: f.length > 0 ? f[0].name : null, isFile: true },
-        ]);
-    }
-
-    // ── DCN ──
-    const s2 = document.getElementById("section-2");
-    if (s2 && s2.style.display !== "none") {
-        const f = document.getElementById("dcnFile").files;
-        addReviewSection(reviewContent, "Document Change Notice", [
-            { label: "DCN No.", value: getInputVal("dcnNumber") },
-            { label: "DCN Date", value: formatInputDate("noticeDate") },
-            { label: "Receipt", value: formatInputDate("receiptDate") + " " + getInputVal("receiptTime") },
-            { label: "Source Unit", value: getSelectText("dcnSourceUnit") },
-            { label: "File", value: f.length > 0 ? f[0].name : null, isFile: true },
-        ]);
-        const rev = [];
-        document.querySelectorAll("#revisionTableBody tr").forEach((r, i) => {
-            const t = r.querySelector('input[name="documentTitle[]"]');
-            if (t && t.value.trim()) rev.push("Row " + (i + 1) + ": " + t.value);
-        });
-        if (rev.length) addReviewList(reviewContent, "Revisions", rev);
-    }
-
-    // ── Masterlist ──
-    const s3 = document.getElementById("section-3");
-    if (s3 && s3.style.display !== "none") {
-        const f = document.getElementById("uploadScannedCopy").files;
-        addReviewSection(reviewContent, "Masterlist Registration", [
-            { label: "Doc No.", value: getInputVal("masterlistDocNo") },
-            { label: "Title", value: getInputVal("masterlistDocTitle") },
-            { label: "Deadline", value: formatInputDate("deadlineOfSubmission") },
-            { label: "Receipt", value: formatInputDate("masterlistReceiptDate") + " " + getInputVal("masterlistReceiptTime") },
-            { label: "Registered", value: formatInputDate("masterlistRegisteredDate") + " " + getInputVal("masterlistRegisteredTime") },
-            { label: "Time Spent", value: document.getElementById("masterlistTimeSpentDisplay").value || null },
-            { label: "Effectivity", value: formatInputDate("masterlistEffectivityDate") },
-            { label: "Revision No.", value: getInputVal("masterlistRevisionNo") },
-            { label: "Pages", value: getInputVal("masterlistNoOfPages") },
-            { label: "In-charge", value: getInputVal("masterlistInCharge") },
-            { label: "Source Unit", value: getInputVal("masterlistSourceUnit") || null },
-            { label: "Purpose", value: getInputVal("briefPurpose") },
-            { label: "Related Docs", value: getInputVal("relatedDocuments") },
-            { label: "File", value: f.length > 0 ? f[0].name : null, isFile: true },
-        ]);
-    }
-
-    // ── Approval ──
-    const sa = document.getElementById("section-approval");
-    if (sa && sa.style.display !== "none") {
-        addReviewSection(reviewContent, "Approval Details", [
-            { label: "Body", value: getSelectText("approvalBody") },
-            { label: "Date", value: formatInputDate("approvalDate") },
-            { label: "No.", value: getInputVal("approvalNo") },
-        ]);
-    }
-
-    // ── Retrieval ──
-    const s4 = document.getElementById("section-4");
-    if (s4 && s4.style.display !== "none") {
-        const f = document.getElementById("scannedRet").files;
-        addReviewSection(reviewContent, "Document Retrieval", [
-            { label: "Form Date", value: formatInputDate("retrievalFormDate") + " " + getInputVal("retrievalFormTime") },
-            { label: "Retrieval Date", value: formatInputDate("retrievalDate") + " " + getInputVal("retrievalTime") },
-            { label: "Time Spent", value: document.getElementById("retrievalTimeSpentDisplay").value || null },
-            { label: "Remarks", value: getInputVal("retrievalRemarks") },
-            { label: "File", value: f.length > 0 ? f[0].name : null, isFile: true },
-        ]);
-        const off = getOfficeList("retrievalBody");
-        if (off.length) addReviewList(reviewContent, "Receiving Offices (Retrieval)", off);
-    }
-
-    // ── Distribution ──
-    const s5 = document.getElementById("section-5");
-    if (s5 && s5.style.display !== "none") {
-        const f = document.getElementById("scanneddist").files;
-        addReviewSection(reviewContent, "Document Distribution", [
-            { label: "Form Date", value: formatInputDate("distributionFormDate") + " " + getInputVal("distributionFormTime") },
-            { label: "Distribution Date", value: formatInputDate("distributionDate") + " " + getInputVal("distributionTime") },
-            { label: "Time Spent", value: document.getElementById("distributionTimeSpentDisplay").value || null },
-            { label: "Remarks", value: getInputVal("distributionRemarks") },
-            { label: "File", value: f.length > 0 ? f[0].name : null, isFile: true },
-        ]);
-        const off = getOfficeList("distBody");
-        if (off.length) addReviewList(reviewContent, "Receiving Offices (Distribution)", off);
-    }
-
-    if (!reviewContent.children.length) {
-        reviewContent.innerHTML = '<div class="review-empty">No data to review.</div>';
-    }
-
-    document.getElementById("confirmModal").style.display = "flex";
-};
-
-window.closeConfirmModal = function () {
-    document.getElementById("confirmModal").style.display = "none";
-};
-
-window.submitForm = function () {
-    document.getElementById("masterForm").submit();
-};
-
-window.handleGenerateReport = function () {
-    alert("Report generation coming soon.");
-};
-
-function addReviewSection(container, title, fields) {
-    const visibleFields = fields.filter(f => f.value && f.value.trim() !== "" && f.value !== "N/A");
-    if (visibleFields.length === 0) return;
-
-    const section = document.createElement("div");
-    section.className = "review-section";
-
-    let html = '<div class="review-section-title">' + title + '</div>';
-    visibleFields.forEach(f => {
-        html += '<div class="review-row">';
-        html += '<span class="review-label">' + f.label + '</span>';
-        if (f.isFile) {
-            html += '<span class="review-value review-file"><i class="fa-solid fa-paperclip"></i> ' + f.value + '</span>';
-        } else {
-            html += '<span class="review-value">' + f.value + '</span>';
-        }
-        html += '</div>';
-    });
-
-    section.innerHTML = html;
-    container.appendChild(section);
-}
-
-function addReviewList(container, title, items) {
-    const section = document.createElement("div");
-    section.className = "review-section";
-
-    let html = '<div class="review-section-title">' + title + '</div><ul class="review-list">';
-    items.forEach(item => { html += '<li>' + item + '</li>'; });
-    html += '</ul>';
-
-    section.innerHTML = html;
-    container.appendChild(section);
-}
-
 function getInputVal(id) {
     const el = document.getElementById(id);
     return el ? el.value.trim() : "";
@@ -1655,6 +1599,17 @@ function formatInputDate(id) {
     return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
+function fmtDateValue(val) {
+    if (!val) return "";
+    const d = new Date(val + "T00:00:00");
+    return isNaN(d.getTime()) ? val : d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+}
+
+function selectText(sel) {
+    if (!sel || sel.selectedIndex <= 0) return "";
+    return sel.options[sel.selectedIndex].text;
+}
+
 function getOfficeList(tbodyId) {
     const tbody = document.getElementById(tbodyId);
     if (!tbody) return [];
@@ -1666,6 +1621,231 @@ function getOfficeList(tbodyId) {
     });
     return offices;
 }
+
+function addReviewSection(container, title, fields) {
+    const visibleFields = fields.filter(f => f.value && f.value.trim() !== "" && f.value !== "N/A");
+    if (visibleFields.length === 0) return;
+
+    const section = document.createElement("div");
+    section.className = "review-section";
+
+    let html = '<div class="review-section-title">' + title + '</div>';
+    visibleFields.forEach(f => {
+        html += '<div class="review-row">';
+        html += '<span class="review-label">' + f.label + '</span>';
+        html += f.isFile
+            ? '<span class="review-value review-file"><i class="fa-solid fa-paperclip"></i> ' + f.value + '</span>'
+            : '<span class="review-value">' + f.value + '</span>';
+        html += '</div>';
+    });
+
+    section.innerHTML = html;
+    container.appendChild(section);
+}
+
+function addReviewList(container, title, items) {
+    const section = document.createElement("div");
+    section.className = "review-section";
+
+    let html = '<div class="review-section-title">' + title + '</div><ul class="review-list">';
+    items.forEach(item => { html += '<li>' + item + '</li>'; });
+    html += '</ul>';
+
+    section.innerHTML = html;
+    container.appendChild(section);
+}
+
+window.confirmSave = function () {
+    if (docNoDuplicate) {
+        scrollToField('masterlistDocNo');
+        document.getElementById('masterlistDocNo').focus();
+        return;
+    }
+    const errors = validateForm();
+
+    if (errors.length > 0) {
+        showValidationErrors(errors);
+        return;
+    }
+
+    clearValidation();
+
+    const reviewContent = document.getElementById("reviewContent");
+    reviewContent.innerHTML = "";
+
+    buildSyllabiInfoReview(reviewContent);
+    buildSyllabiRowsReview(reviewContent);
+    buildDrfReview(reviewContent);
+    buildDcnReview(reviewContent);
+    buildMasterlistReview(reviewContent);
+    buildApprovalReview(reviewContent);
+    buildRetrievalReview(reviewContent);
+    buildDistributionReview(reviewContent);
+
+    if (!reviewContent.children.length) {
+        reviewContent.innerHTML = '<div class="review-empty">No data to review.</div>';
+    }
+
+    document.getElementById("confirmModal").style.display = "flex";
+};
+
+function buildSyllabiInfoReview(reviewContent) {
+    const ss = document.getElementById("section-syllabi");
+    if (!ss || ss.style.display === "none") return;
+
+    addReviewSection(reviewContent, "Syllabi — Document Info", [
+        { label: "College", value: getSelectText("syllabiCollege") },
+        { label: "Program", value: getSelectText("syllabiProgram") },
+        { label: "Semester", value: getSelectText("syllabiSemester") },
+        { label: "School Year", value: getSelectText("syllabiSchoolYear") },
+        { label: "Document No.", value: getInputVal("syllabiDocNo") },
+        { label: "Document Title", value: getInputVal("syllabiDocTitle") },
+        { label: "Effectivity Date", value: formatInputDate("syllabiEffectivityDate") },
+        { label: "Deadline", value: formatInputDate("syllabiDeadline") },
+    ]);
+}
+
+function buildSyllabiRowsReview(reviewContent) {
+    const ss = document.getElementById("section-syllabi");
+    if (!ss || ss.style.display === "none") return;
+
+    document.querySelectorAll("#syllabiTableBody tr").forEach((r) => {
+        const course = r.querySelector('input[name="syllabiCourseName[]"]');
+        if (!course || !course.value.trim()) return;
+
+        const avail = r.querySelector('select[name="syllabiAvailability[]"]');
+        const pages = r.querySelector('input[name="syllabiNoPages[]"]');
+        const drfAvail = r.querySelector('select[name="syllabiDrfAvailability[]"]');
+        const drfNo = r.querySelector('input[name="syllabiDrfNo[]"]');
+        const drfDate = r.querySelector('input[name="syllabiDrfDate[]"]');
+        const drfReceived = r.querySelector('input[name="syllabiDrfReceived[]"]');
+        const fileInput = r.querySelector('input[name="syllabiScannedDrf[]"]');
+
+        addReviewSection(reviewContent, "Syllabi — " + course.value.trim(), [
+            { label: "Availability", value: selectText(avail) },
+            { label: "No. of Pages", value: pages?.value || "" },
+            { label: "DRF Availability", value: selectText(drfAvail) },
+            { label: "DRF No.", value: drfNo?.value?.trim() || "" },
+            { label: "DRF Date", value: fmtDateValue(drfDate?.value) },
+            { label: "DRF Received", value: fmtDateValue(drfReceived?.value) },
+            { label: "Scanned DRF", value: fileInput?.files?.length > 0 ? fileInput.files[0].name : null, isFile: true },
+        ]);
+    });
+}
+
+function buildDrfReview(reviewContent) {
+    const s1 = document.getElementById("section-1");
+    if (!s1 || s1.style.display === "none") return;
+
+    const f = document.getElementById("drfFile").files;
+    addReviewSection(reviewContent, "Document Request Form", [
+        { label: "DRF No.", value: getInputVal("drfNo") },
+        { label: "DRF Date", value: formatInputDate("drfDate") },
+        { label: "Receipt", value: formatInputDate("drfReceiptDate") + " " + getInputVal("drfTime") },
+        { label: "Title", value: getInputVal("drfTitle") },
+        { label: "Source Unit", value: drfSourceSelected.length > 0 ? drfSourceSelected.map(o => o.office_name).join(', ') : null },
+        { label: "File", value: f.length > 0 ? f[0].name : null, isFile: true },
+    ]);
+}
+
+function buildDcnReview(reviewContent) {
+    const s2 = document.getElementById("section-2");
+    if (!s2 || s2.style.display === "none") return;
+
+    const f = document.getElementById("dcnFile").files;
+    addReviewSection(reviewContent, "Document Change Notice", [
+        { label: "DCN No.", value: getInputVal("dcnNumber") },
+        { label: "DCN Date", value: formatInputDate("noticeDate") },
+        { label: "Receipt", value: formatInputDate("receiptDate") + " " + getInputVal("receiptTime") },
+        { label: "Source Unit", value: getSelectText("dcnSourceUnit") },
+        { label: "File", value: f.length > 0 ? f[0].name : null, isFile: true },
+    ]);
+
+    const rev = [];
+    document.querySelectorAll("#revisionTableBody tr").forEach((r, i) => {
+        const t = r.querySelector('input[name="documentTitle[]"]');
+        if (t && t.value.trim()) rev.push("Row " + (i + 1) + ": " + t.value);
+    });
+    if (rev.length) addReviewList(reviewContent, "Revisions", rev);
+}
+
+function buildMasterlistReview(reviewContent) {
+    const s3 = document.getElementById("section-3");
+    if (!s3 || s3.style.display === "none") return;
+
+    const f = document.getElementById("uploadScannedCopy").files;
+    addReviewSection(reviewContent, "Masterlist Registration", [
+        { label: "Doc No.", value: getInputVal("masterlistDocNo") },
+        { label: "Title", value: getInputVal("masterlistDocTitle") },
+        { label: "Deadline", value: formatInputDate("deadlineOfSubmission") },
+        { label: "Receipt", value: formatInputDate("masterlistReceiptDate") + " " + getInputVal("masterlistReceiptTime") },
+        { label: "Registered", value: formatInputDate("masterlistRegisteredDate") + " " + getInputVal("masterlistRegisteredTime") },
+        { label: "Time Spent", value: document.getElementById("masterlistTimeSpentDisplay").value || null },
+        { label: "Effectivity", value: formatInputDate("masterlistEffectivityDate") },
+        { label: "Revision No.", value: getInputVal("masterlistRevisionNo") },
+        { label: "Pages", value: getInputVal("masterlistNoOfPages") },
+        { label: "In-charge", value: getInputVal("masterlistInCharge") },
+        { label: "Source Unit", value: getInputVal("masterlistSourceUnit") || null },
+        { label: "Purpose", value: getInputVal("briefPurpose") },
+        { label: "Related Docs", value: relatedDocsSelected.length > 0 ? relatedDocsSelected.map(d => d.doc_title).join(', ') : null },
+        { label: "File", value: f.length > 0 ? f[0].name : null, isFile: true },
+    ]);
+}
+
+function buildApprovalReview(reviewContent) {
+    const sa = document.getElementById("section-approval");
+    if (!sa || sa.style.display === "none") return;
+
+    addReviewSection(reviewContent, "Approval Details", [
+        { label: "Body", value: getSelectText("approvalBody") },
+        { label: "Date", value: formatInputDate("approvalDate") },
+        { label: "No.", value: getInputVal("approvalNo") },
+    ]);
+}
+
+function buildRetrievalReview(reviewContent) {
+    const s4 = document.getElementById("section-4");
+    if (!s4 || s4.style.display === "none") return;
+
+    const f = document.getElementById("scannedRet").files;
+    addReviewSection(reviewContent, "Document Retrieval", [
+        { label: "Form Date", value: formatInputDate("retrievalFormDate") + " " + getInputVal("retrievalFormTime") },
+        { label: "Retrieval Date", value: formatInputDate("retrievalDate") + " " + getInputVal("retrievalTime") },
+        { label: "Time Spent", value: document.getElementById("retrievalTimeSpentDisplay").value || null },
+        { label: "Remarks", value: getInputVal("retrievalRemarks") },
+        { label: "File", value: f.length > 0 ? f[0].name : null, isFile: true },
+    ]);
+    const off = getOfficeList("retrievalBody");
+    if (off.length) addReviewList(reviewContent, "Receiving Offices (Retrieval)", off);
+}
+
+function buildDistributionReview(reviewContent) {
+    const s5 = document.getElementById("section-5");
+    if (!s5 || s5.style.display === "none") return;
+
+    const f = document.getElementById("scanneddist").files;
+    addReviewSection(reviewContent, "Document Distribution", [
+        { label: "Form Date", value: formatInputDate("distributionFormDate") + " " + getInputVal("distributionFormTime") },
+        { label: "Distribution Date", value: formatInputDate("distributionDate") + " " + getInputVal("distributionTime") },
+        { label: "Time Spent", value: document.getElementById("distributionTimeSpentDisplay").value || null },
+        { label: "Remarks", value: getInputVal("distributionRemarks") },
+        { label: "File", value: f.length > 0 ? f[0].name : null, isFile: true },
+    ]);
+    const off = getOfficeList("distBody");
+    if (off.length) addReviewList(reviewContent, "Receiving Offices (Distribution)", off);
+}
+
+window.closeConfirmModal = function () {
+    document.getElementById("confirmModal").style.display = "none";
+};
+
+window.submitForm = function () {
+    document.getElementById("masterForm").submit();
+};
+
+window.handleGenerateReport = function () {
+    alert("Report generation coming soon.");
+};
 
 // ══════════════════════════════════════════════
 // APPROVAL
@@ -1688,7 +1868,6 @@ function disableApproval() {
     if (approval) approval.style.display = "none";
 }
 
-
 // ══════════════════════════════════════════════
 // REVISION TABLE
 // ══════════════════════════════════════════════
@@ -1706,70 +1885,294 @@ window.addRevisionRow = function () {
         <td><button type="button" class="reg-row-del" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash-can"></i></button></td>
     `;
     tbody.appendChild(tr);
-    const fileInput = tr.querySelector('input[type="file"]');
-    fileInput.dataset.bound = "true";
-    fileInput.addEventListener('change', function () { validateTableFile(this); });
+    bindTableFileInput(tr.querySelector('input[type="file"]'));
 };
 
+// ══════════════════════════════════════════════
+// SYLLABI CONTEXT DROPDOWNS
+// ══════════════════════════════════════════════
+async function loadSyllabiContextDropdowns() {
+    try {
+        const [colleges, semesters, schoolYears] = await Promise.all([
+            fetch("/api/colleges").then(r => r.json()),
+            fetch("/api/semesters").then(r => r.json()),
+            fetch("/api/school-years").then(r => r.json()),
+        ]);
+
+        const collegeSel = document.getElementById("syllabiCollege");
+        const semSel = document.getElementById("syllabiSemester");
+        const sySel = document.getElementById("syllabiSchoolYear");
+
+        if (collegeSel && collegeSel.options.length <= 1) {
+            colleges.forEach(c => collegeSel.add(new Option(c.college_name, c.college_id)));
+        }
+        if (semSel && semSel.options.length <= 1) {
+            semesters.forEach(s => semSel.add(new Option(s.semester_name, s.semester_id)));
+        }
+        if (sySel && sySel.options.length <= 1) {
+            schoolYears.forEach(y => sySel.add(new Option(y.school_year, y.school_year_id)));
+        }
+    } catch (err) {
+        console.error("Failed to load syllabi context dropdowns:", err);
+    }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    const collegeSel = document.getElementById("syllabiCollege");
+    const programSel = document.getElementById("syllabiProgram");
+    const semSel = document.getElementById("syllabiSemester");
+    const sySel = document.getElementById("syllabiSchoolYear");
+
+    if (collegeSel) {
+        collegeSel.addEventListener("change", async function () {
+            programSel.innerHTML = '<option value="" selected disabled>Select program</option>';
+            programSel.disabled = true;
+            semSel.value = "";
+            semSel.disabled = true;
+            sySel.value = "";
+            sySel.disabled = true;
+
+            if (!this.value) return;
+
+            try {
+                const programs = await fetch("/api/programs/" + this.value).then(r => r.json());
+                programs.forEach(p => programSel.add(new Option(p.program_name, p.program_id)));
+                programSel.disabled = false;
+            } catch (err) {
+                console.error("Failed to load programs:", err);
+            }
+        });
+    }
+
+    if (programSel) {
+        programSel.addEventListener("change", function () {
+            semSel.value = "";
+            semSel.disabled = !this.value;
+            sySel.value = "";
+            sySel.disabled = true;
+        });
+    }
+
+    if (semSel) {
+        semSel.addEventListener("change", function () {
+            sySel.value = "";
+            sySel.disabled = !this.value;
+        });
+    }
+});
 
 // ══════════════════════════════════════════════
-// SYLLABI TABLE
+// SYLLABI WIZARD — STEP NAVIGATION
 // ══════════════════════════════════════════════
-window.addSyllabiRow = function () {
-    const tbody = document.getElementById("syllabiTableBody");
-    if (!tbody) return;
+function setSyllabiStep(step) {
+    syllabiCurrentStep = step;
+    const table = document.getElementById("syllabiWizardTable");
+    if (table) table.dataset.activeStep = step;
+
+    document.querySelectorAll("#syllabiStepIndicator .reg-wizard-step").forEach(el => {
+        const s = parseInt(el.dataset.step);
+        el.classList.toggle("is-active", s === step);
+        el.classList.toggle("is-done", s < step);
+    });
+
+    const backBtn = document.getElementById("syllabiBackBtn");
+    const nextBtn = document.getElementById("syllabiNextBtn");
+    if (backBtn) backBtn.style.display = step === 1 ? "none" : "";
+    if (nextBtn) {
+        nextBtn.innerHTML = step === 3
+            ? '<i class="fa-solid fa-check"></i> Review &amp; Confirm'
+            : 'Next <i class="fa-solid fa-arrow-right"></i>';
+    }
+}
+
+window.syllabiStepNext = function () {
+    if (syllabiCurrentStep < 3) {
+        setSyllabiStep(syllabiCurrentStep + 1);
+    } else {
+        confirmSave(); // opens the shared review modal
+    }
+};
+
+window.syllabiStepBack = function () {
+    if (syllabiCurrentStep > 1) setSyllabiStep(syllabiCurrentStep - 1);
+};
+
+// ══════════════════════════════════════════════
+// SYLLABI ROW BUILDER
+// ══════════════════════════════════════════════
+function buildSyllabiRow({ groupId, copyNo = 1, courseName = "", availability = "", originator = "", noPages = "", copies = 1 } = {}) {
     const tr = document.createElement("tr");
     tr.style.animation = "fadeSlideUp 0.25s ease";
+    tr.dataset.group = groupId;
+    tr.dataset.copyNo = copyNo;
+
     tr.innerHTML = `
-        <td><input type="text" name="syllabiCourseName[]" placeholder="Enter course name"></td>
-        <td>
+        <td class="col-pinned"><input type="text" name="syllabiCourseName[]" placeholder="Enter course name" value="${courseName}"></td>
+
+        <td class="col-step1">
             <select name="syllabiAvailability[]">
-                <option value="" disabled selected>Select</option>
-                <option value="available">Available</option>
-                <option value="not_available">Not Available</option>
+                <option value="" disabled ${!availability ? "selected" : ""}>Select</option>
+                <option value="available" ${availability === "available" ? "selected" : ""}>Available</option>
+                <option value="not_available" ${availability === "not_available" ? "selected" : ""}>Not Available</option>
             </select>
         </td>
-        <td><input type="number" name="syllabiNoPages[]" min="0" placeholder="0"></td>
-        <td>
+        <td class="col-step1"><input type="number" name="syllabiCopies[]" min="1" value="${copies}" oninput="handleCopiesChange(this)"></td>
+        <td class="col-step1"><input type="text" name="syllabiOriginator[]" placeholder="Originator" value="${originator}"></td>
+        <td class="col-step1"><input type="number" name="syllabiNoPages[]" min="0" placeholder="0" value="${noPages}"></td>
+        <td class="col-step1"><input type="date" name="syllabiDateReceived[]" oninput="calcSyllabiRowTimeSpent(this.closest('tr'))"></td>
+        <td class="col-step1"><input type="time" name="syllabiTimeReceived[]" oninput="calcSyllabiRowTimeSpent(this.closest('tr'))"></td>
+
+        <td class="col-step2">
             <select name="syllabiDrfAvailability[]">
                 <option value="" disabled selected>Select</option>
                 <option value="available">Available</option>
                 <option value="not_available">Not Available</option>
             </select>
         </td>
-        <td><input type="text" name="syllabiDrfNo[]" placeholder="DRF-001"></td>
-        <td><input type="date" name="syllabiDrfDate[]"></td>
-        <td><input type="date" name="syllabiDrfReceived[]"></td>
-        <td>
+        <td class="col-step2"><input type="text" name="syllabiDrfNo[]" placeholder="DRF-001"></td>
+        <td class="col-step2"><input type="date" name="syllabiDrfDate[]"></td>
+        <td class="col-step2"><input type="date" name="syllabiDrfReceived[]"></td>
+        <td class="col-step2">
             <label class="reg-upload-cell">
                 <input type="file" name="syllabiScannedDrf[]" accept=".pdf,.docx">
                 <i class="fa-solid fa-cloud-arrow-up"></i>
                 <span>No file chosen</span>
             </label>
         </td>
-        <td><button type="button" class="reg-row-del" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash-can"></i></button></td>
+
+        <td class="col-step3" style="text-align:center;">
+            <input type="checkbox" name="syllabiIsRegistered[]" value="1" onchange="toggleSyllabiRegFields(this)">
+        </td>
+        <td class="col-step3"><input type="date" name="syllabiRegDate[]" disabled oninput="calcSyllabiRowTimeSpent(this.closest('tr'))"></td>
+        <td class="col-step3"><input type="time" name="syllabiRegTime[]" disabled oninput="calcSyllabiRowTimeSpent(this.closest('tr'))"></td>
+        <td class="col-step3">
+            <input type="text" class="syllabi-time-spent-display" readonly placeholder="--" style="background:#f8fafc;text-align:center;">
+            <input type="hidden" name="syllabiTimeSpent[]">
+        </td>
+
+        <td><button type="button" class="reg-row-del" onclick="removeSyllabiRow(this)"><i class="fa-solid fa-trash-can"></i></button></td>
     `;
-    tbody.appendChild(tr);
 
     const fileInput = tr.querySelector('.reg-upload-cell input[type="file"]');
     const cell = tr.querySelector('.reg-upload-cell');
     fileInput.dataset.bound = "true";
     fileInput.addEventListener('change', function () { processUploadCellFile(this, cell); });
+
+    return tr;
+}
+
+window.addSyllabiRow = function () {
+    const tbody = document.getElementById("syllabiTableBody");
+    if (!tbody) return;
+    syllabiGroupCounter++;
+    tbody.appendChild(buildSyllabiRow({ groupId: "g" + syllabiGroupCounter, copyNo: 1, copies: 1 }));
 };
 
+window.removeSyllabiRow = function (btn) {
+    const row = btn.closest("tr");
+    const group = row.dataset.group;
+    row.remove();
+
+    const remaining = [...document.querySelectorAll(`#syllabiTableBody tr[data-group="${group}"]`)];
+    remaining.forEach((r, idx) => {
+        r.dataset.copyNo = idx + 1;
+        const copiesInput = r.querySelector('[name="syllabiCopies[]"]');
+        if (copiesInput) copiesInput.value = remaining.length;
+    });
+};
 
 // ══════════════════════════════════════════════
-// OFFICE SEARCH
+// COPY SPLITTING
+// ══════════════════════════════════════════════
+window.handleCopiesChange = function (input) {
+    const row = input.closest("tr");
+    const group = row.dataset.group;
+    const desired = Math.max(1, parseInt(input.value) || 1);
+
+    let groupRows = [...document.querySelectorAll(`#syllabiTableBody tr[data-group="${group}"]`)]
+        .sort((a, b) => parseInt(a.dataset.copyNo) - parseInt(b.dataset.copyNo));
+
+    if (desired > groupRows.length) {
+        const template = groupRows[0];
+        const courseName = template.querySelector('[name="syllabiCourseName[]"]').value;
+        const availability = template.querySelector('[name="syllabiAvailability[]"]').value;
+        const originator = template.querySelector('[name="syllabiOriginator[]"]').value;
+        const noPages = template.querySelector('[name="syllabiNoPages[]"]').value;
+
+        let lastRow = groupRows[groupRows.length - 1];
+        for (let i = groupRows.length + 1; i <= desired; i++) {
+            const newRow = buildSyllabiRow({ groupId: group, copyNo: i, courseName, availability, originator, noPages, copies: desired });
+            lastRow.after(newRow);
+            lastRow = newRow;
+        }
+    } else if (desired < groupRows.length) {
+        for (let i = groupRows.length; i > desired; i--) {
+            groupRows[i - 1].remove();
+        }
+    }
+
+    document.querySelectorAll(`#syllabiTableBody tr[data-group="${group}"] [name="syllabiCopies[]"]`)
+        .forEach(el => { el.value = desired; });
+};
+
+// ══════════════════════════════════════════════
+// REGISTRATION STEP — checkbox + time spent
+// ══════════════════════════════════════════════
+window.toggleSyllabiRegFields = function (checkbox) {
+    const row = checkbox.closest("tr");
+    const regDate = row.querySelector('[name="syllabiRegDate[]"]');
+    const regTime = row.querySelector('[name="syllabiRegTime[]"]');
+
+    regDate.disabled = !checkbox.checked;
+    regTime.disabled = !checkbox.checked;
+    if (!checkbox.checked) {
+        regDate.value = "";
+        regTime.value = "";
+        calcSyllabiRowTimeSpent(row);
+    }
+};
+
+window.calcSyllabiRowTimeSpent = function (row) {
+    const dR = row.querySelector('[name="syllabiDateReceived[]"]')?.value;
+    const tR = row.querySelector('[name="syllabiTimeReceived[]"]')?.value;
+    const dG = row.querySelector('[name="syllabiRegDate[]"]')?.value;
+    const tG = row.querySelector('[name="syllabiRegTime[]"]')?.value;
+    const display = row.querySelector('.syllabi-time-spent-display');
+    const hidden = row.querySelector('[name="syllabiTimeSpent[]"]');
+    if (!display || !hidden) return;
+
+    const result = computeDuration(dR, tR, dG, tG);
+
+    if (!result) {
+        display.value = "--";
+        display.style.color = "";
+        hidden.value = "";
+        return;
+    }
+    if (result.invalid) {
+        display.value = "Invalid";
+        display.style.color = "var(--reg-error)";
+        hidden.value = "";
+        return;
+    }
+
+    display.style.color = "";
+    display.value = result.totalMinutes + " min";
+    hidden.value = String(result.totalMinutes);
+};
+
+// ══════════════════════════════════════════════
+// OFFICE SEARCH (Retrieval / Distribution)
 // ══════════════════════════════════════════════
 window.handleSearch = function (input, resultsId, bodyId, totalId) {
-    const query = input.value.trim().toLowerCase();
     const dropdown = document.getElementById(resultsId);
     if (!dropdown) return;
 
-    if (query.length < 1) { dropdown.style.display = "none"; return; }
-
-    const filtered = allOffices.filter(o => o.office_name.toLowerCase().includes(query));
-    if (filtered.length === 0) { dropdown.style.display = "none"; return; }
+    const filtered = filterOffices(input.value);
+    if (input.value.trim().length < 1 || filtered.length === 0) {
+        dropdown.style.display = "none";
+        return;
+    }
 
     dropdown.innerHTML = filtered
         .map(o => '<div onclick="addOffice(' + o.office_id + ", '" + o.office_name.replace(/'/g, "\\'") + "', '" + bodyId + "', '" + totalId + "', '" + resultsId + "')\">" + o.office_name + '</div>')
@@ -1836,19 +2239,10 @@ window.removeOffice = function (btn, totalId, bodyId) {
 
     setTimeout(() => {
         tr.remove();
-        updateTotal(totalId, bodyId);   // ← add bodyId here
+        updateTotal(totalId, bodyId);
         const tbody = document.getElementById(bodyId);
         if (tbody && tbody.querySelectorAll("tr").length === 0) {
-            tbody.innerHTML = `
-                <tr class="reg-empty-row">
-                    <td colspan="3">
-                        <div class="reg-empty-state">
-                            <i class="fa-solid fa-building-circle-xmark"></i>
-                            <span>No offices added yet</span>
-                        </div>
-                    </td>
-                </tr>
-            `;
+            tbody.innerHTML = emptyOfficeRowHTML();
         }
     }, 200);
 };
@@ -1876,10 +2270,33 @@ window.updateTotal = function (totalId, bodyId) {
     totalEl.textContent = sum;
 };
 
-
 // ══════════════════════════════════════════════
 // TOAST AUTO DISMISS
 // ══════════════════════════════════════════════
+
+function showToast(type, message) {
+    // Remove existing toasts
+    document.querySelectorAll('.reg-toast').forEach(t => t.remove());
+
+    const icon = type === 'success' ? 'fa-circle-check' : 'fa-circle-exclamation';
+    const toast = document.createElement('div');
+    toast.className = `reg-toast reg-toast-${type}`;
+    toast.id = type + 'Toast';
+    toast.innerHTML = `
+        <div class="reg-toast-icon"><i class="fa-solid ${icon}"></i></div>
+        <div class="reg-toast-content">
+            <span class="reg-toast-title">${type === 'success' ? 'Success' : 'Error'}</span>
+            <span class="reg-toast-message">${message}</span>
+        </div>
+        <button type="button" class="reg-toast-close" onclick="closeToast()">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+        <div class="reg-toast-progress"></div>
+    `;
+    document.querySelector('.reg-container').prepend(toast);
+    setTimeout(() => closeToast(), 5000);
+}
+
 (function () {
     const toast = document.getElementById("successToast") || document.getElementById("errorToast");
     if (!toast) return;
@@ -1892,4 +2309,3 @@ window.closeToast = function () {
     toast.style.animation = "toastSlideOut 0.3s ease forwards";
     setTimeout(() => { toast.remove(); }, 300);
 };
-

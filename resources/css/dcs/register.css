@@ -503,6 +503,7 @@ body {
 
 /* Document Title: columns 1-2, row 2 */
 .reg-ml-title-span {
+    margin-top: 0;
     grid-column: 1 / 3;
 }
 
@@ -512,6 +513,200 @@ body {
     grid-template-columns: 0.34fr 0.33fr 0.33fr 0.54fr 0.5fr;
     gap: 16px;
     overflow: visible;
+}
+
+/* ══════════════════════════════════════════════
+   DRF SOURCE UNIT — FULL OVERLAY BOX
+   ══════════════════════════════════════════════ */
+
+#drfSourceOverlay {
+    position: fixed;
+    top: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 520px;
+    max-width: 90vw;
+    background: var(--reg-surface);
+    border: 1px solid var(--reg-border);
+    border-radius: var(--reg-radius);
+    box-shadow: 0 16px 48px rgba(15, 23, 42, 0.2);
+    z-index: 9000;
+    animation: overlaySlideIn 0.25s ease;
+    overflow: hidden;
+}
+
+@keyframes overlaySlideIn {
+    from { opacity: 0; transform: translateX(-50%) translateY(-12px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* Header */
+.drf-overlay-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    background: var(--reg-accent);
+    color: #fff;
+}
+
+.drf-overlay-header span {
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.drf-overlay-header button {
+    background: rgba(255,255,255,0.15);
+    border: none;
+    color: #fff;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    transition: background 0.15s;
+}
+
+.drf-overlay-header button:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+/* Search inside overlay */
+.drf-overlay-search {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--reg-border);
+}
+
+.drf-overlay-search .reg-search {
+    width: 100%;
+}
+
+/* Suggestions list */
+.drf-overlay-suggestions {
+    max-height: 180px;
+    overflow-y: auto;
+    border-bottom: 1px solid var(--reg-border);
+    display: none;
+}
+
+.drf-overlay-suggestions div {
+    padding: 10px 18px;
+    font-size: 0.82rem;
+    color: var(--reg-text);
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.drf-overlay-suggestions div:hover {
+    background: var(--reg-accent-subtle);
+}
+
+.drf-overlay-suggestions .drf-overlay-noresult {
+    color: var(--reg-text-subtle);
+    font-style: italic;
+    cursor: default;
+    text-align: center;
+    padding: 16px;
+}
+
+.drf-overlay-suggestions .drf-overlay-noresult:hover {
+    background: transparent;
+}
+
+/* Selected section */
+.drf-overlay-selected {
+    padding: 14px 18px;
+    background: var(--reg-accent-subtle);
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.drf-overlay-selected-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--reg-accent);
+    margin-bottom: 10px;
+}
+
+.drf-overlay-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.drf-overlay-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 6px 6px 12px;
+    background: var(--reg-surface);
+    border: 1px solid rgba(0, 0, 128, 0.15);
+    border-radius: 20px;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+    animation: fadeSlideUp 0.2s ease;
+    max-width: 100%;
+}
+
+.drf-overlay-chip i.fa-building {
+    color: var(--reg-accent);
+    font-size: 0.75rem;
+    flex-shrink: 0;
+}
+
+.drf-overlay-chip span {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--reg-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 300px;
+}
+
+.drf-overlay-chip button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(0, 0, 128, 0.08);
+    color: var(--reg-accent);
+    font-size: 0.6rem;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.15s ease;
+}
+
+.drf-overlay-chip button:hover {
+    background: var(--reg-error);
+    color: #fff;
+    transform: scale(1.1);
+}
+
+.drf-overlay-empty {
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--reg-text-subtle);
+    font-style: italic;
+    padding: 8px 0;
+}
+
+/* Backdrop behind overlay */
+.drf-overlay-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.3);
+    z-index: 8999;
+    animation: fadeIn 0.2s ease;
 }
 
 .reg-source-suggestions {
@@ -547,7 +742,273 @@ body {
     cursor: pointer;
     transition: background 0.15s ease;
 }
+.reg-related-wrap {
+    position: relative;
+}
 
+.reg-related-docs-list {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-height: 0;
+    margin-bottom: 8px;
+}
+
+.reg-related-docs-list:empty::before,
+.reg-related-empty {
+    display: block;
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 0.78rem;
+    color: var(--reg-text-subtle);
+    font-style: italic;
+    background: rgba(148, 163, 184, 0.06);
+    border: 1px dashed var(--reg-border);
+    border-radius: var(--reg-radius-sm);
+}
+
+.reg-related-doc-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px 6px 12px;
+    background: rgba(238, 242, 255, 0.75);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    border: 1px solid rgba(0, 0, 128, 0.12);
+    border-radius: 20px;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
+    animation: fadeSlideUp 0.2s ease;
+    max-width: 100%;
+    transition: all 0.15s ease;
+}
+
+.reg-related-doc-chip:hover {
+    background: rgba(238, 242, 255, 0.95);
+    border-color: rgba(0, 0, 128, 0.22);
+    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.1);
+}
+
+.reg-related-doc-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--reg-accent);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
+}
+
+.reg-related-doc-no {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--reg-text-muted);
+    background: rgba(255, 255, 255, 0.6);
+    padding: 2px 7px;
+    border-radius: 10px;
+    white-space: nowrap;
+}
+
+.reg-related-doc-chip button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(0, 0, 128, 0.08);
+    color: var(--reg-accent);
+    font-size: 0.65rem;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.15s ease;
+}
+
+.reg-related-doc-chip button:hover {
+    background: var(--reg-error);
+    color: #fff;
+    transform: scale(1.1);
+}
+
+/* ══════════════════════════════════════════════
+   RELATED DOCUMENTS — single search input + arrow toggle
+   ══════════════════════════════════════════════ */
+.reg-reldocs {
+    position: relative;
+}
+
+.reg-reldocs-inputwrap {
+    display: flex;
+    align-items: center;
+    height: 44px;
+    border: 1.5px solid var(--reg-border);
+    border-radius: var(--reg-radius-sm);
+    background: var(--reg-surface);
+    transition: all 0.2s ease;
+}
+
+.reg-reldocs-inputwrap:focus-within {
+    border-color: var(--reg-accent);
+    box-shadow: 0 0 0 3px rgba(13, 42, 122, 0.07);
+}
+
+.reg-reldocs-input {
+    flex: 1;
+    height: 90%;
+    border: none !important;
+    outline: none;
+    background: transparent;
+    box-shadow: none !important;
+    font-size: 0.85rem;
+    font-family: inherit;
+    color: var(--reg-text);
+    padding: 0 14px;
+}
+
+.reg-reldocs-input::placeholder {
+    color: #cbd5e1;
+}
+
+.reg-reldocs-arrow-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 100%;
+    border: none;
+    border-left: 1.5px solid var(--reg-border);
+    background: transparent;
+    color: var(--reg-text-subtle);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.15s ease;
+}
+
+.reg-reldocs-arrow-btn:hover {
+    background: var(--reg-accent-subtle);
+    color: var(--reg-accent);
+}
+
+.reg-reldocs-arrow-btn i {
+    font-size: 0.75rem;
+    transition: transform 0.2s ease;
+}
+
+/* ── Shared dropdown box (search results OR selected chips) ── */
+.reg-reldocs-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    z-index: 60;
+    max-height: 220px;
+    overflow-y: auto;
+    background: var(--reg-surface);
+    border: 1px solid var(--reg-border);
+    border-radius: var(--reg-radius-sm);
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
+    animation: fadeSlideUp 0.16s ease;
+}
+
+/* Search results list */
+.reg-reldocs-dropdown div {
+    padding: 9px 14px;
+    font-size: 0.82rem;
+    color: var(--reg-text);
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.reg-reldocs-dropdown div:hover {
+    background: var(--reg-accent-subtle);
+}
+
+.reg-reldocs-noresult {
+    color: var(--reg-text-subtle) !important;
+    font-style: italic;
+    cursor: default !important;
+}
+
+.reg-reldocs-noresult:hover {
+    background: transparent !important;
+}
+
+/* Selected panel — highlighted like the reference screenshot */
+.reg-reldocs-selected-panel {
+    padding: 10px;
+    background: var(--reg-accent-subtle);
+}
+
+.reg-reldocs-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.reg-reldocs-empty {
+    width: 100%;
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--reg-text-subtle);
+    font-style: italic;
+    padding: 4px 0;
+}
+
+.reg-reldocs-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 6px 5px 10px;
+    background: var(--reg-surface);
+    border: 1px solid rgba(0, 0, 128, 0.15);
+    border-radius: 14px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+    animation: fadeSlideUp 0.18s ease;
+    max-width: 100%;
+}
+
+.reg-reldocs-chip-title {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--reg-accent);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+}
+
+.reg-reldocs-chip-no {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--reg-text-muted);
+    background: #f1f5f9;
+    padding: 2px 6px;
+    border-radius: 10px;
+    white-space: nowrap;
+}
+
+.reg-reldocs-chip button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(0, 0, 128, 0.1);
+    color: var(--reg-accent);
+    font-size: 0.6rem;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.15s ease;
+}
+
+.reg-reldocs-chip button:hover {
+    background: var(--reg-error);
+    color: #fff;
+}
 .reg-source-suggestions div:hover {
     background: var(--reg-accent-subtle, #f0f0f0);
 }
@@ -559,6 +1020,7 @@ body {
     display: grid;
     grid-template-columns: 1fr 1.02fr;
     gap: 16px;
+    margin-top: 16px;
     margin-bottom: 16px;
 }
 
@@ -581,6 +1043,43 @@ body {
 .reg-grid-3,
 .reg-grid-4 {
     overflow: visible;
+}
+
+.reg-syllabi-basic-grid {
+    display: grid;
+    grid-template-columns: 1fr 1.6fr 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.reg-table td input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: var(--accent);
+    display: block;
+    margin: 0 auto;
+}
+
+.reg-checkbox-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.reg-checkbox-cell input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: var(--accent);
+}
+
+.reg-checkbox-cell label {
+    font-size: 0.82rem;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
 }
 
 .reg-grid-2-1 {
@@ -918,6 +1417,67 @@ body {
 .reg-add-row i {
     font-size: 0.7rem;
 }
+
+/* ═══ SYLLABI WIZARD ═══ */
+.reg-wizard-steps {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.reg-wizard-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: var(--reg-radius-sm);
+    background: #f1f5f9;
+    color: var(--reg-text-muted);
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.reg-wizard-step span {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--reg-border-strong);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.72rem;
+}
+
+.reg-wizard-step.is-active {
+    background: var(--reg-accent-subtle);
+    color: var(--reg-accent);
+}
+
+.reg-wizard-step.is-active span {
+    background: var(--reg-accent);
+}
+
+.reg-wizard-step.is-done span {
+    background: var(--reg-success);
+}
+
+.reg-wizard-nav {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 16px;
+}
+
+/* Column visibility per active step — Course Name (.col-pinned) always shown */
+.reg-wizard-table .col-step1,
+.reg-wizard-table .col-step2,
+.reg-wizard-table .col-step3 {
+    display: none;
+}
+
+.reg-wizard-table[data-active-step="1"] .col-step1 { display: table-cell; }
+.reg-wizard-table[data-active-step="2"] .col-step2 { display: table-cell; }
+.reg-wizard-table[data-active-step="3"] .col-step3 { display: table-cell; }
 
 /* ══════════════════════════════════════════════
    SPLIT LAYOUT — Retrieval & Distribution

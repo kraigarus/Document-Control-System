@@ -73,7 +73,27 @@ class MasterlistRegistration extends Model
 
     public function relatedDocuments()
     {
-        return $this->belongsToMany(MasterlistRegistration::class, 'related_documents', 'masterlist_id', 'related_doc_id');
+        return $this->belongsToMany(
+            MasterlistRegistration::class,
+            'masterlist_related_docs',
+            'masterlist_id',
+            'related_doc_id'
+        )->withTimestamps();
+    }
+
+    public function relatedToDocuments()
+    {
+        return $this->belongsToMany(
+            MasterlistRegistration::class,
+            'masterlist_related_docs',
+            'related_doc_id',
+            'masterlist_id'
+        )->withTimestamps();
+    }
+
+    public function allRelatedDocuments()
+    {
+        return $this->relatedDocuments->merge($this->relatedToDocuments)->unique('masterlist_id');
     }
 
     public function origins()

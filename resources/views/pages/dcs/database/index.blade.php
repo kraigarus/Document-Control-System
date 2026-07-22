@@ -113,6 +113,7 @@
                         <th rowspan="3">STATUS</th>
                         <th rowspan="3">PDF FILE</th>
                         <th rowspan="3">SOURCE UNIT</th>
+                        <th rowspan="3">RELATED DOCS</th>
 
                         <th rowspan="3" class="col-group-summary collapsed" data-group="approval">APPROVAL <span class="collapse-arrow">&#9654;</span></th>
                         <th colspan="2" class="col-group-approval col-group-expanded">APPROVAL <span class="collapse-arrow" data-toggle="approval">&#9664;</span></th>

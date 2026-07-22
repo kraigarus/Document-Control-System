@@ -85,6 +85,7 @@
 
         <!-- Form -->
         <form id="masterForm" method="POST" action="{{ route('register.updateDoc', $docRequest->request_id) }}" enctype="multipart/form-data">
+            <input type="hidden" id="requestId" value="{{ $docRequest->request_id }}">
             @csrf
             @method('PUT')
 
@@ -483,12 +484,22 @@
                     </div>
                     <div class="reg-grid-2">
                         <div class="reg-field">
-                            <label>Brief Purpose</label>
+                            <label>Justification</label>
                             <input type="text" id="briefPurpose" name="briefPurpose" placeholder="Type here..." value="{{ $masterlist->brief_purpose ?? '' }}">
                         </div>
                         <div class="reg-field">
                             <label>Related Documents</label>
-                            <input type="text" id="relatedDocuments" name="relatedDocuments" placeholder="Documents...">
+                            <div class="reg-related-wrap">
+                                <div id="relatedDocsList" class="reg-related-docs-list"></div>
+                                <div class="reg-search">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+                                    </svg>
+                                    <input type="text" id="relatedDocsSearch" placeholder="Type a document title to search..."
+                                        autocomplete="off" oninput="handleRelatedDocSearch(this)">
+                                    <div id="relatedDocsResults" class="reg-search-dropdown" style="display:none;"></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="reg-field">
@@ -819,3 +830,14 @@
 
 </body>
 </html>
+
+<script>
+  window.__existingRelatedDocs = @json(
+      $masterlist ? $masterlist->allRelatedDocuments()->map(fn($m) => [
+          'masterlist_id' => $m->masterlist_id,
+          'doc_no' => $m->doc_no,
+          'doc_title' => $m->doc_title,
+          'label' => $m->doc_title . ($m->doc_no ? ' ('.$m->doc_no.')' : ''),
+      ]) : []
+  );
+</script>

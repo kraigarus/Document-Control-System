@@ -104,120 +104,6 @@
             </div>
         </section>
 
-        <!-- ═══ SECTION SYLLABI ═══ -->
-        <section class="reg-card" id="section-syllabi" style="display: none;">
-            <div class="reg-card-header">
-                <span>Syllabi</span>
-            </div>
-            <div class="reg-card-body">
-                <div class="reg-field">
-                    <label>Syllabi Details</label>
-                    <div class="reg-table-wrap">
-                        <table class="reg-table">
-                            <thead>
-                                <tr>
-                                    <th>Course Name</th>
-                                    <th>Syllabi Availability</th>
-                                    <th>No. of Pages</th>
-                                    <th>DRF Availability</th>
-                                    <th>DRF No.</th>
-                                    <th>DRF Date</th>
-                                    <th>DRF Received Date</th>
-                                    <th>Scanned DRF</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody id="syllabiTableBody">
-                                <tr>
-                                    <td><input type="text" name="syllabiCourseName[]" placeholder="Enter course name"></td>
-                                    <td>
-                                        <select name="syllabiAvailability[]">
-                                            <option value="" disabled selected>Select</option>
-                                            <option value="available">Available</option>
-                                            <option value="not_available">Not Available</option>
-                                        </select>
-                                    </td>
-                                    <td><input type="number" name="syllabiNoPages[]" min="0" placeholder="0"></td>
-                                    <td>
-                                        <select name="syllabiDrfAvailability[]">
-                                            <option value="" disabled selected>Select</option>
-                                            <option value="available">Available</option>
-                                            <option value="not_available">Not Available</option>
-                                        </select>
-                                    </td>
-                                    <td><input type="text" name="syllabiDrfNo[]" placeholder="Enter Syllabi No."></td>
-                                    <td><input type="date" name="syllabiDrfDate[]"></td>
-                                    <td><input type="date" name="syllabiDrfReceived[]"></td>
-                                    <td>
-                                        <label class="reg-upload-cell">
-                                            <input type="file" name="syllabiScannedDrf[]" accept=".pdf,.docx">
-                                            <i class="fa-solid fa-cloud-arrow-up"></i>
-                                            <span>No file chosen</span>
-                                        </label>
-                                    </td>
-                                    <td>
-                                        <button type="button" class="reg-row-del" onclick="this.closest('tr').remove()">
-                                            <i class="fa-solid fa-trash-can"></i>
-                                        </button>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    <button type="button" id="btnAddSyllabiRow" onclick="addSyllabiRow()">
-                        <i class="fa-solid fa-plus"></i> Add Row
-                    </button>
-                </div>
-            </div>
-        </section>
-
-        <!-- ═══ SECTION 1 — DRF ═══ -->
-        <section class="reg-card" id="section-1" style="display: none;">
-            <div class="reg-card-header">
-                <span>Document Request Form</span>
-            </div>
-            <div class="reg-card-body">
-                <div class="reg-grid-3">
-                    <div class="reg-field">
-                        <label>DRF No.</label>
-                        <input type="text" id="drfNo" name="drfNo" placeholder="Enter DRF No.">
-                    </div>
-                    <div class="reg-field">
-                        <label>DRF Date</label>
-                        <input type="date" id="drfDate" name="drfDate">
-                    </div>
-                    <div class="reg-field">
-                        <label>Date Receipt</label>
-                        <div class="reg-dual">
-                            <input type="date" id="drfReceiptDate" name="drfReceiptDate">
-                            <input type="time" id="drfTime" name="drfTime">
-                        </div>
-                    </div>
-                </div>
-                <div class="reg-grid-2-1">
-                    <div class="reg-field">
-                        <label>Document Title</label>
-                        <input type="text" id="drfTitle" name="drfTitle" placeholder="Enter document title">
-                    </div>
-                    <div class="reg-field">
-                        <label>Source Unit</label>
-                        <select id="drfSourceUnit" name="drfSourceUnit">
-                            <option value="" selected disabled>Select office</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="reg-field">
-                    <label>Upload Scanned DRF</label>
-                    <label class="reg-upload">
-                        <input type="file" id="drfFile" name="drfFile" accept=".pdf,.docx">
-                        <i class="fa-solid fa-cloud-arrow-up"></i>
-                        <span>Choose .pdf or .docx file</span>
-                    </label>
-                </div>
-            </div>
-        </section>
-
-        <!-- ═══ SECTION 2 — DCN ═══ -->
         <section class="reg-card" id="section-2" style="display: none;">
             <div class="reg-card-header">
                 <span>Document Change Notice</span>
@@ -296,6 +182,174 @@
             </div>
         </section>
 
+        <!-- ═══ SECTION SYLLABI ═══ -->
+        <section class="reg-card" id="section-syllabi" style="display: none;">
+            <div class="reg-card-header">
+                <span>Syllabi</span>
+            </div>
+            <div class="reg-card-body">
+
+                <!-- ═══ CONTEXT: College / Program / Semester / School Year ═══ -->
+                <div class="reg-grid-4">
+                    <div class="reg-field">
+                        <label>College</label>
+                        <select id="syllabiCollege" name="college_id">
+                            <option value="" selected disabled>Select college</option>
+                        </select>
+                    </div>
+                    <div class="reg-field">
+                        <label>Program</label>
+                        <select id="syllabiProgram" name="program_id" disabled>
+                            <option value="" selected disabled>Select program</option>
+                        </select>
+                    </div>
+                    <div class="reg-field">
+                        <label>Semester</label>
+                        <select id="syllabiSemester" name="semester_id" disabled>
+                            <option value="" selected disabled>Select semester</option>
+                        </select>
+                    </div>
+                    <div class="reg-field">
+                        <label>School Year</label>
+                        <select id="syllabiSchoolYear" name="school_year_id" disabled>
+                            <option value="" selected disabled>Select school year</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- ═══ DOCUMENT INFO ═══ -->
+                <div class="reg-grid-4">
+                    <div class="reg-field">
+                        <label>Document No.</label>
+                        <input type="text" id="syllabiDocNo" name="syllabiDocNo" placeholder="Enter Document No.">
+                    </div>
+                    <div class="reg-field">
+                        <label>Document Title</label>
+                        <input type="text" id="syllabiDocTitle" name="syllabiDocTitle" placeholder="Enter Document Title">
+                    </div>
+                    <div class="reg-field">
+                        <label>Effectivity Date</label>
+                        <input type="date" id="syllabiEffectivityDate" name="syllabiEffectivityDate">
+                    </div>
+                    <div class="reg-field">
+                        <label>Deadline of Submission</label>
+                        <input type="date" id="syllabiDeadline" name="syllabiDeadline">
+                    </div>
+                </div>
+
+                <!-- ═══ WIZARD STEP INDICATOR ═══ -->
+                <div class="reg-wizard-steps" id="syllabiStepIndicator">
+                    <div class="reg-wizard-step is-active" data-step="1"><span>1</span> Course Info</div>
+                    <div class="reg-wizard-step" data-step="2"><span>2</span> DRF</div>
+                    <div class="reg-wizard-step" data-step="3"><span>3</span> Registration</div>
+                </div>
+
+                <div class="reg-field">
+                    <div class="reg-table-wrap">
+                        <table class="reg-table reg-wizard-table" id="syllabiWizardTable" data-active-step="1">
+                            <thead>
+                                <tr>
+                                    <th class="col-pinned">Course Name</th>
+
+                                    <th class="col-step1">Syllabi Availability</th>
+                                    <th class="col-step1">No. Copies</th>
+                                    <th class="col-step1">Originator</th>
+                                    <th class="col-step1">No. Pages</th>
+                                    <th class="col-step1">Date Received</th>
+                                    <th class="col-step1">Time Received</th>
+
+                                    <th class="col-step2">DRF Availability</th>
+                                    <th class="col-step2">DRF No.</th>
+                                    <th class="col-step2">DRF Date</th>
+                                    <th class="col-step2">DRF Received</th>
+                                    <th class="col-step2">Scanned DRF</th>
+
+                                    <th class="col-step3">Registered</th>
+                                    <th class="col-step3">Date of Registration</th>
+                                    <th class="col-step3">Time of Registration</th>
+                                    <th class="col-step3">Time Spent</th>
+
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="syllabiTableBody"></tbody>
+                        </table>
+                    </div>
+                    <button type="button" id="btnAddSyllabiRow" onclick="addSyllabiRow()">
+                        <i class="fa-solid fa-plus"></i> Add Course
+                    </button>
+                </div>
+
+                <div class="reg-wizard-nav">
+                    <button type="button" class="reg-btn reg-btn-cancel" id="syllabiBackBtn" onclick="syllabiStepBack()" style="display:none;">
+                        <i class="fa-solid fa-arrow-left"></i> Back
+                    </button>
+                    <button type="button" class="reg-btn reg-btn-save" id="syllabiNextBtn" onclick="syllabiStepNext()">
+                        Next <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══ SECTION 1 — DRF ═══ -->
+        <section class="reg-card" id="section-1" style="display: none;">
+            <div class="reg-card-header">
+                <span>Document Request Form</span>
+            </div>
+            <div class="reg-card-body">
+                <div class="reg-grid-3">
+                    <div class="reg-field">
+                        <label>DRF No.</label>
+                        <input type="text" id="drfNo" name="drfNo" placeholder="Enter DRF No.">
+                    </div>
+                    <div class="reg-field">
+                        <label>DRF Date</label>
+                        <input type="date" id="drfDate" name="drfDate">
+                    </div>
+                    <div class="reg-field">
+                        <label>Date Receipt</label>
+                        <div class="reg-dual">
+                            <input type="date" id="drfReceiptDate" name="drfReceiptDate">
+                            <input type="time" id="drfTime" name="drfTime">
+                        </div>
+                    </div>
+                </div>
+                <div class="reg-grid-2-1">
+                    <div class="reg-field">
+                        <label>Document Title</label>
+                        <input type="text" id="drfTitle" name="drfTitle" placeholder="Enter document title">
+                    </div>
+                    <div class="reg-field">
+                        <label>Source Unit</label>
+                        <div class="reg-reldocs" id="drfSourceUnitWidget">
+                            <div class="reg-reldocs-inputwrap">
+                                <input type="text" id="drfSourceUnitSearch" class="reg-reldocs-input"
+                                    placeholder="Type to search offices..."
+                                    autocomplete="off"
+                                    oninput="handleDrfSourceSearch(this)"
+                                    onfocus="handleDrfSourceFocus()">
+                                <button type="button" class="reg-reldocs-arrow-btn" onclick="toggleDrfSourceSelected(event)">
+                                    <i class="fa-solid fa-chevron-down" id="drfSourceArrowIcon"></i>
+                                </button>
+                            </div>
+                            <div id="drfSourceResults" class="reg-reldocs-dropdown" style="display:none;"></div>
+                            <div id="drfSourceSelectedPanel" class="reg-reldocs-dropdown reg-reldocs-selected-panel" style="display:none;">
+                                <div id="drfSourceChips" class="reg-reldocs-chips"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="reg-field">
+                    <label>Upload Scanned DRF</label>
+                    <label class="reg-upload">
+                        <input type="file" id="drfFile" name="drfFile" accept=".pdf,.docx">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                        <span>Choose .pdf or .docx file</span>
+                    </label>
+                </div>
+            </div>
+        </section>
+
         <!-- ═══ SECTION 3 — MASTERLIST ═══ -->
         <section class="reg-card" id="section-3" style="display: none;">
             <div class="reg-card-header">
@@ -305,11 +359,12 @@
                 <!-- Rows 1-2: 4-column grid, Time Spent spans 2 rows -->
                 <div class="reg-ml-grid">
                     <!-- Row 1 -->
-                    <div class="reg-field">
+                    <div class="reg-field" id="mlFieldDocNo">
                         <label>Document No.</label>
                         <input type="text" id="masterlistDocNo" name="masterlistDocNo" placeholder="Enter Document no.">
+                        <span id="docNoHint" style="display:block;margin-top:4px;font-size:12px;"></span>
                     </div>
-                    <div class="reg-field">
+                    <div class="reg-field" id="mlFieldDeadline">
                         <label>Deadline of Submission</label>
                         <input type="date" id="deadlineOfSubmission" name="deadlineOfSubmission">
                     </div>
@@ -328,7 +383,7 @@
                     </div>
 
                     <!-- Row 2 -->
-                    <div class="reg-field reg-ml-title-span">
+                    <div class="reg-field reg-ml-title-span" id="mlFieldTitle">
                         <label>Document Title</label>
                         <input type="text" id="masterlistDocTitle" name="masterlistDocTitle" placeholder="Enter Document title">
                     </div>
@@ -343,25 +398,24 @@
 
                 <!-- Row 3: 5-column grid -->
                 <div class="reg-ml-mid">
-                    <div class="reg-field">
+                    <div class="reg-field" id="mlFieldEffectivity">
                         <label>Effectivity Date</label>
                         <input type="date" id="masterlistEffectivityDate" name="masterlistEffectivityDate">
                     </div>
                     <div class="reg-field">
                         <label>Revision No.</label>
                         <input type="number" id="masterlistRevisionNo" name="masterlistRevisionNo" min="0" placeholder="0">
-                        <span id="docNoHint" style="display:block;margin-top:4px;font-size:12px;"></span>
                     </div>
                     <div class="reg-field">
                         <label>No. of Pages</label>
                         <input type="number" id="masterlistNoOfPages" name="masterlistNoOfPages" min="0" placeholder="0">
                     </div>
                     <div class="reg-field">
-                        <label>In-charge</label>
+                        <label>Originator</label>
                         <input type="text" id="masterlistInCharge" name="masterlistInCharge" placeholder="Name">
                     </div>
                     <div class="reg-field">
-                        <label>Source Unit / Originator</label>
+                        <label>Source Unit</label>
                         <div class="reg-source-wrap">
                             <input type="hidden" id="masterlistOfficeId" name="masterlistOfficeId" value="">
                             <input type="text" id="masterlistSourceUnit" name="masterlistSourceUnit"
@@ -373,22 +427,37 @@
                             <div id="masterlistSourceResults" class="reg-source-suggestions"
                                 style="display:none;"></div>
                         </div>
-                        <small style="color:#888; font-size:12px; margin-top:4px; display:block;">
-                            Separate multiple entries with commas. Select an office from suggestions
-                            or type a person's name.
-                        </small>
                     </div>
                 </div>
 
                 <!-- Row 4: 2-column grid -->
                 <div class="reg-grid-2">
                     <div class="reg-field">
-                        <label>Brief Purpose</label>
+                        <label>Justification</label>
                         <input type="text" id="briefPurpose" name="briefPurpose" placeholder="Type here...">
                     </div>
                     <div class="reg-field">
                         <label>Related Documents</label>
-                        <input type="text" id="relatedDocuments" name="relatedDocuments" placeholder="Enter related Documents here">
+                        <div class="reg-reldocs" id="relatedDocsWidget">
+                            <div class="reg-reldocs-inputwrap">
+                                <input type="text" id="relatedDocsSearch" class="reg-reldocs-input"
+                                    placeholder="Type a document title to search..."
+                                    autocomplete="off"
+                                    oninput="handleRelatedDocSearch(this)"
+                                    onfocus="handleRelatedDocFocus()">
+                                <button type="button" class="reg-reldocs-arrow-btn" onclick="toggleRelatedDocsSelected(event)">
+                                    <i class="fa-solid fa-chevron-down" id="relatedDocsArrowIcon"></i>
+                                </button>
+                            </div>
+
+                            <!-- Search results (shown while typing) -->
+                            <div id="relatedDocsResults" class="reg-reldocs-dropdown" style="display:none;"></div>
+
+                            <!-- Selected documents (shown when arrow is clicked) -->
+                            <div id="relatedDocsSelectedPanel" class="reg-reldocs-dropdown reg-reldocs-selected-panel" style="display:none;">
+                                <div id="relatedDocsChips" class="reg-reldocs-chips"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -616,7 +685,7 @@
                 <button type="button" class="reg-btn reg-btn-report" onclick="handleGenerateReport()">
                     <i class="fa-solid fa-file-pdf"></i> Generate Report
                 </button>
-                <button type="button" class="reg-btn reg-btn-save" onclick="confirmSave()">
+                <button type="button" id="btnSaveDocument" class="reg-btn reg-btn-save" onclick="confirmSave()">
                     <i class="fa-solid fa-floppy-disk"></i> Save Document
                 </button>
             </div>
