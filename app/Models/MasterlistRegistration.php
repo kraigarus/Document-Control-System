@@ -27,7 +27,6 @@ class MasterlistRegistration extends Model
         'office_id',
         'originator_name',
         'deadline',
-        'in_charge',
         'brief_purpose',
         'scanned_masterlist',
         'created_by',

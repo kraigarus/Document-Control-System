@@ -3,8 +3,7 @@
 // ══════════════════════════════════════════════
 let allOffices = [];
 let allDocTypes = [];
-let drfSourceSelected = [];
-let drfSourcePanelOpen = false;
+let allOriginators = [];
 let syllabiGroupCounter = 0;
 let syllabiCurrentStep = 1;
 let relatedDocsCache = [];
@@ -89,23 +88,29 @@ function emptyOfficeRowHTML() {
             '</tr>';
 }
 
+function filterItems(list, labelKey, query) {
+    const q = query.trim().toLowerCase();
+    if (q.length < 1) return [];
+    return list.filter(o => o[labelKey].toLowerCase().includes(q));
+}
 
 // ══════════════════════════════════════════════
 // DOM READY — single consolidated handler
 // ══════════════════════════════════════════════
 document.addEventListener("DOMContentLoaded", async function () {
-
     // ── Fetch dropdown data ──
     try {
-        const [offices, docTypes, versionTypes, approvalBodies] = await Promise.all([
+        const [offices, docTypes, versionTypes, approvalBodies, originators] = await Promise.all([
             fetch("/api/offices").then(r => r.json()),
             fetch("/api/doc-types").then(r => r.json()),
             fetch("/api/version-types").then(r => r.json()),
             fetch("/api/approval-bodies").then(r => r.json()),
+            fetch("/api/originators").then(r => r.json()),
         ]);
 
         allOffices = offices;
         allDocTypes = docTypes;
+        allOriginators = originators;
 
         const versionSelect = document.getElementById("versionType");
         versionTypes.forEach(v => versionSelect.add(new Option(v.version_name, v.version_id)));
@@ -155,6 +160,50 @@ document.addEventListener("DOMContentLoaded", async function () {
             mlTitle.value = drfTitle.value;
         });
     }
+
+    createSourceUnitWidget({
+        key: 'drf',
+        widgetId: 'drfSourceUnitWidget',
+        inputId: 'drfSourceUnitSearch',
+        arrowId: 'drfSourceArrowBtn',
+        resultsId: 'drfSourceResults',
+        chipsId: 'drfSourceInlineChips',
+        allowFreeText: false,
+        officeFieldName: 'drfSourceUnit[]',
+        nameFieldName: null,
+        initial: []
+    });
+
+    createSourceUnitWidget({
+        key: 'masterlist',
+        widgetId: 'masterlistSourceWidget',
+        inputId: 'masterlistSourceSearch',
+        arrowId: 'masterlistSourceArrowBtn',
+        resultsId: 'masterlistSourceSuggestions',
+        chipsId: 'masterlistSourceInlineChips',
+        allowFreeText: true,
+        officeFieldName: 'masterlistOfficeIds[]',
+        nameFieldName: 'masterlistOriginatorNames[]',
+        initial: []
+    });
+
+    createSourceUnitWidget({
+        key: 'masterlistOriginator',
+        widgetId: 'masterlistOriginatorWidget',
+        inputId: 'masterlistOriginatorSearch',
+        arrowId: 'masterlistOriginatorArrowBtn',
+        resultsId: 'masterlistOriginatorResults',
+        chipsId: 'masterlistOriginatorInlineChips',
+        allowFreeText: true,
+        singleSelect: true,
+        fieldName: 'masterlistOriginator',
+        dataListGetter: () => allOriginators,
+        idKey: 'originator_id',
+        labelKey: 'originator_name',
+        itemLabelPlural: 'originators',
+        overlayTitle: 'Originator',
+        initial: []
+    });
 });
 
 // ══════════════════════════════════════════════
@@ -254,10 +303,7 @@ function applyRevisedModeLookupResult(data, hintEl, revField) {
             titleField.value = data.latest_title;
         }
 
-        const originatorField = document.getElementById('masterlistSourceUnit');
-        if (originatorField && data.latest_originator && !originatorField.value.trim()) {
-            originatorField.value = data.latest_originator;
-        }
+        if (data.latest_originator && window.__sourceWidgets.masterlist) window.__sourceWidgets.masterlist.seedFromString(data.latest_originator);
 
         if (hintEl) {
             hintEl.innerHTML = '<i class="fa-solid fa-circle-check"></i> ' + data.message;
@@ -398,141 +444,324 @@ function setSaveEnabled(enabled) {
 }
 
 // ══════════════════════════════════════════════
-// SOURCE UNIT — autocomplete for Masterlist
+// SHARED SOURCE UNIT WIDGET FACTORY
+// Used identically by DRF and Masterlist — one implementation, no duplication.
 // ══════════════════════════════════════════════
-window.handleSourceSearch = function (input, dropdownId) {
-    const dropdown = document.getElementById(dropdownId);
-    if (!dropdown) return;
+window.__sourceWidgets = {};
 
-    const parts = input.value.split(",");
-    const currentQuery = parts[parts.length - 1].trim();
-    const filtered = filterOffices(currentQuery);
+function createSourceUnitWidget(opts) {
 
-    if (currentQuery.length < 1 || filtered.length === 0) {
-        dropdown.style.display = "none";
-        return;
+    let selected = opts.initial || [];
+    let idCounter = 0;
+    let panelOpen = false;
+    let scrollResizeHandler = null;
+
+    const idKey = opts.idKey || 'office_id';
+    const labelKey = opts.labelKey || 'office_name';
+    const getList = opts.dataListGetter || (() => allOffices);
+    const itemLabelPlural = opts.itemLabelPlural || 'offices';
+
+    function isOfficeSelected(itemId) {
+        return selected.some(i => i.type === 'office' && String(i.id) === String(itemId));
     }
 
-    dropdown.innerHTML = filtered.map(o =>
-        '<div onmousedown="pickSource(\'' + input.id + "', '" + dropdownId +
-        "', '" + o.office_name.replace(/'/g, "\\'") +
-        "', '" + o.office_id + '\')">' + o.office_name + '</div>'
-    ).join("");
-    dropdown.style.display = "block";
-};
-
-window.pickSource = function (inputId, dropdownId, officeName, officeId) {
-    const input = document.getElementById(inputId);
-    const dropdown = document.getElementById(dropdownId);
-
-    if (inputId === "masterlistSourceUnit") {
-        input.dataset.justPicked = "true";
-        const parts = input.value.split(",");
-        parts[parts.length - 1] = " " + officeName;
-        input.value = parts.join(",");
-
-        const hiddenId = document.getElementById("masterlistOfficeId");
-        if (hiddenId) hiddenId.value = officeId || "";
-    } else {
-        input.value = officeName;
+    function addOffice(itemId) {
+        const item = getList().find(o => o[idKey] == itemId);
+        if (!item) return;
+        if (opts.singleSelect) selected = [];
+        else if (isOfficeSelected(itemId)) return;
+        selected.push({ type: 'office', id: item[idKey], label: item[labelKey] });
+        render();
     }
 
-    dropdown.style.display = "none";
-    input.focus();
-};
+    function addFreeText(val) {
+        if (!opts.allowFreeText || !val) return;
+        if (opts.singleSelect) selected = [];
+        idCounter++;
+        selected.push({ type: 'name', id: 'n' + idCounter, label: val });
+        render();
+    }
 
-document.addEventListener("click", function (e) {
-    const dd = document.getElementById("masterlistSourceResults");
-    if (dd && !dd.parentElement.contains(e.target)) dd.style.display = "none";
-});
+    function removeItem(type, id) {
+        selected = selected.filter(i => !(i.type === type && String(i.id) === String(id)));
+        render();
+    }
+
+    function render() {
+        const widget = document.getElementById(opts.widgetId);
+        widget.querySelectorAll('input[data-source-hidden]').forEach(el => el.remove());
+        selected.forEach(item => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.dataset.sourceHidden = 'true';
+            input.name = opts.fieldName || (item.type === 'office' ? opts.officeFieldName : opts.nameFieldName);
+            input.value = opts.fieldName ? item.label : (item.type === 'office' ? item.id : item.label);
+            widget.appendChild(input);
+        });
+
+        const chipsEl = document.getElementById(opts.chipsId);
+        if (chipsEl) {
+            chipsEl.innerHTML = selected.length === 0
+            ? '<div class="reg-reldocs-empty">Nothing selected yet</div>'
+            : selected.map(item => `
+                <div class="reg-inline-chip">
+                    <span>${item.label}</span>
+                    <button type="button" onclick="event.stopPropagation(); window.__sourceWidgets['${opts.key}'].removeItem('${item.type}','${item.id}')"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+            `).join('');
+        }
+
+        if (window.__sourceOverlayConfigs[opts.key] && document.getElementById('universalSourceOverlay')) {
+            refreshSourceOverlay(window.__sourceOverlayConfigs[opts.key]);
+        }
+    }
+
+    function handleSearch(input) {
+        const dropdown = document.getElementById(opts.resultsId);
+        const q = input.value.trim();
+        if (q.length < 1) { dropdown.style.display = 'none'; return; }
+        const filtered = filterItems(getList(), labelKey, q).filter(o => !isOfficeSelected(o[idKey]));
+        if (filtered.length === 0) {
+            dropdown.innerHTML = `<div class="reg-reldocs-noresult">No matching ${itemLabelPlural} found</div>`;
+            dropdown.style.display = 'block';
+            return;
+        }
+        dropdown.innerHTML = filtered.map(o =>
+            `<div onmousedown="window.__sourceWidgets['${opts.key}'].pick(${o[idKey]})">${o[labelKey]}</div>`
+        ).join('');
+        dropdown.style.display = 'block';
+    }
+
+    function handleKeydown(e, input) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+    }
+
+    function pick(itemId) {
+        addOffice(itemId);
+        document.getElementById(opts.inputId).value = '';
+        document.getElementById(opts.resultsId).style.display = 'none';
+    }
+
+    function openOverlay() {
+        document.getElementById(opts.resultsId).style.display = 'none';
+        openSourceOverlay({
+            key: opts.key,
+            title: opts.overlayTitle || 'Selected',
+            searchPlaceholder: opts.allowFreeText ? `Search ${itemLabelPlural}, or type a name and press Enter...` : `Search ${itemLabelPlural}...`,
+            allowFreeText: opts.allowFreeText,
+            getList, idKey, labelKey, itemLabelPlural,
+            getSelected: () => selected.map(i => ({ id: i.type + ':' + i.id, label: i.label })),
+            addOffice,
+            addFreeText,
+            removeItem: (compoundId) => {
+                const [type, id] = compoundId.split(':');
+                removeItem(type, id);
+            },
+            onChange: render
+        });
+    }
+
+    function positionPanel(panelEl, anchorEl) {
+        const rect = anchorEl.getBoundingClientRect();
+        panelEl.style.position = 'fixed';
+        panelEl.style.top = (rect.bottom + 6) + 'px';
+        panelEl.style.left = rect.left + 'px';
+        panelEl.style.width = rect.width + 'px';
+        panelEl.style.zIndex = 9500;
+    }
+
+    function togglePanel(e) {
+        if (e) e.stopPropagation();
+        document.getElementById(opts.resultsId).style.display = 'none';
+        panelOpen = !panelOpen;
+        const chipsEl = document.getElementById(opts.chipsId);
+        if (!chipsEl) return;
+
+        if (panelOpen) {
+            document.body.appendChild(chipsEl);
+            positionPanel(chipsEl, document.getElementById(opts.widgetId));
+            chipsEl.style.display = 'block';
+
+            scrollResizeHandler = () => positionPanel(chipsEl, document.getElementById(opts.widgetId));
+            window.addEventListener('scroll', scrollResizeHandler, true);
+            window.addEventListener('resize', scrollResizeHandler);
+        } else {
+            chipsEl.style.display = 'none';
+            if (scrollResizeHandler) {
+                window.removeEventListener('scroll', scrollResizeHandler, true);
+                window.removeEventListener('resize', scrollResizeHandler);
+                scrollResizeHandler = null;
+            }
+        }
+    }
+
+    function closePanel() {
+        panelOpen = false;
+        const chipsEl = document.getElementById(opts.chipsId);
+        if (chipsEl) chipsEl.style.display = 'none';
+        if (scrollResizeHandler) {
+            window.removeEventListener('scroll', scrollResizeHandler, true);
+            window.removeEventListener('resize', scrollResizeHandler);
+            scrollResizeHandler = null;
+        }
+    }
+
+    function reset() {
+        selected = [];
+        render();
+    }
+
+    function seedFromString(str) {
+        if (!str || selected.length > 0) return;
+        str.split(',').map(s => s.trim()).filter(Boolean).forEach(part => {
+            const office = allOffices.find(o => o.office_name.toLowerCase() === part.toLowerCase());
+            if (office) selected.push({ type: 'office', id: office.office_id, label: office.office_name });
+            else { idCounter++; selected.push({ type: 'name', id: 'n' + idCounter, label: part }); }
+        });
+        render();
+    }
+
+    // wire the DOM once
+    const inputEl = document.getElementById(opts.inputId);
+    const arrowEl = document.getElementById(opts.arrowId);
+    inputEl.addEventListener('input', function () { closePanel(); handleSearch(this); });
+    inputEl.addEventListener('keydown', function (e) { handleKeydown(e, this); });
+    arrowEl.addEventListener('click', togglePanel);
+    document.addEventListener('click', function (e) {
+        const widget = document.getElementById(opts.widgetId);
+        const chipsEl = document.getElementById(opts.chipsId);
+        const insideWidget = widget && widget.contains(e.target);
+        const insidePanel = chipsEl && chipsEl.contains(e.target);
+        if (!insideWidget && !insidePanel) {
+            document.getElementById(opts.resultsId).style.display = 'none';
+            closePanel();
+        }
+    });
+
+    render();
+
+    const api = { pick, removeItem, reset, seedFromString, get selected() { return selected; } };
+    window.__sourceWidgets[opts.key] = api;
+    return api;
+}
 
 // ══════════════════════════════════════════════
-// DRF SOURCE UNIT — searchable multi-select
+// UNIVERSAL SOURCE UNIT OVERLAY (fixed, never clipped)
 // ══════════════════════════════════════════════
-window.handleDrfSourceFocus = function () {
-    closeDrfSourceSelectedPanel();
-};
+window.__sourceOverlayConfigs = window.__sourceOverlayConfigs || {};
 
-window.handleDrfSourceSearch = function (input) {
-    const dropdown = document.getElementById('drfSourceResults');
-    closeDrfSourceSelectedPanel();
+function closeSourceOverlay() {
+    const overlay = document.getElementById('universalSourceOverlay');
+    const backdrop = document.getElementById('universalSourceBackdrop');
+    if (overlay) overlay.remove();
+    if (backdrop) backdrop.remove();
+    document.removeEventListener('keydown', handleSourceOverlayEsc);
+}
+window.closeSourceOverlay = closeSourceOverlay;
 
+function handleSourceOverlayEsc(e) {
+    if (e.key === 'Escape') closeSourceOverlay();
+}
+
+function openSourceOverlay(config) {
+    closeSourceOverlay();
+    window.__sourceOverlayConfigs[config.key] = config;
+
+    const backdrop = document.createElement('div');
+    backdrop.id = 'universalSourceBackdrop';
+    backdrop.className = 'drf-overlay-backdrop';
+    backdrop.onclick = closeSourceOverlay;
+    document.body.appendChild(backdrop);
+
+    const overlay = document.createElement('div');
+    overlay.id = 'universalSourceOverlay';
+    overlay.innerHTML = `
+        <div class="drf-overlay-header">
+            <span>${config.title}</span>
+            <button type="button" onclick="closeSourceOverlay()"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="drf-overlay-search">
+            <div class="reg-search">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+                </svg>
+                <input type="text" id="universalSourceOverlaySearch" placeholder="${config.searchPlaceholder}" autocomplete="off">
+            </div>
+        </div>
+        <div id="universalSourceOverlaySuggestions" class="drf-overlay-suggestions"></div>
+        <div class="drf-overlay-selected">
+            <div class="drf-overlay-selected-label">Selected (<span id="universalSourceOverlayCount">0</span>)</div>
+            <div id="universalSourceOverlayChips" class="drf-overlay-chips"></div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const searchInput = document.getElementById('universalSourceOverlaySearch');
+    searchInput.addEventListener('input', () => handleSourceOverlaySearch(config, searchInput));
+
+    document.addEventListener('keydown', handleSourceOverlayEsc);
+    searchInput.focus();
+    refreshSourceOverlay(config);
+}
+
+function refreshSourceOverlay(config) {
+    const container = document.getElementById('universalSourceOverlayChips');
+    const countEl = document.getElementById('universalSourceOverlayCount');
+    if (!container) return;
+    const items = config.getSelected();
+    countEl.textContent = items.length;
+
+    container.innerHTML = items.length === 0
+        ? '<div class="drf-overlay-empty">No offices selected yet</div>'
+        : items.map(item => `
+            <div class="drf-overlay-chip">
+                <i class="fa-solid fa-building"></i>
+                <span>${item.label}</span>
+                <button type="button" onclick="removeSourceOverlayItem('${config.key}', '${item.id}')"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+        `).join('');
+
+    if (config.onChange) config.onChange();
+}
+
+function handleSourceOverlaySearch(config, input) {
+    const dropdown = document.getElementById('universalSourceOverlaySuggestions');
     const q = input.value.trim();
     if (q.length < 1) { dropdown.style.display = 'none'; return; }
 
-    const filtered = filterOffices(q).filter(o => !drfSourceSelected.some(s => s.office_id == o.office_id));
+    const selectedIds = config.getSelected()
+        .map(i => i.id.split(':').pop());
+    const filtered = filterItems(config.getList(), config.labelKey, q)
+        .filter(o => !selectedIds.includes(String(o[config.idKey])));
 
     if (filtered.length === 0) {
-        dropdown.innerHTML = '<div class="reg-reldocs-noresult">No matching offices found</div>';
+        dropdown.innerHTML = `<div class="drf-overlay-noresult">No matching ${config.itemLabelPlural} found</div>`;
         dropdown.style.display = 'block';
         return;
     }
 
     dropdown.innerHTML = filtered.map(o =>
-        `<div onmousedown="pickDrfSource(${o.office_id})">${o.office_name}</div>`
+        `<div onmousedown="pickSourceOverlayOffice('${config.key}', ${o[config.idKey]})">${o[config.labelKey]}</div>`
     ).join('');
     dropdown.style.display = 'block';
-};
-
-window.pickDrfSource = function (id) {
-    const office = allOffices.find(o => o.office_id == id);
-    if (!office || drfSourceSelected.some(s => s.office_id == id)) return;
-    drfSourceSelected.push(office);
-    renderDrfSourceChips();
-
-    document.getElementById('drfSourceUnitSearch').value = '';
-    document.getElementById('drfSourceResults').style.display = 'none';
-};
-
-window.removeDrfSource = function (id, event) {
-    if (event) event.stopPropagation();
-    drfSourceSelected = drfSourceSelected.filter(s => s.office_id != id);
-    renderDrfSourceChips();
-};
-
-window.toggleDrfSourceSelected = function (e) {
-    if (e) e.stopPropagation();
-    document.getElementById('drfSourceResults').style.display = 'none';
-
-    drfSourcePanelOpen = !drfSourcePanelOpen;
-    const panel = document.getElementById('drfSourceSelectedPanel');
-    const icon = document.getElementById('drfSourceArrowIcon');
-    panel.style.display = drfSourcePanelOpen ? 'block' : 'none';
-    icon.style.transform = drfSourcePanelOpen ? 'rotate(180deg)' : '';
-};
-
-function closeDrfSourceSelectedPanel() {
-    drfSourcePanelOpen = false;
-    const panel = document.getElementById('drfSourceSelectedPanel');
-    const icon = document.getElementById('drfSourceArrowIcon');
-    if (panel) panel.style.display = 'none';
-    if (icon) icon.style.transform = '';
 }
 
-function renderDrfSourceChips() {
-    const container = document.getElementById('drfSourceChips');
-    if (!container) return;
+window.pickSourceOverlayOffice = function (key, officeId) {
+    const config = window.__sourceOverlayConfigs[key];
+    if (!config) return;
+    config.addOffice(officeId);
+    document.getElementById('universalSourceOverlaySearch').value = '';
+    document.getElementById('universalSourceOverlaySuggestions').style.display = 'none';
+    refreshSourceOverlay(config);
+};
 
-    if (drfSourceSelected.length === 0) {
-        container.innerHTML = '<div class="reg-reldocs-empty">No offices selected yet</div>';
-        return;
-    }
-
-    container.innerHTML = drfSourceSelected.map(o => `
-        <div class="reg-reldocs-chip">
-            <input type="hidden" name="drfSourceUnit[]" value="${o.office_id}">
-            <span class="reg-reldocs-chip-title">${o.office_name}</span>
-            <button type="button" onclick="removeDrfSource(${o.office_id}, event)"><i class="fa-solid fa-xmark"></i></button>
-        </div>`).join('');
-}
-
-document.addEventListener('click', function (e) {
-    const widget = document.getElementById('drfSourceUnitWidget');
-    if (widget && !widget.contains(e.target)) {
-        document.getElementById('drfSourceResults').style.display = 'none';
-        closeDrfSourceSelectedPanel();
-    }
-});
+window.removeSourceOverlayItem = function (key, id) {
+    const config = window.__sourceOverlayConfigs[key];
+    if (!config) return;
+    config.removeItem(id);
+    refreshSourceOverlay(config);
+};
 
 document.addEventListener('DOMContentLoaded', renderRelatedDocsChips);
 
@@ -987,8 +1216,7 @@ function handleDocTypeChange() {
         if (el) el.value = '';
     });
 
-    drfSourceSelected = [];
-    renderDrfSourceChips();
+    if (window.__sourceWidgets.drf) window.__sourceWidgets.drf.reset();
     const drfSearchInput = document.getElementById('drfSourceUnitSearch');
     if (drfSearchInput) drfSearchInput.value = '';
 
@@ -1267,7 +1495,10 @@ function clearValidation() {
 }
 
 function markFieldError(fieldId, message) {
-    const field = fieldId ? document.getElementById(fieldId) : null;
+    // Fix 1: also search by [name] so dynamic hidden inputs are found
+    const field = fieldId
+        ? (document.getElementById(fieldId) || document.querySelector('[name="' + fieldId + '"]'))
+        : null;
 
     if (field) {
         field.classList.add("reg-input-error");
@@ -1279,14 +1510,13 @@ function markFieldError(fieldId, message) {
             parent.appendChild(err);
         }
     } else {
-        // Fallback for fields without IDs (like syllabi rows) — show a
-        // table-level error, first occurrence only.
+        // Fix 2: use appendChild — .reg-table-wrap is nested, not a direct child of #section-syllabi
         const syllabiSection = document.getElementById("section-syllabi");
         if (syllabiSection && !syllabiSection.querySelector('.reg-field-error')) {
             const err = document.createElement("div");
             err.className = "reg-field-error";
             err.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' + message;
-            syllabiSection.insertBefore(err, syllabiSection.querySelector('.reg-table-wrap') || syllabiSection.firstChild);
+            syllabiSection.appendChild(err);
         }
     }
 }
@@ -1388,7 +1618,7 @@ function validateDrfSection(errors) {
     requireField(errors, "drfTime", "Time Receipt is required.");
     requireField(errors, "drfTitle", "Document Title is required.");
 
-    if (drfSourceSelected.length === 0) {
+    if (!window.__sourceWidgets.drf || window.__sourceWidgets.drf.selected.length === 0) {
         errors.push({ field: "drfSourceUnitSearch", message: "Source Unit is required." });
     }
 }
@@ -1427,8 +1657,12 @@ function validateMasterlistSection(errors) {
     }
 
     requireField(errors, "masterlistNoOfPages", "No. of Pages is required.");
-    requireField(errors, "masterlistInCharge", "In-charge is required.");
-    requireField(errors, "masterlistSourceUnit", "Source Unit / Originator is required.");
+    if (!window.__sourceWidgets.masterlistOriginator || window.__sourceWidgets.masterlistOriginator.selected.length === 0) {
+        errors.push({ field: "masterlistOriginatorSearch", message: "Originator is required." });
+    }
+    if (!window.__sourceWidgets.masterlist || window.__sourceWidgets.masterlist.selected.length === 0) {
+        errors.push({ field: "masterlistSourceSearch", message: "Source Unit is required." });
+    }
     requireField(errors, "briefPurpose", "Brief Purpose is required.");
 
     const mlTimeDisplay = document.getElementById("masterlistTimeSpentDisplay");
@@ -1743,7 +1977,7 @@ function buildDrfReview(reviewContent) {
         { label: "DRF Date", value: formatInputDate("drfDate") },
         { label: "Receipt", value: formatInputDate("drfReceiptDate") + " " + getInputVal("drfTime") },
         { label: "Title", value: getInputVal("drfTitle") },
-        { label: "Source Unit", value: drfSourceSelected.length > 0 ? drfSourceSelected.map(o => o.office_name).join(', ') : null },
+        { label: "Source Unit", value: window.__sourceWidgets.drf?.selected.length > 0 ? window.__sourceWidgets.drf.selected.map(o => o.label).join(', ') : null },
         { label: "File", value: f.length > 0 ? f[0].name : null, isFile: true },
     ]);
 }
@@ -1784,8 +2018,8 @@ function buildMasterlistReview(reviewContent) {
         { label: "Effectivity", value: formatInputDate("masterlistEffectivityDate") },
         { label: "Revision No.", value: getInputVal("masterlistRevisionNo") },
         { label: "Pages", value: getInputVal("masterlistNoOfPages") },
-        { label: "In-charge", value: getInputVal("masterlistInCharge") },
-        { label: "Source Unit", value: getInputVal("masterlistSourceUnit") || null },
+        { label: "Originator", value: window.__sourceWidgets.masterlistOriginator?.selected.length > 0 ? window.__sourceWidgets.masterlistOriginator.selected.map(o => o.label).join(', ') : null },
+        { label: "Source Unit", value: window.__sourceWidgets.masterlist?.selected.length > 0 ? window.__sourceWidgets.masterlist.selected.map(i => i.label).join(', ') : null },
         { label: "Purpose", value: getInputVal("briefPurpose") },
         { label: "Related Docs", value: relatedDocsSelected.length > 0 ? relatedDocsSelected.map(d => d.doc_title).join(', ') : null },
         { label: "File", value: f.length > 0 ? f[0].name : null, isFile: true },

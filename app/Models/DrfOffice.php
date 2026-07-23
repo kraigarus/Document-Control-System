@@ -10,17 +10,17 @@ class DrfOffice extends Model
     protected $primaryKey = 'id';
 
     protected $fillable = [
-        'request_id',
+        'drf_id',
         'office_id',
     ];
 
-    public function request()
+    public function drf()
     {
-        return $this->belongsTo(DocumentRequest::class, 'request_id');
+        return $this->belongsTo(DocumentRequestForm::class, 'drf_id', 'drf_id');
     }
 
     public function office()
     {
-        return $this->belongsTo(Office::class, 'office_id');
+        return $this->belongsTo(Office::class, 'office_id', 'office_id');
     }
 }

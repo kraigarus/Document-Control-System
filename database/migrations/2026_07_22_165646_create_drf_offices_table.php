@@ -11,9 +11,8 @@ return new class extends Migration
         Schema::create('drf_offices', function (Blueprint $table) {
             $table->id();
 
-            // Foreign Key to Document Requests (DRF)
-            $table->foreignId('request_id')
-                  ->constrained('document_requests', 'request_id')
+            $table->foreignId('drf_id')
+                  ->constrained('document_request_form', 'drf_id')
                   ->cascadeOnDelete();
 
             // Foreign Key to Offices

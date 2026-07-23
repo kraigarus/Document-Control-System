@@ -374,11 +374,16 @@ body {
 .reg-card {
     background: var(--reg-surface);
     border: 1px solid var(--reg-border);
-    overflow: hidden;
+    /* overflow: hidden; */
     margin-bottom: 20px;
     box-shadow: var(--reg-shadow);
     animation: regFadeIn 0.3s ease forwards;
 }
+
+/* .reg-card.reg-panel-open {
+    position: relative;
+    z-index: 50;
+} */
 
 .reg-card-header {
     display: flex;
@@ -484,7 +489,7 @@ body {
 }
 
 .reg-ml-timespent label {
-    text-align: center;
+    font-size: 4px;
     width: 100%;
 }
 
@@ -842,7 +847,7 @@ body {
 .reg-reldocs-inputwrap {
     display: flex;
     align-items: center;
-    height: 44px;
+    height: 40px;
     border: 1.5px solid var(--reg-border);
     border-radius: var(--reg-radius-sm);
     background: var(--reg-surface);
@@ -857,7 +862,7 @@ body {
 .reg-reldocs-input {
     flex: 1;
     height: 90%;
-    border: none !important;
+    border: none;
     outline: none;
     background: transparent;
     box-shadow: none !important;
@@ -1012,6 +1017,32 @@ body {
 .reg-source-suggestions div:hover {
     background: var(--reg-accent-subtle, #f0f0f0);
 }
+
+.reg-inline-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+.reg-inline-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 6px 5px 10px;
+    background: var(--reg-accent-subtle);
+    border: 1px solid rgba(0,0,128,0.15);
+    border-radius: 14px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--reg-accent);
+}
+.reg-inline-chip button {
+    display: flex; align-items: center; justify-content: center;
+    width: 16px; height: 16px; border: none; border-radius: 50%;
+    background: rgba(0,0,128,0.1); color: var(--reg-accent);
+    font-size: 0.6rem; cursor: pointer;
+}
+.reg-inline-chip button:hover { background: var(--reg-error); color: #fff; }
 
 /* ══════════════════════════════════════════════
    GRIDS

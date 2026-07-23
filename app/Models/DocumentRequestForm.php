@@ -51,7 +51,7 @@ class DocumentRequestForm extends Model
 
     public function drfOffices()
     {
-        return $this->hasMany(DrfOffice::class, 'request_id', 'request_id');
+        return $this->hasMany(DrfOffice::class, 'drf_id', 'drf_id');
     }
 
     public function creator()

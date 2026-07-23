@@ -32,7 +32,6 @@ return new class extends Migration
                   ->constrained('offices', 'office_id');
             $table->string('originator_name')->nullable();
             $table->date('deadline')->nullable();
-            $table->string('in_charge')->nullable();
             $table->text('brief_purpose')->nullable();
             $table->string('scanned_masterlist')->nullable();
             $table->foreignId('created_by')

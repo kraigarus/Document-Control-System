@@ -369,7 +369,7 @@ class RegisterController extends Controller
 
                 $drfOfficeIds = array_filter($request->input('drfSourceUnit', []));
 
-                DocumentRequestForm::create([
+                $drf = DocumentRequestForm::create([
                     'checklist_id'     => 1,
                     'version_id'       => $versionId,
                     'request_id'       => $requestId,
@@ -386,8 +386,8 @@ class RegisterController extends Controller
 
                 foreach ($drfOfficeIds as $officeId) {
                     DrfOffice::create([
-                        'request_id' => $requestId,
-                        'office_id'  => $officeId,
+                        'drf_id'    => $drf->drf_id,
+                        'office_id' => $officeId,
                     ]);
                 }
             }
@@ -466,16 +466,19 @@ class RegisterController extends Controller
                     'revise_no'           => $request->masterlistRevisionNo,
                     'no_pages'            => $request->masterlistNoOfPages,
                     'office_id'           => null,
-                    'originator_name'     => null,
+                    'originator_name'     => $request->masterlistOriginator,
                     'deadline'            => $request->deadlineOfSubmission,
-                    'in_charge'           => $request->masterlistInCharge,
                     'brief_purpose'       => $request->briefPurpose,
                     'scanned_masterlist'  => $masterlistFile,
                     'created_by'          => auth()->id(),
                 ]);
 
                 // ── Origins (offices + person names from single comma-separated field) ──
-                $primaryOfficeId = $this->saveOrigins($masterlist, $request->input('masterlistSourceUnit'));
+                $primaryOfficeId = $this->saveOriginsFromArrays(
+                    $masterlist,
+                    $request->input('masterlistOfficeIds', []),
+                    $request->input('masterlistOriginatorNames', [])
+                );
                 if ($primaryOfficeId) {
                     $masterlist->update(['office_id' => $primaryOfficeId]);
                 }
@@ -694,6 +697,29 @@ class RegisterController extends Controller
         }
     }
 
+    private function saveOriginsFromArrays(MasterlistRegistration $masterlist, array $officeIds, array $originatorNames): ?int
+    {
+        $firstOfficeId = null;
+
+        foreach (array_filter($officeIds) as $officeId) {
+            MasterlistOrigin::create([
+                'masterlist_id'   => $masterlist->masterlist_id,
+                'office_id'       => (int) $officeId,
+                'originator_name' => null,
+            ]);
+            if ($firstOfficeId === null) $firstOfficeId = (int) $officeId;
+        }
+
+        foreach (array_filter($originatorNames) as $name) {
+            MasterlistOrigin::create([
+                'masterlist_id'   => $masterlist->masterlist_id,
+                'office_id'       => null,
+                'originator_name' => trim($name),
+            ]);
+        }
+
+        return $firstOfficeId;
+    }
 
     public function apiColleges()
     {
@@ -719,6 +745,13 @@ class RegisterController extends Controller
     {
         return response()->json(
             \App\Models\SchoolYear::orderBy('school_year')->get()
+        );
+    }
+
+    public function apiOriginators()
+    {
+        return response()->json(
+            \App\Models\Originator::orderBy('originator_name')->get()
         );
     }
     // ──────────────────────────────────────────────────────────
@@ -1152,11 +1185,10 @@ class RegisterController extends Controller
                     ]));
                 }
 
-                // Replace DRF offices
-                DrfOffice::where('request_id', $requestId)->delete();
+                DrfOffice::where('drf_id', $drf->drf_id)->delete();
                 foreach ($drfOfficeIds as $officeId) {
                     DrfOffice::create([
-                        'request_id' => $requestId,
+                        'drf_id'    => $drf->drf_id,
                         'office_id'  => $officeId,
                     ]);
                 }
@@ -1254,10 +1286,9 @@ class RegisterController extends Controller
                     'effectivity_date'    => $request->masterlistEffectivityDate,
                     'revise_no'           => $request->masterlistRevisionNo,
                     'no_pages'            => $request->masterlistNoOfPages,
-                    'office_id'           => null,          // ← reset, will be restored below
-                    'originator_name'     => null,
+                    'office_id'           => null,
+                    'originator_name'     => $request->masterlistOriginator,
                     'deadline'            => $request->deadlineOfSubmission,
-                    'in_charge'           => $request->masterlistInCharge,
                     'brief_purpose'       => $request->briefPurpose,
                     'scanned_masterlist'  => $masterlistFile,
                 ];
@@ -1273,7 +1304,11 @@ class RegisterController extends Controller
 
                 // ── Fix: replace origins AND restore primary office_id ──
                 MasterlistOrigin::where('masterlist_id', $masterlist->masterlist_id)->delete();
-                $primaryOfficeId = $this->saveOrigins($masterlist, $request->input('masterlistSourceUnit'));
+                $primaryOfficeId = $this->saveOriginsFromArrays(
+                    $masterlist,
+                    $request->input('masterlistOfficeIds', []),
+                    $request->input('masterlistOriginatorNames', [])
+                );
                 if ($primaryOfficeId) {
                     $masterlist->update(['office_id' => $primaryOfficeId]);
                 }
@@ -1587,9 +1622,11 @@ class RegisterController extends Controller
             $requestId = $docRequest->request_id;
 
             // DRF
-            $drfOffices = $drf ? DrfOffice::where('request_id', $id)->with('office')->get() : collect();
+            $drf = DocumentRequestForm::where('request_id', $requestId)->first();   // ← fetch it
+            $drfOffices = $drf ? DrfOffice::where('drf_id', $drf->drf_id)->with('office')->get() : collect();
             if ($drf) {
                 if ($drf->scanned_drf) $filesToDelete[] = $drf->scanned_drf;
+                DrfOffice::where('drf_id', $drf->drf_id)->delete();
                 $drf->delete();
             }
 

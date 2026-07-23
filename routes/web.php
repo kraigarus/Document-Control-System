@@ -95,6 +95,7 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::get('/api/semesters', [RegisterController::class, 'apiSemesters']);
     Route::get('/api/school-years', [RegisterController::class, 'apiSchoolYears']);
     Route::get('/api/documents/search', [RegisterController::class, 'apiSearchDocuments']);
+    Route::get('/api/originators', [RegisterController::class, 'apiOriginators']);
 
     // Register — Update
     Route::get('/register/update', [RegisterController::class, 'updateList'])->name('register.update');

@@ -324,18 +324,13 @@
                         <div class="reg-reldocs" id="drfSourceUnitWidget">
                             <div class="reg-reldocs-inputwrap">
                                 <input type="text" id="drfSourceUnitSearch" class="reg-reldocs-input"
-                                    placeholder="Type to search offices..."
-                                    autocomplete="off"
-                                    oninput="handleDrfSourceSearch(this)"
-                                    onfocus="handleDrfSourceFocus()">
-                                <button type="button" class="reg-reldocs-arrow-btn" onclick="toggleDrfSourceSelected(event)">
-                                    <i class="fa-solid fa-chevron-down" id="drfSourceArrowIcon"></i>
+                                    placeholder="Type to search offices..." autocomplete="off">
+                                <button type="button" class="reg-reldocs-arrow-btn" id="drfSourceArrowBtn">
+                                    <i class="fa-solid fa-chevron-down"></i>
                                 </button>
                             </div>
                             <div id="drfSourceResults" class="reg-reldocs-dropdown" style="display:none;"></div>
-                            <div id="drfSourceSelectedPanel" class="reg-reldocs-dropdown reg-reldocs-selected-panel" style="display:none;">
-                                <div id="drfSourceChips" class="reg-reldocs-chips"></div>
-                            </div>
+                            <div id="drfSourceInlineChips" class="reg-reldocs-dropdown reg-reldocs-selected-panel" style="display:none;"></div>
                         </div>
                     </div>
                 </div>
@@ -376,7 +371,7 @@
                         </div>
                     </div>
                     <div class="reg-field reg-ml-timespent">
-                        <label>Time Spent/Minute(s)</label>
+                        <label>Time Spent</label>
                         <input type="text" id="masterlistTimeSpentDisplay" readonly placeholder="--"
                             style="background: #f8fafc; cursor: default; font-weight: 700; text-align: center; font-size: 18px; height: 100%; min-height: 80px;">
                         <input type="hidden" id="masterlistTimeSpent" name="masterlistTimeSpent">
@@ -412,20 +407,32 @@
                     </div>
                     <div class="reg-field">
                         <label>Originator</label>
-                        <input type="text" id="masterlistInCharge" name="masterlistInCharge" placeholder="Name">
+                        <div class="reg-reldocs" id="masterlistOriginatorWidget">
+                            <div class="reg-reldocs-inputwrap">
+                                <input type="text" id="masterlistOriginatorSearch" class="reg-reldocs-input"
+                                    placeholder="Type a name"
+                                    autocomplete="off">
+                                <button type="button" class="reg-reldocs-arrow-btn" id="masterlistOriginatorArrowBtn">
+                                    <i class="fa-solid fa-chevron-down"></i>
+                                </button>
+                            </div>
+                            <div id="masterlistOriginatorResults" class="reg-reldocs-dropdown" style="display:none;"></div>
+                            <div id="masterlistOriginatorInlineChips" class="reg-reldocs-dropdown reg-reldocs-selected-panel" style="display:none;"></div>
+                        </div>
                     </div>
                     <div class="reg-field">
                         <label>Source Unit</label>
-                        <div class="reg-source-wrap">
-                            <input type="hidden" id="masterlistOfficeId" name="masterlistOfficeId" value="">
-                            <input type="text" id="masterlistSourceUnit" name="masterlistSourceUnit"
-                                value="{{ old('masterlistSourceUnit', $masterlistSourceUnit ?? '') }}"
-                                placeholder="e.g. Office of the President, Juan dela Cruz"
-                                autocomplete="off"
-                                oninput="handleSourceSearch(this, 'masterlistSourceResults')"
-                                onfocus="handleSourceSearch(this, 'masterlistSourceResults')">
-                            <div id="masterlistSourceResults" class="reg-source-suggestions"
-                                style="display:none;"></div>
+                        <div class="reg-reldocs" id="masterlistSourceWidget">
+                            <div class="reg-reldocs-inputwrap">
+                                <input type="text" id="masterlistSourceSearch" class="reg-reldocs-input"
+                                    placeholder="Type office name"
+                                    autocomplete="off">
+                                <button type="button" class="reg-reldocs-arrow-btn" id="masterlistSourceArrowBtn">
+                                    <i class="fa-solid fa-chevron-down"></i>
+                                </button>
+                            </div>
+                            <div id="masterlistSourceSuggestions" class="reg-reldocs-dropdown" style="display:none;"></div>
+                            <div id="masterlistSourceInlineChips" class="reg-reldocs-dropdown reg-reldocs-selected-panel" style="display:none;"></div>
                         </div>
                     </div>
                 </div>
