@@ -16,6 +16,7 @@ class Syllabi extends Model
         'program_id',
         'semester_id',
         'school_year_id',
+        'drf_id',
         'course_name',
         'syllabi_availability',
         'no_copies',
@@ -23,11 +24,6 @@ class Syllabi extends Model
         'no_pages',
         'date_received',
         'time_received',
-        'drf_availability',
-        'drf_no',
-        'drf_date',
-        'drf_received_date',
-        'scanned_drf',
         'registered',
         'date_of_registration',
         'time_of_registration',
@@ -36,10 +32,7 @@ class Syllabi extends Model
 
     protected $casts = [
         'syllabi_availability' => 'boolean',
-        'drf_availability'     => 'boolean',
         'registered'           => 'boolean',
-        'drf_date'             => 'date',
-        'drf_received_date'    => 'date',
         'date_received'        => 'date',
         'date_of_registration' => 'date',
     ];
@@ -68,5 +61,10 @@ class Syllabi extends Model
     public function request(): BelongsTo
     {
         return $this->belongsTo(DocumentRequest::class, 'request_id', 'request_id');
+    }
+
+    public function drf(): BelongsTo
+    {
+        return $this->belongsTo(DocumentRequestForm::class, 'drf_id', 'drf_id');
     }
 }

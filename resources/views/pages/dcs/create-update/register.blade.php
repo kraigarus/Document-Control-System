@@ -35,6 +35,22 @@
     </div>
     @endif
 
+    @if($errors->any())
+    <div class="reg-toast reg-toast-error" id="errorToast">
+        <div class="reg-toast-icon">
+            <i class="fa-solid fa-circle-exclamation"></i>
+        </div>
+        <div class="reg-toast-content">
+            <span class="reg-toast-title">Error</span>
+            <span class="reg-toast-message">{{ $errors->first() }}</span>
+        </div>
+        <button type="button" class="reg-toast-close" onclick="closeToast()">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+        <div class="reg-toast-progress"></div>
+    </div>
+    @endif
+
     @if(session('error'))
     <div class="reg-toast reg-toast-error" id="errorToast">
         <div class="reg-toast-icon">
@@ -241,7 +257,7 @@
                 <div class="reg-wizard-steps" id="syllabiStepIndicator">
                     <div class="reg-wizard-step is-active" data-step="1"><span>1</span> Course Info</div>
                     <div class="reg-wizard-step" data-step="2"><span>2</span> DRF</div>
-                    <div class="reg-wizard-step" data-step="3"><span>3</span> Registration</div>
+                    <div class="reg-wizard-step" data-step="3"><span>3</span>Masterlist  Registration</div>
                 </div>
 
                 <div class="reg-field">
@@ -250,7 +266,6 @@
                             <thead>
                                 <tr>
                                     <th class="col-pinned">Course Name</th>
-
                                     <th class="col-step1">Syllabi Availability</th>
                                     <th class="col-step1">No. Copies</th>
                                     <th class="col-step1">Originator</th>
@@ -261,15 +276,15 @@
                                     <th class="col-step2">DRF Availability</th>
                                     <th class="col-step2">DRF No.</th>
                                     <th class="col-step2">DRF Date</th>
-                                    <th class="col-step2">DRF Received</th>
-                                    <th class="col-step2">Scanned DRF</th>
+                                    <th class="col-step2">DRF Received Date</th>
 
                                     <th class="col-step3">Registered</th>
                                     <th class="col-step3">Date of Registration</th>
                                     <th class="col-step3">Time of Registration</th>
                                     <th class="col-step3">Time Spent</th>
+                                    <th class="col-step3">Scanned Registration Copy</th>
 
-                                    <th></th>
+                                    <th class="col-pinned"></th>
                                 </tr>
                             </thead>
                             <tbody id="syllabiTableBody"></tbody>
@@ -278,6 +293,9 @@
                     <button type="button" id="btnAddSyllabiRow" onclick="addSyllabiRow()">
                         <i class="fa-solid fa-plus"></i> Add Course
                     </button>
+                    <div class="reg-syllabi-copies-total">
+                        Total No. of Copies: <span id="totalSyllabiCopies">0</span>
+                    </div>
                 </div>
 
                 <div class="reg-wizard-nav">

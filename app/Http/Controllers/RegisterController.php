@@ -271,9 +271,7 @@ class RegisterController extends Controller
                 'doc_type_id'          => 'required|integer|exists:doc_types,doc_type_id',
                 'version_id'           => 'required|integer|exists:version_type,version_id',
                 'approval_status'      => 'required|in:applicable,not_applicable',
-                'masterlistRevisionNo' => 'nullable|integer|min:0|max:0',
-            ], [
-                'masterlistRevisionNo.max' => 'A newly registered document must start at Revision 0.',
+                'masterlistRevisionNo' => 'nullable|integer|min:0',
             ]);
 
             // ── Prevent duplicate registration ──
@@ -522,17 +520,8 @@ class RegisterController extends Controller
                         if (empty($courseName)) {
                             return back()->withInput()->with('error', "Syllabi Row {$rowNum}: Course Name is required.");
                         }
-                        if (empty($request->syllabiOriginator[$i])) {
-                            return back()->withInput()->with('error', "Syllabi Row {$rowNum}: Originator is required.");
-                        }
                         if (empty($request->syllabiNoPages[$i]) || $request->syllabiNoPages[$i] <= 0) {
                             return back()->withInput()->with('error', "Syllabi Row {$rowNum}: No. of Pages must be greater than 0.");
-                        }
-                        if (empty($request->syllabiDateReceived[$i])) {
-                            return back()->withInput()->with('error', "Syllabi Row {$rowNum}: Date Received is required.");
-                        }
-                        if (empty($request->syllabiTimeReceived[$i])) {
-                            return back()->withInput()->with('error', "Syllabi Row {$rowNum}: Time Received is required.");
                         }
                         if (empty($request->syllabiDrfNo[$i])) {
                             return back()->withInput()->with('error', "Syllabi Row {$rowNum}: DRF No. is required.");
@@ -544,41 +533,37 @@ class RegisterController extends Controller
                             return back()->withInput()->with('error', "Syllabi Row {$rowNum}: DRF Received Date is required.");
                         }
 
-                        // Handle file upload
-                        $scannedDrf = null;
-                        if ($request->hasFile('syllabiScannedDrf') && isset($request->file('syllabiScannedDrf')[$i])) {
-                            $file = $request->file('syllabiScannedDrf')[$i];
-                            $ext = strtolower($file->getClientOriginalExtension());
-                            if (!in_array($ext, ['pdf', 'docx'])) {
-                                return back()->withInput()->with('error', "Syllabi Row {$rowNum}: Only .pdf and .docx files are accepted.");
-                            }
-                            if ($file->getSize() > 10 * 1024 * 1024) {
-                                return back()->withInput()->with('error', "Syllabi Row {$rowNum}: File size must not exceed 10MB.");
-                            }
-                            $scannedDrf = $file->store('scans/syllabi', 'public');
-                            $uploadedFiles[] = $scannedDrf;
-                        }
+                        // ── NEW: each course-copy-row gets its own DocumentRequestForm row,
+                        // scoped via drf_id — does NOT collide with Section 1's DRF lookup ──
+                        $syllabiDrf = DocumentRequestForm::create([
+                            'checklist_id'     => 1,
+                            'version_id'       => $versionId,
+                            'request_id'       => $requestId,
+                            'doc_type_id'      => $docTypeId,
+                            'drf_no'           => $request->syllabiDrfNo[$i],
+                            'drf_date'         => $request->syllabiDrfDate[$i],
+                            'drf_receipt_date' => $request->syllabiDrfReceived[$i],
+                            'doc_title'        => $courseName,
+                            'scanned_drf'      => null,
+                            'created_by'       => auth()->id(),
+                        ]);
 
-                        // Actually save the row
                         Syllabi::create([
                             'request_id'            => $requestId,
                             'college_id'            => $request->college_id,
                             'program_id'            => $request->program_id,
                             'semester_id'           => $request->semester_id,
                             'school_year_id'        => $request->school_year_id,
+                            'drf_id'                => $syllabiDrf->drf_id,
                             'course_name'           => $courseName,
-                            'syllabi_availability'  => true,
-                            'no_copies'             => $request->syllabiNoCopies[$i] ?? null,
+                            'syllabi_availability'  => ($request->syllabiAvailability[$i] ?? 'not available'),
+                            'no_copies'             => $request->syllabiCopies[$i] ?? null,
                             'originator'            => $request->syllabiOriginator[$i] ?? null,
                             'no_pages'              => $request->syllabiNoPages[$i],
                             'date_received'         => $request->syllabiDateReceived[$i],
                             'time_received'         => $request->syllabiTimeReceived[$i],
-                            'drf_availability'      => true,
-                            'drf_no'                => $request->syllabiDrfNo[$i],
-                            'drf_date'              => $request->syllabiDrfDate[$i],
-                            'drf_received_date'     => $request->syllabiDrfReceived[$i],
-                            'scanned_drf'           => $scannedDrf,
-                            'registered'            => $request->has("syllabiRegistered.{$i}"),
+                            'drf_availability'      => ($request->syllabiDrfAvailability[$i] ?? 'not available'),
+                            'registered'            => ($request->syllabiIsRegistered[$i] ?? 'not registered'),
                             'date_of_registration'  => $request->syllabiRegDate[$i] ?? null,
                             'time_of_registration'  => $request->syllabiRegTime[$i] ?? null,
                             'time_spent'            => $request->syllabiTimeSpent[$i] ?? null,
@@ -783,14 +768,31 @@ class RegisterController extends Controller
                     $result['matches']->pluck('request_id')
                 )->where('doc_no', $docNo)->orderByDesc('revise_no')->get();
 
+                // ── NEW: pull the last revision's distribution offices,
+                // so they can be pre-filled into Retrieval for this revision ──
+                $latestDistribution = DocumentDistribution::where('request_id', $latest->request_id)->first();
+                $latestDistributionOffices = [];
+                if ($latestDistribution) {
+                    $latestDistributionOffices = DistributionOffice::where('distribution_id', $latestDistribution->distribution_id)
+                        ->with('office')
+                        ->get()
+                        ->map(fn ($o) => [
+                            'office_id'   => $o->office_id,
+                            'office_name' => $o->office->office_name ?? 'Unknown Office',
+                            'copies'      => $o->copies ?? 1,
+                        ])
+                        ->values();
+                }
+
                 return response()->json([
-                    'exists'            => true,
-                    'message'           => 'Document found.',
-                    'next_rev'          => $latestRev + 1,
-                    'latest_rev'        => $latestRev,
-                    'latest_title'      => $latest->doc_title,
-                    'latest_originator' => $latest->originator_name,
-                    'revision_count'    => $registrations->count(),
+                    'exists'                       => true,
+                    'message'                      => 'Document found.',
+                    'next_rev'                     => $latestRev + 1,
+                    'latest_rev'                   => $latestRev,
+                    'latest_title'                 => $latest->doc_title,
+                    'latest_originator'            => $latest->originator_name,
+                    'revision_count'               => $registrations->count(),
+                    'latest_distribution_offices'  => $latestDistributionOffices, // ← NEW
                 ]);
             }
         }
@@ -1371,35 +1373,36 @@ class RegisterController extends Controller
                             return back()->withInput()->with('error', "Syllabi Row {$rowNum}: DRF Received Date is required.");
                         }
 
-                        $scannedDrf = null;
-                        if ($request->hasFile('syllabiScannedDrf') && isset($request->file('syllabiScannedDrf')[$i])) {
-                            $file = $request->file('syllabiScannedDrf')[$i];
-                            $ext = strtolower($file->getClientOriginalExtension());
-                            if (!in_array($ext, ['pdf', 'docx'])) {
-                                return back()->withInput()->with('error', "Syllabi Row {$rowNum}: Only .pdf and .docx files are accepted.");
-                            }
-                            if ($file->getSize() > 10 * 1024 * 1024) {
-                                return back()->withInput()->with('error', "Syllabi Row {$rowNum}: File size must not exceed 10MB.");
-                            }
-                            $scannedDrf = $file->store('scans/syllabi', 'public');
-                            $uploadedFiles[] = $scannedDrf;
-                        }
+                        // ── NEW: each course-copy-row gets its own DocumentRequestForm row,
+                        // scoped via drf_id — does NOT collide with Section 1's DRF lookup ──
+                        $syllabiDrf = DocumentRequestForm::create([
+                            'checklist_id'     => 1,
+                            'version_id'       => $versionId,
+                            'request_id'       => $requestId,
+                            'doc_type_id'      => $docTypeId,
+                            'drf_no'           => $request->syllabiDrfNo[$i],
+                            'drf_date'         => $request->syllabiDrfDate[$i],
+                            'drf_receipt_date' => $request->syllabiDrfReceived[$i],
+                            'doc_title'        => $courseName,
+                            'scanned_drf'      => null,
+                            'created_by'       => auth()->id(),
+                        ]);
 
                         Syllabi::create([
                             'request_id'            => $requestId,
+                            'college_id'            => $request->college_id,
+                            'program_id'            => $request->program_id,
+                            'semester_id'           => $request->semester_id,
+                            'school_year_id'        => $request->school_year_id,
+                            'drf_id'                => $syllabiDrf->drf_id,       // ← link, not columns
                             'course_name'           => $courseName,
-                            'syllabi_availability'  => $request->has("syllabiAvailability.{$i}"),
-                            'no_copies'             => $request->syllabiNoCopies[$i] ?? null,
+                            'syllabi_availability'  => ($request->syllabiAvailability[$i] ?? '0') === '1',
+                            'no_copies'             => $request->syllabiCopies[$i] ?? null,
                             'originator'            => $request->syllabiOriginator[$i] ?? null,
                             'no_pages'              => $request->syllabiNoPages[$i],
-                            'date_received'         => $request->syllabiDateReceived[$i] ?? null,
-                            'time_received'         => $request->syllabiTimeReceived[$i] ?? null,
-                            'drf_availability'      => $request->has("syllabiDrfAvailability.{$i}"),
-                            'drf_no'                => $request->syllabiDrfNo[$i] ?? null,
-                            'drf_date'              => $request->syllabiDrfDate[$i] ?? null,
-                            'drf_received_date'     => $request->syllabiDrfReceived[$i] ?? null,
-                            'scanned_drf'           => $scannedDrf,
-                            'registered'            => $request->has("syllabiRegistered.{$i}"),
+                            'date_received'         => $request->syllabiDateReceived[$i],
+                            'time_received'         => $request->syllabiTimeReceived[$i],
+                            'registered'            => ($request->syllabiIsRegistered[$i] ?? '0') === '1',
                             'date_of_registration'  => $request->syllabiRegDate[$i] ?? null,
                             'time_of_registration'  => $request->syllabiRegTime[$i] ?? null,
                             'time_spent'            => $request->syllabiTimeSpent[$i] ?? null,

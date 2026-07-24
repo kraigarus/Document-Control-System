@@ -943,7 +943,7 @@ body {
 /* Selected panel — highlighted like the reference screenshot */
 .reg-reldocs-selected-panel {
     padding: 10px;
-    background: var(--reg-accent-subtle);
+    background: var(--reg-surface);
 }
 
 .reg-reldocs-chips {
@@ -1509,6 +1509,44 @@ body {
 .reg-wizard-table[data-active-step="1"] .col-step1 { display: table-cell; }
 .reg-wizard-table[data-active-step="2"] .col-step2 { display: table-cell; }
 .reg-wizard-table[data-active-step="3"] .col-step3 { display: table-cell; }
+
+/* ═══ SYLLABI — Checkbox-only cells ═══ */
+.syllabi-check-cell {
+    text-align: center;
+    vertical-align: middle;
+}
+
+.syllabi-check-cell input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--reg-accent);
+    cursor: pointer;
+    margin: 0;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+/* ═══ SYLLABI — Total Copies ═══ */
+.reg-syllabi-copies-total {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 12px 0 4px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--reg-text);
+}
+
+.reg-syllabi-copies-total span {
+    margin-left: 10px;
+    min-width: 32px;
+    text-align: center;
+    padding: 4px 12px;
+    background: var(--reg-accent-subtle);
+    color: var(--reg-accent);
+    border-radius: 6px;
+    font-size: 0.9rem;
+}
 
 /* ══════════════════════════════════════════════
    SPLIT LAYOUT — Retrieval & Distribution

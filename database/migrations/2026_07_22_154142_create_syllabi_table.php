@@ -33,10 +33,6 @@ return new class extends Migration
 
             // DRF (Step 2)
             $table->boolean('drf_availability')->default(false);
-            $table->string('drf_no', 100)->nullable();
-            $table->date('drf_date')->nullable();
-            $table->date('drf_received_date')->nullable();
-            $table->string('scanned_drf')->nullable();
 
             // Registration (Step 3)
             $table->boolean('registered')->default(false);
