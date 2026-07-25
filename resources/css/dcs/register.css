@@ -917,6 +917,18 @@ body {
     animation: fadeSlideUp 0.16s ease;
 }
 
+/* ═══ DROPDOWN STACKING FIX ═══ */
+#section-syllabi,
+#section-3 {
+    position: relative;
+    z-index: 10;
+}
+
+#section-1 {
+    position: relative;
+    z-index: 1;
+}
+
 /* Search results list */
 .reg-reldocs-dropdown div {
     padding: 9px 14px;

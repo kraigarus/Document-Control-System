@@ -1485,8 +1485,8 @@ window.toggleSection = function (checklistId, show) {
     const sectionId = sectionMap[checklistId];
     if (!sectionId) return;
 
-    // In syllabi mode, never show the standalone DRF section
-    if (checklistId === 1 && window.__isSyllabiMode) return;
+    // In syllabi mode, neither DRF nor Masterlist gets its own standalone section
+    if ((checklistId === 1 || checklistId === 3) && window.__isSyllabiMode) return;
 
     const el = document.getElementById(sectionId);
     if (!el) return;
@@ -2392,7 +2392,7 @@ function buildSyllabiGroupFirstRow(groupId, rowspan) {
                 class="syllabi-merged-course" oninput="syncSyllabiMergedFields('${groupId}')">
         </td>
         <td class="col-step1" rowspan="${rowspan}">
-            <input type="hidden" name="syllabiAvailability[]" value="0" class="syllabi-merged-availability-hidden">
+            <input type="hidden" name="syllabiAvailability[]" value="not available" class="syllabi-merged-availability-hidden">
             <label class="reg-checkbox-wrap">
                 <input type="checkbox" class="syllabi-merged-availability" onchange="syncSyllabiMergedFields('${groupId}')">
             </label>
@@ -2440,7 +2440,7 @@ window.syncSyllabiMergedFields = function (groupId) {
     const courseVal = firstRow.querySelector('.syllabi-merged-course').value;
     const availCheckbox = firstRow.querySelector('.syllabi-merged-availability');
     const availHidden = firstRow.querySelector('.syllabi-merged-availability-hidden');
-    availHidden.value = availCheckbox.checked ? '1' : '0';
+    availHidden.value = availCheckbox.checked ? 'registered' : 'not registered';
     const copiesVal = firstRow.querySelector('.syllabi-merged-copies').value;
 
     document.querySelectorAll(`#syllabiTableBody tr[data-group="${groupId}"]:not([data-is-first="true"])`)
@@ -2509,7 +2509,7 @@ window.toggleSyllabiRegFields = function (checkbox) {
     const regTime = row.querySelector('[name="syllabiRegTime[]"]');
     const hidden = checkbox.previousElementSibling; // syllabiIsRegistered[] hidden mirror
 
-    hidden.value = checkbox.checked ? '1' : '0';
+    hidden.value = checkbox.checked ? 'registered' : 'not registered';
     regDate.disabled = !checkbox.checked;
     regTime.disabled = !checkbox.checked;
     if (!checkbox.checked) {

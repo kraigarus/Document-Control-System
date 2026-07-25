@@ -282,7 +282,7 @@
                                     <th class="col-step3">Date of Registration</th>
                                     <th class="col-step3">Time of Registration</th>
                                     <th class="col-step3">Time Spent</th>
-                                    <th class="col-step3">Scanned Registration Copy</th>
+                                    <th class="col-step3">Scanned DRF</th>
 
                                     <th class="col-pinned"></th>
                                 </tr>

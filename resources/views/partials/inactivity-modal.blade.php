@@ -11,7 +11,8 @@
     <style>
         .inactivity-overlay {
             position: fixed;
-            inset: 0; background: rgba(0,0,0,0.6);
+            inset: 0;
+            background: rgba(0,0,0,0.6);
             z-index: 9998;
         }
         .inactivity-box {
@@ -42,60 +43,75 @@
 
     <script>
     (function () {
-        const TIMEOUT_SECONDS = 15 * 60; // 15 minutes
-        const WARNING_SECONDS = 60;
-        const WARNING_AT = TIMEOUT_SECONDS - WARNING_SECONDS; // show warning at 14 min
+        const TIMEOUT_MS     = 15 * 60 * 1000; // 15 minutes in milliseconds
+        const WARNING_MS     = 60  * 1000;      // 60 seconds warning
+        const WARNING_AT_MS  = TIMEOUT_MS - WARNING_MS;
+        const CHECK_INTERVAL = 2000;            // check every 2 seconds
 
-        const modal = document.getElementById('inactivityModal');
-        const countdownEl = document.getElementById('inactivityCountdown');
-        const stayBtn = document.getElementById('stayLoggedIn');
+        const modal        = document.getElementById('inactivityModal');
+        const countdownEl  = document.getElementById('inactivityCountdown');
+        const stayBtn      = document.getElementById('stayLoggedIn');
 
-        let idleSeconds = 0;
-        let countdownInterval;
-        let tickInterval;
+        let lastActivityAt = Date.now();
+        let checking       = null;
+        let warningShown   = false;
 
-        // Tick every second — simpler and more reliable than setTimeout chains
-        function startIdleCounter() {
-            tickInterval = setInterval(function () {
-                idleSeconds++;
+        function startChecker() {
+            checking = setInterval(function () {
+                var elapsed = Date.now() - lastActivityAt;
 
-                if (idleSeconds === WARNING_AT) {
-                    showModal();
+                // Show warning when approaching timeout
+                if (elapsed >= WARNING_AT_MS && !warningShown) {
+                    warningShown = true;
+                    modal.style.display = 'block';
                 }
 
-                if (idleSeconds >= TIMEOUT_SECONDS) {
-                    clearInterval(tickInterval);
-                    clearInterval(countdownInterval);
+                // Update countdown while warning is visible
+                if (warningShown) {
+                    var remaining = Math.max(0, Math.ceil((TIMEOUT_MS - elapsed) / 1000));
+                    countdownEl.textContent = remaining;
+                }
+
+                // Time's up — force logout
+                if (elapsed >= TIMEOUT_MS) {
+                    clearInterval(checking);
                     window.location.href = '{{ route("login") }}';
                 }
-            }, 1000);
+            }, CHECK_INTERVAL);
         }
 
-        function showModal() {
-            let remaining = WARNING_SECONDS;
-            countdownEl.textContent = remaining;
-            modal.style.display = 'block';
-
-            countdownInterval = setInterval(function () {
-                remaining--;
-                countdownEl.textContent = remaining;
-                if (remaining <= 0) clearInterval(countdownInterval);
-            }, 1000);
-        }
-
-        function resetIdle() {
-            idleSeconds = 0;
+        function resetActivity() {
+            lastActivityAt = Date.now();
+            warningShown   = false;
             modal.style.display = 'none';
-            clearInterval(countdownInterval);
         }
 
-        // Only track meaningful interaction events (not scroll/mousemove)
+        // Track meaningful interactions only
         ['mousedown', 'keydown', 'touchstart', 'click'].forEach(function (evt) {
-            document.addEventListener(evt, resetIdle, { passive: true });
+            document.addEventListener(evt, resetActivity, { passive: true });
+        });
+
+        // Also reset when user comes BACK to the tab — but only if they
+        // interact. Just switching back alone doesn't count as activity.
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) {
+                // Tab is active again — the checker will immediately see
+                // the real elapsed time and decide if we need to logout.
+                // Force one check right away so it's instant:
+                var elapsed = Date.now() - lastActivityAt;
+                if (elapsed >= TIMEOUT_MS) {
+                    clearInterval(checking);
+                    window.location.href = '{{ route("login") }}';
+                } else if (elapsed >= WARNING_AT_MS && !warningShown) {
+                    warningShown = true;
+                    modal.style.display = 'block';
+                    var remaining = Math.max(0, Math.ceil((TIMEOUT_MS - elapsed) / 1000));
+                    countdownEl.textContent = remaining;
+                }
+            }
         });
 
         stayBtn.addEventListener('click', function () {
-            // Ping server to refresh session
             fetch('{{ route("keep-alive") }}', {
                 method: 'POST',
                 headers: {
@@ -104,16 +120,16 @@
                 }
             }).then(function (res) {
                 if (res.ok) {
-                    resetIdle();
+                    resetActivity();
                 } else {
                     window.location.href = '{{ route("login") }}';
                 }
             }).catch(function () {
-                resetIdle(); // network error — assume fine
+                resetActivity();
             });
         });
 
-        startIdleCounter();
+        startChecker();
     })();
     </script>
 @endif

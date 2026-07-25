@@ -11,16 +11,18 @@ return new class extends Migration
         Schema::create('syllabi', function (Blueprint $table) {
             $table->id('syllabi_id');
 
-            // Primary Document Request Relationship
             $table->foreignId('request_id')
                   ->constrained('document_requests', 'request_id')
                   ->cascadeOnDelete();
 
-            // Syllabi Context Foreign Keys
             $table->foreignId('college_id')->nullable()->constrained('colleges', 'college_id')->nullOnDelete();
             $table->foreignId('program_id')->nullable()->constrained('programs', 'program_id')->nullOnDelete();
             $table->foreignId('semester_id')->nullable()->constrained('semesters', 'semester_id')->nullOnDelete();
             $table->foreignId('school_year_id')->nullable()->constrained('school_years', 'school_year_id')->nullOnDelete();
+
+            $table->foreignId('drf_id')->nullable()
+                  ->constrained('document_request_form', 'drf_id')
+                  ->nullOnDelete();
 
             // Course Info (Step 1)
             $table->string('course_name')->nullable();
@@ -31,7 +33,7 @@ return new class extends Migration
             $table->date('date_received')->nullable();
             $table->time('time_received')->nullable();
 
-            // DRF (Step 2)
+            // DRF (Step 2) — physical-availability flag, independent of drf_id being set
             $table->boolean('drf_availability')->default(false);
 
             // Registration (Step 3)
@@ -40,7 +42,6 @@ return new class extends Migration
             $table->time('time_of_registration')->nullable();
             $table->integer('time_spent')->nullable();
 
-            // Standard Laravel created_at & updated_at
             $table->timestamps();
         });
     }

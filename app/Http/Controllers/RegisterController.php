@@ -436,7 +436,7 @@ class RegisterController extends Controller
             }
 
             // ── 4. Masterlist (Section 3) ──
-            if ($request->filled('masterlistDocNo')) {
+            if (!$isSyllabi && $request->filled('masterlistDocNo')) {
                 $masterlistFile = null;
                 if ($request->hasFile('uploadScannedCopy')) {
                     $masterlistFile = $request->file('uploadScannedCopy')->store('scans/masterlist', 'public');
@@ -548,6 +548,34 @@ class RegisterController extends Controller
                             'created_by'       => auth()->id(),
                         ]);
 
+                        $scannedDrf = null;
+                        if ($request->hasFile('syllabiScannedDrf') && isset($request->file('syllabiScannedDrf')[$i])) {
+                            $file = $request->file('syllabiScannedDrf')[$i];
+                            $ext = strtolower($file->getClientOriginalExtension());
+                            if (!in_array($ext, ['pdf', 'docx'])) {
+                                return back()->withInput()->with('error', "Syllabi Row {$rowNum}: Only .pdf and .docx files are accepted.");
+                            }
+                            if ($file->getSize() > 10 * 1024 * 1024) {
+                                return back()->withInput()->with('error', "Syllabi Row {$rowNum}: File size must not exceed 10MB.");
+                            }
+                            $scannedDrf = $file->store('scans/syllabi-drf', 'public');
+                            $uploadedFiles[] = $scannedDrf;
+                        }
+
+                        $scannedRegistration = null;
+                        if ($request->hasFile('syllabiScannedRegistration') && isset($request->file('syllabiScannedRegistration')[$i])) {
+                            $file = $request->file('syllabiScannedRegistration')[$i];
+                            $ext = strtolower($file->getClientOriginalExtension());
+                            if (!in_array($ext, ['pdf', 'docx'])) {
+                                return back()->withInput()->with('error', "Syllabi Row {$rowNum}: Registration copy — only .pdf and .docx files are accepted.");
+                            }
+                            if ($file->getSize() > 10 * 1024 * 1024) {
+                                return back()->withInput()->with('error', "Syllabi Row {$rowNum}: Registration copy — file size must not exceed 10MB.");
+                            }
+                            $scannedRegistration = $file->store('scans/syllabi-registration', 'public');
+                            $uploadedFiles[] = $scannedRegistration;
+                        }
+
                         Syllabi::create([
                             'request_id'            => $requestId,
                             'college_id'            => $request->college_id,
@@ -567,6 +595,7 @@ class RegisterController extends Controller
                             'date_of_registration'  => $request->syllabiRegDate[$i] ?? null,
                             'time_of_registration'  => $request->syllabiRegTime[$i] ?? null,
                             'time_spent'            => $request->syllabiTimeSpent[$i] ?? null,
+                            'scanned_registration'  => $scannedRegistration, 
                         ]);
                     }
                 }
@@ -1346,9 +1375,11 @@ class RegisterController extends Controller
                 }
 
                 // Delete old syllabi rows (and track their files)
-                $oldSyllabi = Syllabi::where('request_id', $requestId)->get();
+                $oldSyllabi = Syllabi::with('drf')->where('request_id', $requestId)->get();
                 foreach ($oldSyllabi as $old) {
-                    if ($old->scanned_drf) $filesToDelete[] = $old->scanned_drf;
+                    if ($old->drf && $old->drf->scanned_drf) $filesToDelete[] = $old->drf->scanned_drf;
+                    if ($old->scanned_registration) $filesToDelete[] = $old->scanned_registration;
+                    if ($old->drf) $old->drf->delete();
                 }
                 $oldSyllabi->each->delete();
 
@@ -1388,6 +1419,34 @@ class RegisterController extends Controller
                             'created_by'       => auth()->id(),
                         ]);
 
+                        $scannedDrf = null;
+                        if ($request->hasFile('syllabiScannedDrf') && isset($request->file('syllabiScannedDrf')[$i])) {
+                            $file = $request->file('syllabiScannedDrf')[$i];
+                            $ext = strtolower($file->getClientOriginalExtension());
+                            if (!in_array($ext, ['pdf', 'docx'])) {
+                                return back()->withInput()->with('error', "Syllabi Row {$rowNum}: Only .pdf and .docx files are accepted.");
+                            }
+                            if ($file->getSize() > 10 * 1024 * 1024) {
+                                return back()->withInput()->with('error', "Syllabi Row {$rowNum}: File size must not exceed 10MB.");
+                            }
+                            $scannedDrf = $file->store('scans/syllabi-drf', 'public');
+                            $uploadedFiles[] = $scannedDrf;
+                        }
+
+                        $scannedRegistration = null;
+                        if ($request->hasFile('syllabiScannedRegistration') && isset($request->file('syllabiScannedRegistration')[$i])) {
+                            $file = $request->file('syllabiScannedRegistration')[$i];
+                            $ext = strtolower($file->getClientOriginalExtension());
+                            if (!in_array($ext, ['pdf', 'docx'])) {
+                                return back()->withInput()->with('error', "Syllabi Row {$rowNum}: Registration copy — only .pdf and .docx files are accepted.");
+                            }
+                            if ($file->getSize() > 10 * 1024 * 1024) {
+                                return back()->withInput()->with('error', "Syllabi Row {$rowNum}: Registration copy — file size must not exceed 10MB.");
+                            }
+                            $scannedRegistration = $file->store('scans/syllabi-registration', 'public');
+                            $uploadedFiles[] = $scannedRegistration;
+                        }
+
                         Syllabi::create([
                             'request_id'            => $requestId,
                             'college_id'            => $request->college_id,
@@ -1396,16 +1455,18 @@ class RegisterController extends Controller
                             'school_year_id'        => $request->school_year_id,
                             'drf_id'                => $syllabiDrf->drf_id,       // ← link, not columns
                             'course_name'           => $courseName,
-                            'syllabi_availability'  => ($request->syllabiAvailability[$i] ?? '0') === '1',
+                            'syllabi_availability'  => ($request->syllabiAvailability[$i] ?? 'not available'),
                             'no_copies'             => $request->syllabiCopies[$i] ?? null,
                             'originator'            => $request->syllabiOriginator[$i] ?? null,
                             'no_pages'              => $request->syllabiNoPages[$i],
                             'date_received'         => $request->syllabiDateReceived[$i],
                             'time_received'         => $request->syllabiTimeReceived[$i],
-                            'registered'            => ($request->syllabiIsRegistered[$i] ?? '0') === '1',
+                            'drf_availability'      => ($request->syllabiDrfAvailability[$i] ?? 'not available'),
+                            'registered'            => ($request->syllabiIsRegistered[$i] ?? 'not registered'),
                             'date_of_registration'  => $request->syllabiRegDate[$i] ?? null,
                             'time_of_registration'  => $request->syllabiRegTime[$i] ?? null,
                             'time_spent'            => $request->syllabiTimeSpent[$i] ?? null,
+                            'scanned_registration'  => $scannedRegistration, 
                         ]);
                     }
                 }
@@ -1653,9 +1714,11 @@ class RegisterController extends Controller
             }
 
             // Syllabi
-            $syllabiRecords = Syllabi::where('request_id', $requestId)->get();
+            $syllabiRecords = Syllabi::with('drf')->where('request_id', $requestId)->get();
             foreach ($syllabiRecords as $syl) {
-                if ($syl->scanned_drf) $filesToDelete[] = $syl->scanned_drf;
+                if ($syl->drf && $syl->drf->scanned_drf) $filesToDelete[] = $syl->drf->scanned_drf;
+                if ($syl->scanned_registration) $filesToDelete[] = $syl->scanned_registration;
+                if ($syl->drf) $syl->drf->delete();
             }
             $syllabiRecords->each->delete();
 

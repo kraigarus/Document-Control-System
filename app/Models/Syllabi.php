@@ -24,6 +24,7 @@ class Syllabi extends Model
         'no_pages',
         'date_received',
         'time_received',
+        'drf_availability', 
         'registered',
         'date_of_registration',
         'time_of_registration',
@@ -32,6 +33,7 @@ class Syllabi extends Model
 
     protected $casts = [
         'syllabi_availability' => 'boolean',
+        'drf_availability'     => 'boolean',
         'registered'           => 'boolean',
         'date_received'        => 'date',
         'date_of_registration' => 'date',
