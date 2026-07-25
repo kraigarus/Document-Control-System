@@ -407,6 +407,17 @@ body {
     padding: 24px;
 }
 
+
+/* ═══ DROPDOWN STACKING FIX ═══ */
+#section-2        { position: relative; z-index: 50; }
+#section-syllabi  { position: relative; z-index: 45; }
+#section-1        { position: relative; z-index: 40; }
+#section-3        { position: relative; z-index: 35; }
+#section-approval { position: relative; z-index: 30; }
+#section-4        { position: relative; z-index: 25; }
+#section-5        { position: relative; z-index: 20; }
+
+
 /* ══════════════════════════════════════════════
    FORM FIELDS
    ══════════════════════════════════════════════ */
@@ -862,9 +873,9 @@ body {
 .reg-reldocs-input {
     flex: 1;
     height: 90%;
-    border: none;
-    outline: none;
-    background: transparent;
+    border: none !important;
+    outline: none !important;
+    background: transparent !important;
     box-shadow: none !important;
     font-size: 0.85rem;
     font-family: inherit;
@@ -915,18 +926,6 @@ body {
     border-radius: var(--reg-radius-sm);
     box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
     animation: fadeSlideUp 0.16s ease;
-}
-
-/* ═══ DROPDOWN STACKING FIX ═══ */
-#section-syllabi,
-#section-3 {
-    position: relative;
-    z-index: 10;
-}
-
-#section-1 {
-    position: relative;
-    z-index: 1;
 }
 
 /* Search results list */
