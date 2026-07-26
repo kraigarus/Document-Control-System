@@ -1485,8 +1485,8 @@ window.toggleSection = function (checklistId, show) {
     const sectionId = sectionMap[checklistId];
     if (!sectionId) return;
 
-    // In syllabi mode, neither DRF nor Masterlist gets its own standalone section
-    if ((checklistId === 1 || checklistId === 3) && window.__isSyllabiMode) return;
+    // In syllabi mode, only DRF stays hidden — Masterlist now shows in full
+    if (checklistId === 1 && window.__isSyllabiMode) return;
 
     const el = document.getElementById(sectionId);
     if (!el) return;
@@ -1636,6 +1636,14 @@ function requireField(errors, id, message) {
     return val;
 }
 
+function sectionVisible(id) {
+    const el = document.getElementById(id);
+    return el && el.style.display !== "none";
+}
+
+// ══════════════════════════════════════════════
+// FORM VALIDATION — structural only; content fields are optional
+// ══════════════════════════════════════════════
 function validateForm() {
     clearValidation();
     const errors = [];
@@ -1661,150 +1669,114 @@ function validateForm() {
         return errors;
     }
 
-    validateDrfSection(errors);
-    validateDcnSection(errors);
-    validateMasterlistSection(errors);
-    validateRetrievalSection(errors);
-    validateDistributionSection(errors);
-    validateSyllabiSection(errors);
-
+    // Content fields are no longer required here — missing values are
+    // surfaced in the review modal instead, with a confirm-anyway step.
     return errors;
 }
 
-function sectionVisible(id) {
-    const el = document.getElementById(id);
-    return el && el.style.display !== "none";
-}
+/** Collects a human-readable list of fields left blank, per visible section.
+ *  Used only for the review modal's "missing information" summary — never blocks saving. */
+function collectMissingFields() {
+    const missing = [];
 
-function validateDrfSection(errors) {
-    if (!sectionVisible("section-1")) return;
-    requireField(errors, "drfNo", "DRF No. is required.");
-    requireField(errors, "drfDate", "DRF Date is required.");
-    requireField(errors, "drfReceiptDate", "Date Receipt is required.");
-    requireField(errors, "drfTime", "Time Receipt is required.");
-    requireField(errors, "drfTitle", "Document Title is required.");
+    const checkText = (sectionLabel, id, label) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (!el.value || !el.value.trim()) missing.push(sectionLabel + ": " + label);
+    };
 
-    if (!window.__sourceWidgets.drf || window.__sourceWidgets.drf.selected.length === 0) {
-        errors.push({ field: "drfSourceUnitSearch", message: "Source Unit is required." });
-    }
-}
-
-function validateDcnSection(errors) {
-    if (!sectionVisible("section-2")) return;
-    requireField(errors, "dcnNumber", "DCN No. is required.");
-    requireField(errors, "noticeDate", "DCN Date is required.");
-    requireField(errors, "receiptDate", "DCN Receipt Date is required.");
-    requireField(errors, "receiptTime", "DCN Receipt Time is required.");
-    requireField(errors, "dcnSourceUnit", "Source Unit is required.");
-
-    let hasRevision = false;
-    document.querySelectorAll("#revisionTableBody tr").forEach(row => {
-        const title = row.querySelector('input[name="documentTitle[]"]');
-        if (title && title.value.trim()) hasRevision = true;
-    });
-    if (!hasRevision) errors.push({ field: "revisionTableBody", message: "At least one revision document is required.", type: "table" });
-}
-
-function validateMasterlistSection(errors) {
-    if (!sectionVisible("section-3")) return;
-
-    requireField(errors, "masterlistDocNo", "Document No. is required.");
-    requireField(errors, "masterlistDocTitle", "Document Title is required.");
-    requireField(errors, "deadlineOfSubmission", "Deadline of Submission is required.");
-    requireField(errors, "masterlistReceiptDate", "Document Receipt Date is required.");
-    requireField(errors, "masterlistReceiptTime", "Document Receipt Time is required.");
-    requireField(errors, "masterlistRegisteredDate", "Document Registered Date is required.");
-    requireField(errors, "masterlistRegisteredTime", "Document Registered Time is required.");
-    requireField(errors, "masterlistEffectivityDate", "Effectivity Date is required.");
-
-    const revVal = document.getElementById("masterlistRevisionNo").value.trim();
-    if (revVal === '' || (revVal !== '0' && isNaN(parseInt(revVal)))) {
-        errors.push({ field: "masterlistRevisionNo", message: "Revision No. is required." });
-    }
-
-    requireField(errors, "masterlistNoOfPages", "No. of Pages is required.");
-    if (!window.__sourceWidgets.masterlistOriginator || window.__sourceWidgets.masterlistOriginator.selected.length === 0) {
-        errors.push({ field: "masterlistOriginatorSearch", message: "Originator is required." });
-    }
-    if (!window.__sourceWidgets.masterlist || window.__sourceWidgets.masterlist.selected.length === 0) {
-        errors.push({ field: "masterlistSourceSearch", message: "Source Unit is required." });
-    }
-    requireField(errors, "briefPurpose", "Brief Purpose is required.");
-
-    const mlTimeDisplay = document.getElementById("masterlistTimeSpentDisplay");
-    if (mlTimeDisplay.value === "Invalid") {
-        errors.push({ field: "masterlistRegisteredDate", message: "Time is invalid. Document Registered must be after Document Receipt." });
-    }
-}
-
-function validateRetrievalSection(errors) {
-    if (!sectionVisible("section-4")) return;
-
-    requireField(errors, "retrievalFormDate", "Retrieval Form Date is required.");
-    requireField(errors, "retrievalFormTime", "Retrieval Form Time is required.");
-    requireField(errors, "retrievalDate", "Retrieval Date is required.");
-    requireField(errors, "retrievalTime", "Retrieval Time is required.");
-
-    const retTimeDisplay = document.getElementById("retrievalTimeSpentDisplay");
-    if (retTimeDisplay.value === "Invalid") {
-        errors.push({ field: "retrievalDate", message: "Time is invalid. Retrieval Date must be after Form Date." });
-    }
-
-    const retOffices = document.querySelectorAll("#retrievalBody input[type='hidden']");
-    if (retOffices.length === 0) errors.push({ field: "retrievalSearch", message: "At least one retrieval office is required.", type: "search" });
-}
-
-function validateDistributionSection(errors) {
-    if (!sectionVisible("section-5")) return;
-
-    requireField(errors, "distributionFormDate", "Distribution Form Date is required.");
-    requireField(errors, "distributionFormTime", "Distribution Form Time is required.");
-    requireField(errors, "distributionDate", "Distribution Date is required.");
-    requireField(errors, "distributionTime", "Distribution Time is required.");
-    requireField(errors, "distributionRemarks", "Distribution Remarks is required.");
-
-    const distTimeDisplay = document.getElementById("distributionTimeSpentDisplay");
-    if (distTimeDisplay.value === "Invalid") {
-        errors.push({ field: "distributionDate", message: "Time is invalid. Distribution Date must be after Form Date." });
-    }
-
-    const distOffices = document.querySelectorAll("#distBody input[type='hidden']");
-    if (distOffices.length === 0) errors.push({ field: "distSearch", message: "At least one distribution office is required.", type: "search" });
-}
-
-function validateSyllabiSection(errors) {
-    const sectionSyllabi = document.getElementById("section-syllabi");
-    if (!sectionSyllabi || sectionSyllabi.style.display === "none") return;
-
-    requireField(errors, "syllabiCollege", "College is required.");
-    requireField(errors, "syllabiProgram", "Program is required.");
-    requireField(errors, "syllabiSemester", "Semester is required.");
-    requireField(errors, "syllabiSchoolYear", "School Year is required.");
-    requireField(errors, "syllabiDocNo", "Document No. is required.");
-    requireField(errors, "syllabiDocTitle", "Document Title is required.");
-    requireField(errors, "syllabiEffectivityDate", "Effectivity Date is required.");
-    requireField(errors, "syllabiDeadline", "Deadline is required.");
-
-    document.querySelectorAll("#syllabiTableBody tr").forEach((row, index) => {
-        validateSyllabiRow(row, index + 1);
-    });
-}
-
-function validateSyllabiRow(row, rowNum) {
-    const fields = [
-        { el: row.querySelector('input[name="syllabiCourseName[]"]'), test: v => v.value.trim(), label: 'Course Name is required.' },
-        { el: row.querySelector('input[name="syllabiNoPages[]"]'), test: v => v.value && parseInt(v.value) > 0, label: 'No. of Pages is required and must be greater than 0.' },
-        { el: row.querySelector('input[name="syllabiDrfNo[]"]'), test: v => v.value.trim(), label: 'DRF No. is required.' },
-        { el: row.querySelector('input[name="syllabiDrfDate[]"]'), test: v => v.value, label: 'DRF Date is required.' },
-        { el: row.querySelector('input[name="syllabiDrfReceived[]"]'), test: v => v.value, label: 'DRF Received Date is required.' },
-    ];
-
-    fields.forEach(({ el, test, label }) => {
-        if (!el || !test(el)) {
-            markFieldError(el?.id || 'syllabiTableBody', 'Syllabi Row ' + rowNum + ': ' + label);
-            if (el) el.classList.add('reg-input-error');
+    if (sectionVisible("section-1")) {
+        checkText("DRF", "drfNo", "DRF No.");
+        checkText("DRF", "drfDate", "DRF Date");
+        checkText("DRF", "drfReceiptDate", "Date Receipt");
+        checkText("DRF", "drfTime", "Time Receipt");
+        checkText("DRF", "drfTitle", "Document Title");
+        if (!window.__sourceWidgets.drf || window.__sourceWidgets.drf.selected.length === 0) {
+            missing.push("DRF: Source Unit");
         }
-    });
+    }
+
+    if (sectionVisible("section-2")) {
+        checkText("DCN", "dcnNumber", "DCN No.");
+        checkText("DCN", "noticeDate", "DCN Date");
+        checkText("DCN", "receiptDate", "DCN Receipt Date");
+        checkText("DCN", "receiptTime", "DCN Receipt Time");
+        checkText("DCN", "dcnSourceUnit", "Source Unit");
+        let hasRevision = false;
+        document.querySelectorAll("#revisionTableBody tr").forEach(row => {
+            const title = row.querySelector('input[name="documentTitle[]"]');
+            if (title && title.value.trim()) hasRevision = true;
+        });
+        if (!hasRevision) missing.push("DCN: At least one revision document");
+    }
+
+    if (sectionVisible("section-3")) {
+        checkText("Masterlist", "masterlistDocNo", "Document No.");
+        checkText("Masterlist", "masterlistDocTitle", "Document Title");
+        checkText("Masterlist", "deadlineOfSubmission", "Deadline of Submission");
+        checkText("Masterlist", "masterlistReceiptDate", "Document Receipt Date");
+        checkText("Masterlist", "masterlistReceiptTime", "Document Receipt Time");
+        checkText("Masterlist", "masterlistRegisteredDate", "Document Registered Date");
+        checkText("Masterlist", "masterlistRegisteredTime", "Document Registered Time");
+        checkText("Masterlist", "masterlistEffectivityDate", "Effectivity Date");
+        checkText("Masterlist", "masterlistNoOfPages", "No. of Pages");
+        checkText("Masterlist", "briefPurpose", "Brief Purpose");
+        if (!window.__sourceWidgets.masterlistOriginator || window.__sourceWidgets.masterlistOriginator.selected.length === 0) {
+            missing.push("Masterlist: Originator");
+        }
+        if (!window.__sourceWidgets.masterlist || window.__sourceWidgets.masterlist.selected.length === 0) {
+            missing.push("Masterlist: Source Unit");
+        }
+    }
+
+    if (sectionVisible("section-4")) {
+        checkText("Retrieval", "retrievalFormDate", "Retrieval Form Date");
+        checkText("Retrieval", "retrievalFormTime", "Retrieval Form Time");
+        checkText("Retrieval", "retrievalDate", "Retrieval Date");
+        checkText("Retrieval", "retrievalTime", "Retrieval Time");
+        if (document.querySelectorAll("#retrievalBody input[type='hidden']").length === 0) {
+            missing.push("Retrieval: At least one office");
+        }
+    }
+
+    if (sectionVisible("section-5")) {
+        checkText("Distribution", "distributionFormDate", "Distribution Form Date");
+        checkText("Distribution", "distributionFormTime", "Distribution Form Time");
+        checkText("Distribution", "distributionDate", "Distribution Date");
+        checkText("Distribution", "distributionTime", "Distribution Time");
+        checkText("Distribution", "distributionRemarks", "Remarks");
+        if (document.querySelectorAll("#distBody input[type='hidden']").length === 0) {
+            missing.push("Distribution: At least one office");
+        }
+    }
+
+    const sectionSyllabi = document.getElementById("section-syllabi");
+    if (sectionSyllabi && sectionSyllabi.style.display !== "none") {
+        checkText("Syllabi", "syllabiCollege", "College");
+        checkText("Syllabi", "syllabiProgram", "Program");
+        checkText("Syllabi", "syllabiSemester", "Semester");
+        checkText("Syllabi", "syllabiSchoolYear", "School Year");
+        checkText("Syllabi", "syllabiDocNo", "Document No.");
+        checkText("Syllabi", "syllabiDocTitle", "Document Title");
+        checkText("Syllabi", "syllabiEffectivityDate", "Effectivity Date");
+        checkText("Syllabi", "syllabiDeadline", "Deadline");
+
+        document.querySelectorAll("#syllabiTableBody tr").forEach((row, idx) => {
+            const course = row.querySelector('input[name="syllabiCourseName[]"]');
+            const rowLabel = "Syllabi Row " + (idx + 1);
+            if (!course || !course.value.trim()) missing.push(rowLabel + ": Course Name");
+            const pages = row.querySelector('input[name="syllabiNoPages[]"]');
+            if (!pages || !pages.value) missing.push(rowLabel + ": No. of Pages");
+            const drfNo = row.querySelector('input[name="syllabiDrfNo[]"]');
+            if (!drfNo || !drfNo.value.trim()) missing.push(rowLabel + ": DRF No.");
+            const drfDate = row.querySelector('input[name="syllabiDrfDate[]"]');
+            if (!drfDate || !drfDate.value) missing.push(rowLabel + ": DRF Date");
+            const drfReceived = row.querySelector('input[name="syllabiDrfReceived[]"]');
+            if (!drfReceived || !drfReceived.value) missing.push(rowLabel + ": DRF Received Date");
+        });
+    }
+
+    return missing;
 }
 
 function showValidationErrors(errors) {
@@ -1910,19 +1882,23 @@ function getOfficeList(tbodyId) {
 }
 
 function addReviewSection(container, title, fields) {
-    const visibleFields = fields.filter(f => f.value && f.value.trim() !== "" && f.value !== "N/A");
-    if (visibleFields.length === 0) return;
+    if (fields.length === 0) return;
 
     const section = document.createElement("div");
     section.className = "review-section";
 
     let html = '<div class="review-section-title">' + title + '</div>';
-    visibleFields.forEach(f => {
-        html += '<div class="review-row">';
+    fields.forEach(f => {
+        const hasValue = f.value && String(f.value).trim() !== "" && f.value !== "N/A";
+        html += '<div class="review-row' + (hasValue ? '' : ' review-row-empty') + '">';
         html += '<span class="review-label">' + f.label + '</span>';
-        html += f.isFile
-            ? '<span class="review-value review-file"><i class="fa-solid fa-paperclip"></i> ' + f.value + '</span>'
-            : '<span class="review-value">' + f.value + '</span>';
+        if (hasValue) {
+            html += f.isFile
+                ? '<span class="review-value review-file"><i class="fa-solid fa-paperclip"></i> ' + f.value + '</span>'
+                : '<span class="review-value">' + f.value + '</span>';
+        } else {
+            html += '<span class="review-value review-value-missing"><i class="fa-solid fa-circle-minus"></i> Not provided</span>';
+        }
         html += '</div>';
     });
 
@@ -1973,8 +1949,44 @@ window.confirmSave = function () {
         reviewContent.innerHTML = '<div class="review-empty">No data to review.</div>';
     }
 
+    const missing = collectMissingFields();
+    renderMissingFieldsWarning(reviewContent, missing);
+
     document.getElementById("confirmModal").style.display = "flex";
 };
+
+/** Shows a warning banner + a required "save anyway" checkbox when fields are blank.
+ *  Confirm Save button stays disabled until the checkbox is ticked (only when needed). */
+function renderMissingFieldsWarning(container, missing) {
+    const confirmBtn = document.getElementById("btnConfirmSaveModal");
+
+    if (missing.length === 0) {
+        if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.style.opacity = ''; confirmBtn.style.cursor = ''; }
+        return;
+    }
+
+    const warn = document.createElement("div");
+    warn.className = "review-section review-missing-warning";
+    warn.innerHTML = `
+        <div class="review-section-title" style="color:#d97706;">
+            <i class="fa-solid fa-triangle-exclamation"></i> Missing Information (${missing.length})
+        </div>
+        <ul class="review-list">
+            ${missing.map(m => `<li>${m}</li>`).join('')}
+        </ul>
+        <label class="reg-checkbox-wrap" style="margin-top:10px;display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="confirmSaveAnyway" onchange="document.getElementById('btnConfirmSaveModal').disabled = !this.checked;">
+            <span>I understand some information above is missing, and I still want to save this document.</span>
+        </label>
+    `;
+    container.prepend(warn);
+
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.style.opacity = '0.5';
+        confirmBtn.style.cursor = 'not-allowed';
+    }
+}
 
 function buildSyllabiInfoReview(reviewContent) {
     const ss = document.getElementById("section-syllabi");

@@ -736,7 +736,7 @@
             <button type="button" class="reg-btn reg-btn-cancel" onclick="closeConfirmModal()">
                 <i class="fa-solid fa-xmark"></i> Go Back
             </button>
-            <button type="button" class="reg-btn reg-btn-save" onclick="submitForm()">
+            <button type="button" id="btnConfirmSaveModal" class="reg-btn reg-btn-save" onclick="submitForm()">
                 <i class="fa-solid fa-check"></i> Confirm Save
             </button>
         </div>
