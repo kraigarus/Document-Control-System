@@ -1047,6 +1047,56 @@ function processUploadAreaFile(input, container, icon, label, originalText) {
     label.style.fontWeight = '600';
 
     addRemoveBtn(container, input, icon, label, originalText);
+
+    //dito
+    if (input.id === 'drfFile' && check.ext === 'pdf') {
+        triggerScanExtraction(input, file);
+    }
+}
+
+function triggerScanExtraction(input, file) {
+    const formData = new FormData();
+    formData.append('scan', file);
+    formData.append('section', 'drf');
+    formData.append('_token', document.querySelector('meta[name="csrf-token"]')?.content
+        || document.querySelector('input[name="_token"]')?.value);
+
+    const container = input.closest('.reg-upload');
+    const label = container?.querySelector('span');
+    const originalLabelText = label ? label.textContent : '';
+    if (label) label.textContent = 'Reading scanned document...';
+
+    fetch('/register/extract-scan', { method: 'POST', body: formData })
+        .then(r => r.json())
+        .then(data => {
+            if (label) label.textContent = originalLabelText;
+            if (data.extracted) {
+                autofillDrfFields(data.fields);
+                console.log('OCR raw text preview:', data.raw_text_preview);
+            } else {
+                console.warn('Extraction failed:', data.reason);
+            }
+        })
+        .catch(err => {
+            if (label) label.textContent = originalLabelText;
+            console.error('Extraction request failed:', err);
+        });
+}
+
+function autofillDrfFields(fields) {
+    const map = {
+        drfNo: 'drfNo',
+        drfDate: 'drfDate',
+        drfTitle: 'drfTitle',
+    };
+    Object.entries(map).forEach(([fieldKey, elId]) => {
+        const value = fields[fieldKey];
+        const el = document.getElementById(elId);
+        if (value && el && !el.value) {
+            el.value = value;
+            el.classList.add('reg-autofilled');
+        }
+    });
 }
 
 function showUploadFieldError(container, message) {

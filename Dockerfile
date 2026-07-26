@@ -18,6 +18,21 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+RUN apt-get update && apt-get install -y \
+    tesseract-ocr \
+    ghostscript \
+    imagemagick \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && apt-get install -y \
+    libmagickwand-dev \
+    --no-install-recommends \
+    && pecl install imagick \
+    && docker-php-ext-enable imagick \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 

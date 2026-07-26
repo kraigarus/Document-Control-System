@@ -1,3 +1,4 @@
+<meta name="csrf-token" content="{{ csrf_token() }}">
 @vite(['resources/css/dcs/header.css', 'resources/js/dcs/header.js'])
 <header class="top-nav">
     <div class="header-left">

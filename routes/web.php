@@ -104,6 +104,8 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::put('/register/{id}', [RegisterController::class, 'updateDoc'])->name('register.updateDoc');
     Route::delete('/register/{id}', [RegisterController::class, 'destroy'])->name('register.destroy');
     Route::get('/register/history/{docNo}', [RegisterController::class, 'history'])->name('register.history');
+    Route::post('/register/extract-scan', [RegisterController::class, 'extractScan'])
+    ->name('register.extractScan');
 
     // Reports
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
