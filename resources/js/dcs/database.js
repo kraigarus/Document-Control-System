@@ -39,6 +39,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function toggleColumnGroup(group) {
         groupState[group] = !groupState[group];
+        applyGroupState(group);
+    }
+
+    function applyGroupState(group) {
         const expanded = groupState[group];
 
         // 1. Toggle header summary column (visible when collapsed)
@@ -74,6 +78,31 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     window.toggleColumnGroup = toggleColumnGroup;
+
+    // ═══════════════════════════════════════════
+    // Collapse / Expand All button
+    // ═══════════════════════════════════════════
+    const collapseAllBtn = document.getElementById('collapseAllBtn');
+    const collapseBtnLabel = document.getElementById('collapseBtnLabel');
+    let allCollapsed = false;
+
+    if (collapseAllBtn && collapseBtnLabel) {
+        collapseAllBtn.addEventListener('click', () => {
+            allCollapsed = !allCollapsed;
+            const targetExpanded = !allCollapsed;
+
+            groups.forEach(g => {
+                groupState[g] = targetExpanded;
+                applyGroupState(g);
+            });
+
+            collapseBtnLabel.textContent = allCollapsed ? 'Expand' : 'Collapse';
+            collapseAllBtn.title = allCollapsed ? 'Expand all column groups' : 'Collapse all column groups';
+            collapseAllBtn.classList.toggle('is-collapsed', allCollapsed);
+        });
+    } else {
+        console.warn('Collapse button not found:', { collapseAllBtn, collapseBtnLabel });
+    }
 
     // ═══════════════════════════════════════════
     // Doc type tabs
@@ -334,15 +363,15 @@ document.addEventListener('DOMContentLoaded', () => {
             // ── Masterlist ──
             summaryCell('masterlist', r) +
             groupCell('masterlist', r.ml_receipt_date) +
-            groupCell('masterlist', r.ml_receipt_time) +
+            groupCell('masterlist', fmtTime12(r.ml_receipt_time)) +
             groupCell('masterlist', r.ml_register_date) +
-            groupCell('masterlist', r.ml_register_time) +
+            groupCell('masterlist', fmtTime12(r.ml_register_time)) +
             // ── DCN ──
             summaryCell('dcn', r) +
             groupCell('dcn', r.dcn_no) +
             groupCell('dcn', r.dcn_date) +
             groupCell('dcn', r.dcn_receipt_date) +
-            groupCell('dcn', r.dcn_receipt_time) +
+            groupCell('dcn', fmtTime12(r.dcn_receipt_time)) +
             groupCell('dcn', r.dcn_purpose) +
             groupCell('dcn', r.dcn_scan, true) +
             // ── DRF ──
@@ -350,14 +379,14 @@ document.addEventListener('DOMContentLoaded', () => {
             groupCell('drf', r.drf_no) +
             groupCell('drf', r.drf_date) +
             groupCell('drf', r.drf_receipt_date) +
-            groupCell('drf', r.drf_receipt_time) +
+            groupCell('drf', fmtTime12(r.drf_receipt_time)) +
             groupCell('drf', r.drf_scan, true) +
             // ── Distribution ──
             summaryCell('distribution', r) +
             groupCell('distribution', r.dist_onfile_date) +
-            groupCell('distribution', r.dist_onfile_time) +
+            groupCell('distribution', fmtTime12(r.dist_onfile_time)) +
             groupCell('distribution', r.dist_actual_date) +
-            groupCell('distribution', r.dist_actual_time) +
+            groupCell('distribution', fmtTime12(r.dist_actual_time)) +
             groupCell('distribution', r.dist_offices) +
             groupCell('distribution', r.dist_scan, true) +
             // ── Retrieval ──
@@ -367,7 +396,7 @@ document.addEventListener('DOMContentLoaded', () => {
             groupCell('retrieval', r.ret_offices) +
             groupCell('retrieval', r.ret_scan, true);
     }
-
+    
     function groupCell(group, value, isLink) {
         const hidden = groupState[group] ? '' : ' style="display:none"';
         if (!value || value === 'N/A') {
@@ -402,6 +431,19 @@ document.addEventListener('DOMContentLoaded', () => {
             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
             '<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>' +
             '<path d="M14 2v6h6"/></svg></a>';
+    }
+
+    function fmtTime12(val) {
+        if (!val || val === 'N/A' || val === '—') return val;
+        // Handle "14:16:00" or "14:16" format
+        const parts = String(val).split(':');
+        if (parts.length < 2) return val;
+        let h = parseInt(parts[0], 10);
+        const m = parts[1].padStart(2, '0');
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        if (h === 0) h = 12;
+        else if (h > 12) h -= 12;
+        return h + ':' + m + ' ' + ampm;
     }
 
     function esc(str) {

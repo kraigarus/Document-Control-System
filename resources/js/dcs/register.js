@@ -351,8 +351,45 @@ function applyRevisedModeLookupResult(data, hintEl, revField) {
             titleField.value = data.latest_title;
         }
 
-        if (data.latest_originator && window.__sourceWidgets.masterlist) window.__sourceWidgets.masterlist.seedFromString(data.latest_originator);
+        // ── Source Unit (offices/names) ──
+        if (data.latest_source_unit && window.__sourceWidgets.masterlist) {
+            window.__sourceWidgets.masterlist.seedFromString(data.latest_source_unit);
+        }
 
+        // ── Originator (fixed: was incorrectly seeding into 'masterlist' before) ──
+        if (data.latest_originator && window.__sourceWidgets.masterlistOriginator) {
+            window.__sourceWidgets.masterlistOriginator.seedFromString(data.latest_originator);
+        }
+
+        // ── Effectivity Date ──
+        const effField = document.getElementById('masterlistEffectivityDate');
+        if (effField && !effField.value && data.latest_effectivity_date) {
+            effField.value = data.latest_effectivity_date;
+        }
+
+        // ── No. of Pages ──
+        const pagesField = document.getElementById('masterlistNoOfPages');
+        if (pagesField && !pagesField.value && data.latest_no_pages) {
+            pagesField.value = data.latest_no_pages;
+        }
+
+        // ── Deadline of Submission ──
+        const deadlineField = document.getElementById('deadlineOfSubmission');
+        if (deadlineField && !deadlineField.value && data.latest_deadline) {
+            deadlineField.value = data.latest_deadline;
+        }
+
+        // ── Justification / Brief Purpose ──
+        const purposeField = document.getElementById('briefPurpose');
+        if (purposeField && !purposeField.value && data.latest_brief_purpose) {
+            purposeField.value = data.latest_brief_purpose;
+        }
+
+        // ── Related Documents ──
+        if (data.latest_related_documents && data.latest_related_documents.length > 0 && relatedDocsSelected.length === 0) {
+            relatedDocsSelected = data.latest_related_documents.slice();
+            renderRelatedDocsChips();
+        }
         // ── NEW: pre-fill Retrieval offices from the last revision's Distribution,
         // only if the user hasn't already started picking retrieval offices ──
         if (data.latest_distribution_offices && data.latest_distribution_offices.length > 0
@@ -1048,7 +1085,6 @@ function processUploadAreaFile(input, container, icon, label, originalText) {
 
     addRemoveBtn(container, input, icon, label, originalText);
 
-    //dito
     if (input.id === 'drfFile' && check.ext === 'pdf') {
         triggerScanExtraction(input, file);
     }
@@ -1719,9 +1755,69 @@ function validateForm() {
         return errors;
     }
 
-    // Content fields are no longer required here — missing values are
+    // ── Time Spent must never be logically invalid (end before start) ──
+    // this blocks saving outright — it's a data-integrity error, not a missing value.
+    validateTimeSpentFields(errors);
+
+    // Content fields are otherwise optional — missing values are
     // surfaced in the review modal instead, with a confirm-anyway step.
     return errors;
+}
+
+/** Blocks save if any visible Time Spent calculation shows "Invalid". */
+function validateTimeSpentFields(errors) {
+    if (sectionVisible("section-3")) {
+        const ml = document.getElementById("masterlistTimeSpentDisplay");
+        if (ml && ml.value === "Invalid") {
+            errors.push({
+                field: "masterlistRegisteredDate",
+                message: "Masterlist: Document Registered must be after Document Receipt."
+            });
+            // highlight both ends of the bad range, not just the field key used for scrolling
+            ["masterlistReceiptDate", "masterlistReceiptTime", "masterlistRegisteredDate", "masterlistRegisteredTime"]
+                .forEach(id => document.getElementById(id)?.classList.add("reg-input-error"));
+        }
+    }
+
+    if (sectionVisible("section-4")) {
+        const ret = document.getElementById("retrievalTimeSpentDisplay");
+        if (ret && ret.value === "Invalid") {
+            errors.push({
+                field: "retrievalDate",
+                message: "Retrieval: Retrieval Date must be after Form Date."
+            });
+            ["retrievalFormDate", "retrievalFormTime", "retrievalDate", "retrievalTime"]
+                .forEach(id => document.getElementById(id)?.classList.add("reg-input-error"));
+        }
+    }
+
+    if (sectionVisible("section-5")) {
+        const dist = document.getElementById("distributionTimeSpentDisplay");
+        if (dist && dist.value === "Invalid") {
+            errors.push({
+                field: "distributionDate",
+                message: "Distribution: Distribution Date must be after Form Date."
+            });
+            ["distributionFormDate", "distributionFormTime", "distributionDate", "distributionTime"]
+                .forEach(id => document.getElementById(id)?.classList.add("reg-input-error"));
+        }
+    }
+
+    const sectionSyllabi = document.getElementById("section-syllabi");
+    if (sectionSyllabi && sectionSyllabi.style.display !== "none") {
+        document.querySelectorAll("#syllabiTableBody tr").forEach((row, idx) => {
+            const display = row.querySelector(".syllabi-time-spent-display");
+            if (display && display.value === "Invalid") {
+                errors.push({
+                    field: "syllabiTableBody",
+                    message: "Syllabi Row " + (idx + 1) + ": Date/Time of Registration must be after Date/Time Received.",
+                    type: "table"
+                });
+                row.querySelectorAll('[name="syllabiDateReceived[]"], [name="syllabiTimeReceived[]"], [name="syllabiRegDate[]"], [name="syllabiRegTime[]"]')
+                    .forEach(el => el.classList.add("reg-input-error"));
+            }
+        });
+    }
 }
 
 /** Collects a human-readable list of fields left blank, per visible section.
@@ -2005,7 +2101,7 @@ window.confirmSave = function () {
     document.getElementById("confirmModal").style.display = "flex";
 };
 
-/** Shows a warning banner + a required "save anyway" checkbox when fields are blank.
+/** Shows a redesigned warning card + a required "save anyway" checkbox when fields are blank.
  *  Confirm Save button stays disabled until the checkbox is ticked (only when needed). */
 function renderMissingFieldsWarning(container, missing) {
     const confirmBtn = document.getElementById("btnConfirmSaveModal");
@@ -2015,16 +2111,39 @@ function renderMissingFieldsWarning(container, missing) {
         return;
     }
 
-    const warn = document.createElement("div");
-    warn.className = "review-section review-missing-warning";
-    warn.innerHTML = `
-        <div class="review-section-title" style="color:#d97706;">
-            <i class="fa-solid fa-triangle-exclamation"></i> Missing Information (${missing.length})
+    // Group "Section: Field" strings by their section for a cleaner layout
+    const grouped = {};
+    missing.forEach(m => {
+        const idx = m.indexOf(":");
+        const section = idx > -1 ? m.slice(0, idx).trim() : "Other";
+        const field = idx > -1 ? m.slice(idx + 1).trim() : m;
+        if (!grouped[section]) grouped[section] = [];
+        grouped[section].push(field);
+    });
+
+    const groupsHtml = Object.entries(grouped).map(([section, fields]) => `
+        <div class="missing-group">
+            <div class="missing-group-title">${section}</div>
+            <div class="missing-group-chips">
+                ${fields.map(f => `<span class="missing-chip"><i class="fa-solid fa-circle-minus"></i>${f}</span>`).join('')}
+            </div>
         </div>
-        <ul class="review-list">
-            ${missing.map(m => `<li>${m}</li>`).join('')}
-        </ul>
-        <label class="reg-checkbox-wrap" style="margin-top:10px;display:flex;align-items:center;gap:8px;">
+    `).join('');
+
+    const warn = document.createElement("div");
+    warn.className = "review-missing-warning";
+    warn.innerHTML = `
+        <div class="review-missing-header">
+            <div class="review-missing-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <div class="review-missing-heading">
+                <span class="review-missing-title">Missing Information</span>
+                <span class="review-missing-count">${missing.length} field${missing.length === 1 ? '' : 's'} left blank</span>
+            </div>
+        </div>
+        <div class="review-missing-body">
+            ${groupsHtml}
+        </div>
+        <label class="review-missing-confirm">
             <input type="checkbox" id="confirmSaveAnyway" onchange="document.getElementById('btnConfirmSaveModal').disabled = !this.checked;">
             <span>I understand some information above is missing, and I still want to save this document.</span>
         </label>
@@ -2502,7 +2621,7 @@ window.syncSyllabiMergedFields = function (groupId) {
     const courseVal = firstRow.querySelector('.syllabi-merged-course').value;
     const availCheckbox = firstRow.querySelector('.syllabi-merged-availability');
     const availHidden = firstRow.querySelector('.syllabi-merged-availability-hidden');
-    availHidden.value = availCheckbox.checked ? 'registered' : 'not registered';
+    availHidden.value = availCheckbox.checked ? 'available' : 'not available';
     const copiesVal = firstRow.querySelector('.syllabi-merged-copies').value;
 
     document.querySelectorAll(`#syllabiTableBody tr[data-group="${groupId}"]:not([data-is-first="true"])`)

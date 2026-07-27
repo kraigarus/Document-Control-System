@@ -757,6 +757,6 @@ $.ajax({
     data: {
         doc_no: someValue,
         doc_type_id: someValue,
-        sub_type_id: someValue   // ← make sure this line exists
+        sub_type_id: someValue
     },
 });

@@ -8,7 +8,7 @@ use App\Models\DrfOffice;
 use App\Models\DocumentChangeNotice;
 use App\Models\DocRevision;
 use App\Models\MasterlistRegistration;
-use App\Models\MasterlistOrigin;
+use App\Models\MasterlistSourceOffice;
 use App\Models\DocumentRetrieval;
 use App\Models\RetrievalOffice;
 use App\Models\DocumentDistribution;
@@ -171,32 +171,28 @@ class RegisterController extends Controller
      */
     private function getLatestRevisionIds(): \Illuminate\Support\Collection
     {
-        // Find latest revision per (doc_no, doc_type, sub_type)
         $latestIds = DB::select("
-            SELECT ml1.request_id
-            FROM masterlist_registration ml1
-            JOIN document_requests dr1 ON ml1.request_id = dr1.request_id
-            WHERE ml1.doc_no IS NOT NULL AND ml1.doc_no != ''
-            AND NOT EXISTS (
-                SELECT 1
-                FROM masterlist_registration ml2
-                JOIN document_requests dr2 ON ml2.request_id = dr2.request_id
-                WHERE ml2.doc_no = ml1.doc_no
-                AND dr2.doc_type_id = dr1.doc_type_id
-                AND IFNULL(dr2.sub_type_id, 0) = IFNULL(dr1.sub_type_id, 0)
-                AND CAST(ml2.revise_no AS UNSIGNED) > CAST(ml1.revise_no AS UNSIGNED)
-            )
+            SELECT request_id FROM (
+                SELECT
+                    ml.request_id,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY ml.doc_no, dr.doc_type_id, IFNULL(dr.sub_type_id, 0)
+                        ORDER BY CAST(ml.revise_no AS UNSIGNED) DESC
+                    ) AS rn
+                FROM masterlist_registration ml
+                JOIN document_requests dr ON ml.request_id = dr.request_id
+                WHERE ml.doc_no IS NOT NULL AND ml.doc_no != ''
+            ) ranked
+            WHERE rn = 1
         ");
 
         $latestIds = collect($latestIds)->pluck('request_id');
 
-        // Documents with no masterlist registration (or empty doc_no)
-        $noMlIds = DocumentRequest::where(function ($q) {
-            $q->whereDoesntHave('masterlistRegistration')
-                ->orWhereHas('masterlistRegistration', function ($q2) {
-                    $q2->whereNull('doc_no')->orWhere('doc_no', '');
-                });
-        })->pluck('request_id');
+        $noMlIds = DocumentRequest::whereDoesntHave('masterlistRegistration')
+            ->orWhereHas('masterlistRegistration', function ($q) {
+                $q->whereNull('doc_no')->orWhere('doc_no', '');
+            })
+            ->pluck('request_id');
 
         return $latestIds->merge($noMlIds)->unique();
     }
@@ -327,15 +323,15 @@ class RegisterController extends Controller
                     return back()->withInput()->with('error', "Syllabi Row {$rowNum}: DRF Received Date is required.");
                 }
 
-                // File is NOT required — validate only if provided
+                // File validation — no DB::rollBack() needed (no active transaction yet)
                 if ($request->hasFile('syllabiScannedDrf') && isset($request->file('syllabiScannedDrf')[$i])) {
                     $file = $request->file('syllabiScannedDrf')[$i];
                     $ext = strtolower($file->getClientOriginalExtension());
                     if (!in_array($ext, ['pdf', 'docx'])) {
-                        return back()->withInput()->with('error', "Syllabi Row {$rowNum}: Only .pdf and .docx files are accepted.");
+                        return back()->withInput()->with('error', "Syllabi Row {$rowNum}: Registration copy — only .pdf and .docx files are accepted.");
                     }
                     if ($file->getSize() > 10 * 1024 * 1024) {
-                        return back()->withInput()->with('error', "Syllabi Row {$rowNum}: File size must not exceed 10MB.");
+                        return back()->withInput()->with('error', "Syllabi Row {$rowNum}: Registration copy — file size must not exceed 10MB.");
                     }
                 }
             }
@@ -465,7 +461,6 @@ class RegisterController extends Controller
                     'effectivity_date'    => $request->masterlistEffectivityDate,
                     'revise_no'           => $request->masterlistRevisionNo,
                     'no_pages'            => $request->masterlistNoOfPages,
-                    'office_id'           => null,
                     'originator_name'     => $request->masterlistOriginator,
                     'deadline'            => $request->deadlineOfSubmission,
                     'brief_purpose'       => $request->briefPurpose,
@@ -474,14 +469,10 @@ class RegisterController extends Controller
                 ]);
 
                 // ── Origins (offices + person names from single comma-separated field) ──
-                $primaryOfficeId = $this->saveOriginsFromArrays(
+                $this->saveOriginsFromArrays(
                     $masterlist,
                     $request->input('masterlistOfficeIds', []),
-                    $request->input('masterlistOriginatorNames', [])
                 );
-                if ($primaryOfficeId) {
-                    $masterlist->update(['office_id' => $primaryOfficeId]);
-                }
 
                 $relatedIds = array_filter(array_map('intval', $request->input('relatedDocumentIds', [])));
                 $masterlist->relatedDocuments()->sync($relatedIds);
@@ -514,93 +505,7 @@ class RegisterController extends Controller
                     'created_by'       => auth()->id(),
                 ]);
 
-                // Validate and SAVE each syllabi row
-                if ($request->has('syllabiCourseName')) {
-                    foreach ($request->syllabiCourseName as $i => $courseName) {
-                        $rowNum = $i + 1;
-
-                        if (empty($courseName)) {
-                            return back()->withInput()->with('error', "Syllabi Row {$rowNum}: Course Name is required.");
-                        }
-                        if (empty($request->syllabiNoPages[$i]) || $request->syllabiNoPages[$i] <= 0) {
-                            return back()->withInput()->with('error', "Syllabi Row {$rowNum}: No. of Pages must be greater than 0.");
-                        }
-                        if (empty($request->syllabiDrfNo[$i])) {
-                            return back()->withInput()->with('error', "Syllabi Row {$rowNum}: DRF No. is required.");
-                        }
-                        if (empty($request->syllabiDrfDate[$i])) {
-                            return back()->withInput()->with('error', "Syllabi Row {$rowNum}: DRF Date is required.");
-                        }
-                        if (empty($request->syllabiDrfReceived[$i])) {
-                            return back()->withInput()->with('error', "Syllabi Row {$rowNum}: DRF Received Date is required.");
-                        }
-
-                        // ── NEW: each course-copy-row gets its own DocumentRequestForm row,
-                        // scoped via drf_id — does NOT collide with Section 1's DRF lookup ──
-                        $syllabiDrf = DocumentRequestForm::create([
-                            'checklist_id'     => 1,
-                            'version_id'       => $versionId,
-                            'request_id'       => $requestId,
-                            'doc_type_id'      => $docTypeId,
-                            'drf_no'           => $request->syllabiDrfNo[$i],
-                            'drf_date'         => $request->syllabiDrfDate[$i],
-                            'drf_receipt_date' => $request->syllabiDrfReceived[$i],
-                            'doc_title'        => $courseName,
-                            'scanned_drf'      => null,
-                            'created_by'       => auth()->id(),
-                        ]);
-
-                        $scannedDrf = null;
-                        if ($request->hasFile('syllabiScannedDrf') && isset($request->file('syllabiScannedDrf')[$i])) {
-                            $file = $request->file('syllabiScannedDrf')[$i];
-                            $ext = strtolower($file->getClientOriginalExtension());
-                            if (!in_array($ext, ['pdf', 'docx'])) {
-                                return back()->withInput()->with('error', "Syllabi Row {$rowNum}: Only .pdf and .docx files are accepted.");
-                            }
-                            if ($file->getSize() > 10 * 1024 * 1024) {
-                                return back()->withInput()->with('error', "Syllabi Row {$rowNum}: File size must not exceed 10MB.");
-                            }
-                            $scannedDrf = $file->store('scans/syllabi-drf', 'public');
-                            $uploadedFiles[] = $scannedDrf;
-                        }
-
-                        $scannedRegistration = null;
-                        if ($request->hasFile('syllabiScannedRegistration') && isset($request->file('syllabiScannedRegistration')[$i])) {
-                            $file = $request->file('syllabiScannedRegistration')[$i];
-                            $ext = strtolower($file->getClientOriginalExtension());
-                            if (!in_array($ext, ['pdf', 'docx'])) {
-                                return back()->withInput()->with('error', "Syllabi Row {$rowNum}: Registration copy — only .pdf and .docx files are accepted.");
-                            }
-                            if ($file->getSize() > 10 * 1024 * 1024) {
-                                return back()->withInput()->with('error', "Syllabi Row {$rowNum}: Registration copy — file size must not exceed 10MB.");
-                            }
-                            $scannedRegistration = $file->store('scans/syllabi-registration', 'public');
-                            $uploadedFiles[] = $scannedRegistration;
-                        }
-
-                        Syllabi::create([
-                            'request_id'            => $requestId,
-                            'college_id'            => $request->college_id,
-                            'program_id'            => $request->program_id,
-                            'semester_id'           => $request->semester_id,
-                            'school_year_id'        => $request->school_year_id,
-                            'drf_id'                => $syllabiDrf->drf_id,
-                            'course_name'           => $courseName,
-                            'syllabi_availability'  => ($request->syllabiAvailability[$i] ?? 'not available'),
-                            'no_copies'             => $request->syllabiCopies[$i] ?? null,
-                            'originator'            => $request->syllabiOriginator[$i] ?? null,
-                            'no_pages'              => $request->syllabiNoPages[$i],
-                            'date_received'         => $request->syllabiDateReceived[$i],
-                            'time_received'         => $request->syllabiTimeReceived[$i],
-                            'drf_availability'      => ($request->syllabiDrfAvailability[$i] ?? 'not available'),
-                            'registered'            => ($request->syllabiIsRegistered[$i] ?? 'not registered'),
-                            'date_of_registration'  => $request->syllabiRegDate[$i] ?? null,
-                            'time_of_registration'  => $request->syllabiRegTime[$i] ?? null,
-                            'time_spent'            => $request->syllabiTimeSpent[$i] ?? null,
-                            'scanned_registration'  => $scannedRegistration, 
-                        ]);
-                    }
-                }
+                $this->saveSyllabiRows($requestId, $versionId, $docTypeId, $request, $uploadedFiles);
             }
 
             // ── 5. Retrieval (Section 4) ──
@@ -713,28 +618,14 @@ class RegisterController extends Controller
         }
     }
 
-    private function saveOriginsFromArrays(MasterlistRegistration $masterlist, array $officeIds, array $originatorNames): ?int
+    private function saveOriginsFromArrays(MasterlistRegistration $masterlist, array $officeIds): void
     {
-        $firstOfficeId = null;
-
         foreach (array_filter($officeIds) as $officeId) {
-            MasterlistOrigin::create([
-                'masterlist_id'   => $masterlist->masterlist_id,
-                'office_id'       => (int) $officeId,
-                'originator_name' => null,
-            ]);
-            if ($firstOfficeId === null) $firstOfficeId = (int) $officeId;
-        }
-
-        foreach (array_filter($originatorNames) as $name) {
-            MasterlistOrigin::create([
-                'masterlist_id'   => $masterlist->masterlist_id,
-                'office_id'       => null,
-                'originator_name' => trim($name),
+            MasterlistSourceOffice::create([
+                'masterlist_id' => $masterlist->masterlist_id,
+                'office_id'     => (int) $officeId,
             ]);
         }
-
-        return $firstOfficeId;
     }
 
     public function apiColleges()
@@ -799,8 +690,6 @@ class RegisterController extends Controller
                     $result['matches']->pluck('request_id')
                 )->where('doc_no', $docNo)->orderByDesc('revise_no')->get();
 
-                // ── NEW: pull the last revision's distribution offices,
-                // so they can be pre-filled into Retrieval for this revision ──
                 $latestDistribution = DocumentDistribution::where('request_id', $latest->request_id)->first();
                 $latestDistributionOffices = [];
                 if ($latestDistribution) {
@@ -815,6 +704,22 @@ class RegisterController extends Controller
                         ->values();
                 }
 
+                // ── NEW: pull everything else from the latest Masterlist row so
+                // the whole section can be pre-filled for the new revision ──
+                $sourceOffices = MasterlistSourceOffice::where('masterlist_id', $latest->masterlist_id)->with('office')->get();
+                $latestSourceUnit = $sourceOffices->map(fn ($o) => $o->office->office_name ?? null)
+                    ->filter()
+                    ->implode(', ');
+
+                $latestRelatedDocs = $latest->relatedDocuments()
+                    ->get(['masterlist_registration.masterlist_id', 'doc_no', 'doc_title'])
+                    ->map(fn ($d) => [
+                        'masterlist_id' => $d->masterlist_id,
+                        'doc_no'        => $d->doc_no,
+                        'doc_title'     => $d->doc_title,
+                    ])
+                    ->values();
+
                 return response()->json([
                     'exists'                       => true,
                     'message'                      => 'Document found.',
@@ -823,7 +728,15 @@ class RegisterController extends Controller
                     'latest_title'                 => $latest->doc_title,
                     'latest_originator'            => $latest->originator_name,
                     'revision_count'               => $registrations->count(),
-                    'latest_distribution_offices'  => $latestDistributionOffices, // ← NEW
+                    'latest_distribution_offices'  => $latestDistributionOffices,
+
+                    // NEW fields
+                    'latest_source_unit'           => $latestSourceUnit,
+                    'latest_effectivity_date'      => $latest->effectivity_date ? \Carbon\Carbon::parse($latest->effectivity_date)->format('Y-m-d') : null,
+                    'latest_no_pages'              => $latest->no_pages,
+                    'latest_deadline'              => $latest->deadline ? \Carbon\Carbon::parse($latest->deadline)->format('Y-m-d') : null,
+                    'latest_brief_purpose'         => $latest->brief_purpose,
+                    'latest_related_documents'     => $latestRelatedDocs,
                 ]);
             }
         }
@@ -926,6 +839,7 @@ class RegisterController extends Controller
             $query = DocumentRequest::with([
                 'docType',
                 'documentRequestForm',
+                'documentRequestForm.drfOffices.office',
                 'masterlistRegistration',
                 'documentChangeNotice',
                 'documentRetrieval',
@@ -977,9 +891,17 @@ class RegisterController extends Controller
                 ];
             }
 
-            $rows = $documents->map(function ($doc) use ($checklistNames) {
+            $syllabiDrfIds = Syllabi::whereIn('request_id', $documents->pluck('request_id'))
+                ->pluck('drf_id')
+                ->filter()
+                ->unique();
+
+           $rows = $documents->map(function ($doc) use ($checklistNames, $syllabiDrfIds) {
                 $ml   = $doc->masterlistRegistration;
-                $drf  = $doc->documentRequestForm;
+                $drf = null;
+                if ($doc->documentRequestForm && !$syllabiDrfIds->contains($doc->documentRequestForm->drf_id)) {
+                    $drf = $doc->documentRequestForm;
+                }
                 $dcn  = $doc->documentChangeNotice;
                 $ret  = $doc->documentRetrieval;
                 $dist = $doc->documentDistribution;
@@ -1055,7 +977,8 @@ class RegisterController extends Controller
             }
         }
 
-        $drf                 = DocumentRequestForm::where('request_id', $id)->first();
+        $drf        = $this->getSection1Drf($id);
+        $drfOffices = $drf ? DrfOffice::where('drf_id', $drf->drf_id)->with('office')->get() : collect();
         $dcn                 = DocumentChangeNotice::where('request_id', $id)->first();
         $revisions           = $dcn ? DocRevision::where('dcn_id', $dcn->dcn_id)->get() : collect();
         $masterlist          = $ml;
@@ -1066,20 +989,14 @@ class RegisterController extends Controller
         $approval            = ApprovalRecord::where('request_id', $id)->first();
         $syllabi             = Syllabi::where('request_id', $id)->orderBy('syllabi_id')->get();
 
-        $origins = collect();
+        $sourceOffices = collect();
         $masterlistSourceUnit = '';
         if ($masterlist) {
-            $origins = MasterlistOrigin::where('masterlist_id', $masterlist->masterlist_id)->with('office')->get();
-            $parts = [];
-            foreach ($origins as $o) {
-                if ($o->office) {
-                    $parts[] = $o->office->office_name;
-                } elseif ($o->originator_name) {
-                    $parts[] = $o->originator_name;
-                }
-            }
-            $masterlistSourceUnit = implode(', ', $parts);
-        }
+            $sourceOffices = MasterlistSourceOffice::where('masterlist_id', $masterlist->masterlist_id)->with('office')->get();
+            $masterlistSourceUnit = $sourceOffices->map(fn ($o) => $o->office->office_name ?? null)
+                ->filter()
+                ->implode(', ');
+                    }
 
         $offices        = \App\Models\Office::orderBy('office_name')->get();
         $docTypes       = \App\Models\DocType::orderBy('doc_type_name')->get();
@@ -1090,9 +1007,123 @@ class RegisterController extends Controller
             'docRequest', 'drf', 'drfOffices', 'dcn', 'revisions', 'masterlist',
             'retrieval', 'retrievalOffices', 'distribution',
             'distributionOffices', 'approval', 'syllabi',
-            'offices', 'docTypes', 'versionTypes', 'approvalBodies', 'masterlistSourceUnit'
+            'offices', 'docTypes', 'versionTypes', 'approvalBodies', 'masterlistSourceUnit', 'sourceOffices'
         ));
     }
+
+    private function getSection1Drf(int $requestId): ?DocumentRequestForm
+    {
+        $syllabiDrfIds = Syllabi::where('request_id', $requestId)->pluck('drf_id')->filter();
+
+        return DocumentRequestForm::where('request_id', $requestId)
+            ->when($syllabiDrfIds->isNotEmpty(), function ($q) use ($syllabiDrfIds) {
+                $q->whereNotIn('drf_id', $syllabiDrfIds);
+            })
+            ->first();
+    }
+
+    /**
+ * Validate and save Syllabi rows for a document request.
+ * Handles DRF creation, file uploads, and Syllabi record creation.
+ *
+ * @throws \Exception on file validation failure (caller should wrap in transaction)
+ */
+private function saveSyllabiRows(
+    int $requestId,
+    int $versionId,
+    int $docTypeId,
+    Request $request,
+    array &$uploadedFiles
+): void {
+    if (!$request->has('syllabiCourseName')) {
+        return;
+    }
+
+    foreach ($request->syllabiCourseName as $i => $courseName) {
+        $rowNum = $i + 1;
+
+        // Create per-row DRF record
+        $syllabiDrf = DocumentRequestForm::create([
+            'checklist_id'     => 1,
+            'version_id'       => $versionId,
+            'request_id'       => $requestId,
+            'doc_type_id'      => $docTypeId,
+            'drf_no'           => $request->syllabiDrfNo[$i],
+            'drf_date'         => $request->syllabiDrfDate[$i],
+            'drf_receipt_date' => $request->syllabiDrfReceived[$i],
+            'doc_title'        => $courseName,
+            'scanned_drf'      => null,
+            'created_by'       => auth()->id(),
+        ]);
+
+        // Scanned DRF file
+        $scannedDrf = $this->storeOptionalFile(
+            $request, 'syllabiScannedDrf', $i, 'scans/syllabi-drf',
+            "Syllabi Row {$rowNum}: Scanned DRF"
+        );
+        $syllabiDrf->update(['scanned_drf' => $scannedDrf]);
+        if ($scannedDrf) $uploadedFiles[] = $scannedDrf;
+
+        // Scanned Registration file
+        $scannedRegistration = $this->storeOptionalFile(
+            $request, 'syllabiScannedRegistration', $i, 'scans/syllabi-registration',
+            "Syllabi Row {$rowNum}: Registration copy"
+        );
+        if ($scannedRegistration) $uploadedFiles[] = $scannedRegistration;
+
+        Syllabi::create([
+            'request_id'            => $requestId,
+            'college_id'            => $request->college_id,
+            'program_id'            => $request->program_id,
+            'semester_id'           => $request->semester_id,
+            'school_year_id'        => $request->school_year_id,
+            'drf_id'                => $syllabiDrf->drf_id,
+            'course_name'           => $courseName,
+            'syllabi_availability'  => $request->syllabiAvailability[$i] ?? 'not available',
+            'no_copies'             => $request->syllabiCopies[$i] ?? null,
+            'originator'            => $request->syllabiOriginator[$i] ?? null,
+            'no_pages'              => $request->syllabiNoPages[$i],
+            'date_received'         => $request->syllabiDateReceived[$i],
+            'time_received'         => $request->syllabiTimeReceived[$i],
+            'drf_availability'      => $request->syllabiDrfAvailability[$i] ?? 'not available',
+            'registered'            => $request->syllabiIsRegistered[$i] ?? 'not registered',
+            'date_of_registration'  => $request->syllabiRegDate[$i] ?? null,
+            'time_of_registration'  => $request->syllabiRegTime[$i] ?? null,
+            'time_spent'            => $request->syllabiTimeSpent[$i] ?? null,
+            'scanned_registration'  => $scannedRegistration,
+        ]);
+    }
+}
+
+/**
+ * Store an optional uploaded file with validation.
+ * Returns the storage path or null if no file was provided.
+ *
+ * @throws \Exception if the file fails validation
+ */
+private function storeOptionalFile(
+    Request $request,
+    string $inputName,
+    int $index,
+    string $directory,
+    string $label
+): ?string {
+    if (!$request->hasFile($inputName) || !isset($request->file($inputName)[$index])) {
+        return null;
+    }
+
+    $file = $request->file($inputName)[$index];
+    $ext  = strtolower($file->getClientOriginalExtension());
+
+    if (!in_array($ext, ['pdf', 'docx'])) {
+        throw new \Exception("{$label}: only .pdf and .docx files are accepted.");
+    }
+    if ($file->getSize() > 10 * 1024 * 1024) {
+        throw new \Exception("{$label}: file size must not exceed 10MB.");
+    }
+
+    return $file->store($directory, 'public');
+}
 
     // ──────────────────────────────────────────────────────────
     // UPDATE — Save changes
@@ -1121,11 +1152,12 @@ class RegisterController extends Controller
             // ── Delete records for unchecked checklists ──
             $checkedChecklists = array_map('intval', $request->input('checklists', []));
 
-            // DRF unchecked → delete
+            // DRF unchecked → delete (Section 1 only — Syllabi DRFs handled separately)
             if (!in_array(1, $checkedChecklists)) {
-                $existingDrf = DocumentRequestForm::where('request_id', $requestId)->first();
+                $existingDrf = $this->getSection1Drf($requestId);
                 if ($existingDrf) {
                     if ($existingDrf->scanned_drf) $filesToDelete[] = $existingDrf->scanned_drf;
+                    DrfOffice::where('drf_id', $existingDrf->drf_id)->delete();
                     $existingDrf->delete();
                 }
             }
@@ -1149,8 +1181,19 @@ class RegisterController extends Controller
                 $existingMl = MasterlistRegistration::where('request_id', $requestId)->first();
                 if ($existingMl) {
                     if ($existingMl->scanned_masterlist) $filesToDelete[] = $existingMl->scanned_masterlist;
+                    MasterlistSourceOffice::where('masterlist_id', $existingMl->masterlist_id)->delete();
+                    $existingMl->relatedDocuments()->detach();
                     $existingMl->delete();
                 }
+
+                // Also clean up any Syllabi records and their DRF rows
+                $oldSyllabi = Syllabi::with('drf')->where('request_id', $requestId)->get();
+                foreach ($oldSyllabi as $old) {
+                    if ($old->drf && $old->drf->scanned_drf) $filesToDelete[] = $old->drf->scanned_drf;
+                    if ($old->scanned_registration) $filesToDelete[] = $old->scanned_registration;
+                    if ($old->drf) $old->drf->delete();
+                }
+                $oldSyllabi->each->delete();
             }
 
             // Retrieval unchecked → delete
@@ -1183,7 +1226,7 @@ class RegisterController extends Controller
 
             // ── 2. DRF ──
             if ($request->filled('drfNo')) {
-                $drf     = DocumentRequestForm::where('request_id', $requestId)->first();
+                $drf     = $this->getSection1Drf($requestId);
                 $drfFile = $drf ? $drf->scanned_drf : null;
 
                 if ($request->hasFile('drfFile')) {
@@ -1191,8 +1234,6 @@ class RegisterController extends Controller
                     $drfFile = $request->file('drfFile')->store('scans/drf', 'public');
                     $uploadedFiles[] = $drfFile;
                 }
-
-                $drfOfficeIds = array_filter($request->input('drfSourceUnit', []));
 
                 $drfOfficeIds = array_filter($request->input('drfSourceUnit', []));
 
@@ -1319,7 +1360,6 @@ class RegisterController extends Controller
                     'effectivity_date'    => $request->masterlistEffectivityDate,
                     'revise_no'           => $request->masterlistRevisionNo,
                     'no_pages'            => $request->masterlistNoOfPages,
-                    'office_id'           => null,
                     'originator_name'     => $request->masterlistOriginator,
                     'deadline'            => $request->deadlineOfSubmission,
                     'brief_purpose'       => $request->briefPurpose,
@@ -1336,15 +1376,11 @@ class RegisterController extends Controller
                 }
 
                 // ── Fix: replace origins AND restore primary office_id ──
-                MasterlistOrigin::where('masterlist_id', $masterlist->masterlist_id)->delete();
-                $primaryOfficeId = $this->saveOriginsFromArrays(
+                MasterlistSourceOffice::where('masterlist_id', $masterlist->masterlist_id)->delete();
+                $this->saveOriginsFromArrays(
                     $masterlist,
                     $request->input('masterlistOfficeIds', []),
-                    $request->input('masterlistOriginatorNames', [])
                 );
-                if ($primaryOfficeId) {
-                    $masterlist->update(['office_id' => $primaryOfficeId]);
-                }
 
                 $relatedIds = array_filter(array_map('intval', $request->input('relatedDocumentIds', [])));
                 $masterlist->relatedDocuments()->sync($relatedIds);
@@ -1354,8 +1390,19 @@ class RegisterController extends Controller
             $subType   = \App\Models\DocType::find($request->sub_type_id);
             $isSyllabi = $subType && strtolower($subType->doc_type_name) === 'syllabi';
 
+            // ── Clean up Syllabi if sub_type changed away from Syllabi ──
+            if (!$isSyllabi) {
+                $oldSyllabi = Syllabi::with('drf')->where('request_id', $requestId)->get();
+                foreach ($oldSyllabi as $old) {
+                    if ($old->drf && $old->drf->scanned_drf) $filesToDelete[] = $old->drf->scanned_drf;
+                    if ($old->scanned_registration) $filesToDelete[] = $old->scanned_registration;
+                    if ($old->drf) $old->drf->delete();
+                }
+                $oldSyllabi->each->delete();
+            }
+
             if ($isSyllabi) {
-                $masterlist = MasterlistRegistration::where('request_id', $requestId)->first();
+                $masterlist     = MasterlistRegistration::where('request_id', $requestId)->first();
                 $masterlistData = [
                     'checklist_id'     => 3,
                     'version_id'       => $versionId,
@@ -1376,7 +1423,7 @@ class RegisterController extends Controller
                     ]));
                 }
 
-                // Delete old syllabi rows (and track their files)
+                // Delete old syllabi rows and their DRF files
                 $oldSyllabi = Syllabi::with('drf')->where('request_id', $requestId)->get();
                 foreach ($oldSyllabi as $old) {
                     if ($old->drf && $old->drf->scanned_drf) $filesToDelete[] = $old->drf->scanned_drf;
@@ -1385,93 +1432,8 @@ class RegisterController extends Controller
                 }
                 $oldSyllabi->each->delete();
 
-                // Validate and re-save
-                if ($request->has('syllabiCourseName')) {
-                    foreach ($request->syllabiCourseName as $i => $courseName) {
-                        $rowNum = $i + 1;
-
-                        if (empty($courseName)) {
-                            return back()->withInput()->with('error', "Syllabi Row {$rowNum}: Course Name is required.");
-                        }
-                        if (empty($request->syllabiNoPages[$i]) || $request->syllabiNoPages[$i] <= 0) {
-                            return back()->withInput()->with('error', "Syllabi Row {$rowNum}: No. of Pages must be greater than 0.");
-                        }
-                        if (empty($request->syllabiDrfNo[$i])) {
-                            return back()->withInput()->with('error', "Syllabi Row {$rowNum}: DRF No. is required.");
-                        }
-                        if (empty($request->syllabiDrfDate[$i])) {
-                            return back()->withInput()->with('error', "Syllabi Row {$rowNum}: DRF Date is required.");
-                        }
-                        if (empty($request->syllabiDrfReceived[$i])) {
-                            return back()->withInput()->with('error', "Syllabi Row {$rowNum}: DRF Received Date is required.");
-                        }
-
-                        // ── NEW: each course-copy-row gets its own DocumentRequestForm row,
-                        // scoped via drf_id — does NOT collide with Section 1's DRF lookup ──
-                        $syllabiDrf = DocumentRequestForm::create([
-                            'checklist_id'     => 1,
-                            'version_id'       => $versionId,
-                            'request_id'       => $requestId,
-                            'doc_type_id'      => $docTypeId,
-                            'drf_no'           => $request->syllabiDrfNo[$i],
-                            'drf_date'         => $request->syllabiDrfDate[$i],
-                            'drf_receipt_date' => $request->syllabiDrfReceived[$i],
-                            'doc_title'        => $courseName,
-                            'scanned_drf'      => null,
-                            'created_by'       => auth()->id(),
-                        ]);
-
-                        $scannedDrf = null;
-                        if ($request->hasFile('syllabiScannedDrf') && isset($request->file('syllabiScannedDrf')[$i])) {
-                            $file = $request->file('syllabiScannedDrf')[$i];
-                            $ext = strtolower($file->getClientOriginalExtension());
-                            if (!in_array($ext, ['pdf', 'docx'])) {
-                                return back()->withInput()->with('error', "Syllabi Row {$rowNum}: Only .pdf and .docx files are accepted.");
-                            }
-                            if ($file->getSize() > 10 * 1024 * 1024) {
-                                return back()->withInput()->with('error', "Syllabi Row {$rowNum}: File size must not exceed 10MB.");
-                            }
-                            $scannedDrf = $file->store('scans/syllabi-drf', 'public');
-                            $uploadedFiles[] = $scannedDrf;
-                        }
-
-                        $scannedRegistration = null;
-                        if ($request->hasFile('syllabiScannedRegistration') && isset($request->file('syllabiScannedRegistration')[$i])) {
-                            $file = $request->file('syllabiScannedRegistration')[$i];
-                            $ext = strtolower($file->getClientOriginalExtension());
-                            if (!in_array($ext, ['pdf', 'docx'])) {
-                                return back()->withInput()->with('error', "Syllabi Row {$rowNum}: Registration copy — only .pdf and .docx files are accepted.");
-                            }
-                            if ($file->getSize() > 10 * 1024 * 1024) {
-                                return back()->withInput()->with('error', "Syllabi Row {$rowNum}: Registration copy — file size must not exceed 10MB.");
-                            }
-                            $scannedRegistration = $file->store('scans/syllabi-registration', 'public');
-                            $uploadedFiles[] = $scannedRegistration;
-                        }
-
-                        Syllabi::create([
-                            'request_id'            => $requestId,
-                            'college_id'            => $request->college_id,
-                            'program_id'            => $request->program_id,
-                            'semester_id'           => $request->semester_id,
-                            'school_year_id'        => $request->school_year_id,
-                            'drf_id'                => $syllabiDrf->drf_id,       // ← link, not columns
-                            'course_name'           => $courseName,
-                            'syllabi_availability'  => ($request->syllabiAvailability[$i] ?? 'not available'),
-                            'no_copies'             => $request->syllabiCopies[$i] ?? null,
-                            'originator'            => $request->syllabiOriginator[$i] ?? null,
-                            'no_pages'              => $request->syllabiNoPages[$i],
-                            'date_received'         => $request->syllabiDateReceived[$i],
-                            'time_received'         => $request->syllabiTimeReceived[$i],
-                            'drf_availability'      => ($request->syllabiDrfAvailability[$i] ?? 'not available'),
-                            'registered'            => ($request->syllabiIsRegistered[$i] ?? 'not registered'),
-                            'date_of_registration'  => $request->syllabiRegDate[$i] ?? null,
-                            'time_of_registration'  => $request->syllabiRegTime[$i] ?? null,
-                            'time_spent'            => $request->syllabiTimeSpent[$i] ?? null,
-                            'scanned_registration'  => $scannedRegistration, 
-                        ]);
-                    }
-                }
+                // Re-create syllabi rows using shared method
+                $this->saveSyllabiRows($requestId, $versionId, $docTypeId, $request, $uploadedFiles);
             }
 
             // ── 5. Retrieval ──
@@ -1627,37 +1589,6 @@ class RegisterController extends Controller
         }
     }
 
-    private function saveOrigins(MasterlistRegistration $masterlist, ?string $originString): ?int
-    {
-        if (!$originString || trim($originString) === '') return null;
-
-        $items = array_filter(array_map('trim', explode(',', $originString)));
-        if (empty($items)) return null;
-
-        $offices = \App\Models\Office::where('status', 'active')->get()->keyBy(fn($o) => strtolower($o->office_name));
-        $firstOfficeId = null;
-
-        foreach ($items as $item) {
-            $data = ['masterlist_id' => $masterlist->masterlist_id];
-            $matchedOffice = $offices->get(strtolower($item));
-
-            if ($matchedOffice) {
-                $data['office_id']       = $matchedOffice->office_id;
-                $data['originator_name'] = null;
-                if ($firstOfficeId === null) {
-                    $firstOfficeId = $matchedOffice->office_id;
-                }
-            } else {
-                $data['office_id']       = null;
-                $data['originator_name'] = $item;
-            }
-
-            MasterlistOrigin::create($data);
-        }
-
-        return $firstOfficeId;
-    }
-
     // ──────────────────────────────────────────────────────────
     // DELETE
     // ──────────────────────────────────────────────────────────
@@ -1687,9 +1618,8 @@ class RegisterController extends Controller
         try {
             $requestId = $docRequest->request_id;
 
-            // DRF
-            $drf = DocumentRequestForm::where('request_id', $requestId)->first();   // ← fetch it
-            $drfOffices = $drf ? DrfOffice::where('drf_id', $drf->drf_id)->with('office')->get() : collect();
+            // DRF (Section 1 only — Syllabi DRFs are handled in the Syllabi block below)
+            $drf = $this->getSection1Drf($requestId);
             if ($drf) {
                 if ($drf->scanned_drf) $filesToDelete[] = $drf->scanned_drf;
                 DrfOffice::where('drf_id', $drf->drf_id)->delete();
@@ -1712,6 +1642,8 @@ class RegisterController extends Controller
             $masterlist = MasterlistRegistration::where('request_id', $requestId)->first();
             if ($masterlist) {
                 if ($masterlist->scanned_masterlist) $filesToDelete[] = $masterlist->scanned_masterlist;
+                MasterlistSourceOffice::where('masterlist_id', $masterlist->masterlist_id)->delete();
+                $masterlist->relatedDocuments()->detach();
                 $masterlist->delete();
             }
 
@@ -1801,14 +1733,15 @@ class RegisterController extends Controller
     public function databaseData(Request $request)
     {
         try {
-            $perPage = (int) $request->input('per_page', 20);
+            $perPage    = (int) $request->input('per_page', 20);
+            $currentPage = max(1, (int) $request->input('page', 1));
 
             $query = DocumentRequest::with([
                 'docType',
                 'documentRequestForm',
                 'documentRequestForm.drfOffices.office',
                 'masterlistRegistration',
-                'masterlistRegistration.origins.office',
+                'masterlistRegistration.sourceOffices.office',
                 'masterlistRegistration.relatedDocuments',
                 'masterlistRegistration.relatedToDocuments',
                 'approvalRecords',
@@ -1843,11 +1776,11 @@ class RegisterController extends Controller
             if ($request->input('originator')) {
                 $search = $request->input('originator');
                 $query->whereHas('masterlistRegistration', function ($q) use ($search) {
-                    $q->whereHas('origins', function ($q2) use ($search) {
-                        $q2->where('originator_name', 'like', "%{$search}%")
-                        ->orWhereHas('office', function ($q3) use ($search) {
-                            $q3->where('office_name', 'like', "%{$search}%");
-                        });
+                    $q->whereHas('sourceOffices', function ($q2) use ($search) {
+                        $q2->where('source_name', 'like', "%{$search}%")
+                            ->orWhereHas('office', function ($q3) use ($search) {
+                                $q3->where('office_name', 'like', "%{$search}%");
+                            });
                     });
                 });
             }
@@ -1878,9 +1811,22 @@ class RegisterController extends Controller
             // Get all matching documents
             $allDocs = $query->get();
 
+            // Collect syllabi DRF IDs once so we can exclude them when looking up Section 1 DRFs
+            $syllabiDrfIds = Syllabi::whereIn('request_id', $allDocs->pluck('request_id'))
+                ->pluck('drf_id')
+                ->filter()
+                ->unique()
+                ->values();
+
             // Build rows using eager-loaded relationships
-            $allRows = $allDocs->map(function ($doc) {
-                $drf  = $doc->documentRequestForm;
+            $allRows = $allDocs->map(function ($doc) use ($syllabiDrfIds) {
+                // Filter out syllabi DRFs — get the Section 1 DRF only
+                $drf = null;
+                if ($doc->documentRequestForm) {
+                    $isSyllabiDrf = $syllabiDrfIds->contains($doc->documentRequestForm->drf_id);
+                    $drf = $isSyllabiDrf ? null : $doc->documentRequestForm;
+                }
+
                 $ml   = $doc->masterlistRegistration;
                 $appr = $doc->approvalRecords ? $doc->approvalRecords->first() : null;
                 $dcn  = $doc->documentChangeNotice;
@@ -1897,23 +1843,34 @@ class RegisterController extends Controller
 
                 $drfOfficesList = null;
                 if ($drf && $drf->drfOffices) {
-                    $drfOfficesList = $drf->drfOffices->pluck('office.office_name')->filter()->implode(', ') ?: null;
+                    $drfOfficesList = $drf->drfOffices
+                        ->map(fn ($o) => $o->office ? $o->office->office_name : null)
+                        ->filter()
+                        ->implode(', ') ?: null;
                 }
 
                 $retOffices = null;
                 if ($ret && $ret->offices) {
-                    $retOffices = $ret->offices->pluck('office_name')->implode(', ') ?: null;
+                    $retOffices = $ret->offices
+                        ->map(fn ($o) => $o->office ? $o->office->office_name : $o->office_name)
+                        ->filter()
+                        ->implode(', ') ?: null;
                 }
 
                 $distOffices = null;
                 if ($dist && $dist->offices) {
-                    $distOffices = $dist->offices->pluck('office_name')->implode(', ') ?: null;
+                    $distOffices = $dist->offices
+                        ->map(fn ($o) => $o->office ? $o->office->office_name : $o->office_name)
+                        ->filter()
+                        ->implode(', ') ?: null;
                 }
 
                 $sourceUnitName = null;
-                if ($drf && $drf->office_id) {
-                    $office = \App\Models\Office::find($drf->office_id);
-                    $sourceUnitName = $office ? $office->office_name : null;
+                if ($ml && $ml->sourceOffices->count() > 0) {
+                    $sourceUnitName = $ml->sourceOffices
+                        ->map(fn ($o) => $o->office ? $o->office->office_name : null)
+                        ->filter()
+                        ->implode(', ') ?: null;
                 }
 
                 $deadlineDiff = null;
@@ -1923,17 +1880,13 @@ class RegisterController extends Controller
 
                 return [
                     'request_id'       => $doc->request_id,
-                    'doc_type_id'      => $doc->doc_type_id,      // ← add
+                    'doc_type_id'      => $doc->doc_type_id,
                     'sub_type_id'      => $doc->sub_type_id,
                     'doc_no'           => $ml ? $ml->doc_no : 'N/A',
                     'rev_no'           => $ml ? (int) $ml->revise_no : 0,
                     'title'            => ($ml && $ml->doc_title) ? $ml->doc_title : (($drf && $drf->doc_title) ? $drf->doc_title : 'N/A'),
                     'effectivity'      => ($ml && $ml->effectivity_date) ? \Carbon\Carbon::parse($ml->effectivity_date)->format('M d, Y') : null,
-                    'originator'       => $ml && $ml->origins->count() > 0
-                                            ? $ml->origins->map(function ($o) {
-                                                return $o->office ? $o->office->office_name : $o->originator_name;
-                                            })->filter()->implode(', ') ?: null
-                                            : null,
+                    'originator'        => $ml ? $ml->originator_name : null,
                     'pages'            => $ml ? $ml->no_pages : null,
                     'status'           => $doc->approval_status ?? 'Active',
                     'pdf_path'         => ($ml && $ml->scanned_masterlist) ? '/storage/' . $ml->scanned_masterlist : null,
@@ -2018,9 +1971,8 @@ class RegisterController extends Controller
 
             // Paginate groups
             $totalGroups    = $groups->count();
-            $currentPage    = max(1, (int) $request->input('page', 1));
-            $lastPage        = max(1, (int) ceil($totalGroups / $perPage));
-            $currentPage     = min($currentPage, $lastPage);
+            $lastPage       = max(1, (int) ceil($totalGroups / $perPage));
+            $currentPage    = min($currentPage, $lastPage);
             $paginatedGroups = $groups->slice(($currentPage - 1) * $perPage, $perPage)->values();
 
             return response()->json([

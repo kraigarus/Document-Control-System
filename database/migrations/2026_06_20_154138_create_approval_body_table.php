@@ -14,7 +14,7 @@ return new class extends Migration
         });
 
         DB::table('approval_body')->insert([
-            ['approval_body_id' => 1, 'approval_name' => 'Board of Trustee'],
+            ['approval_body_id' => 1, 'approval_name' => 'Board of Trustees'],
             ['approval_body_id' => 2, 'approval_name' => 'Admin Council'],
             ['approval_body_id' => 3, 'approval_name' => 'Acad Council'],
             ['approval_body_id' => 4, 'approval_name' => 'RIC Council'],

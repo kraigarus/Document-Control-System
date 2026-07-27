@@ -28,8 +28,6 @@ return new class extends Migration
             $table->date('effectivity_date')->nullable();
             $table->integer('revise_no')->nullable();
             $table->integer('no_pages')->nullable();
-            $table->foreignId('office_id')->nullable()
-                  ->constrained('offices', 'office_id');
             $table->string('originator_name')->nullable();
             $table->date('deadline')->nullable();
             $table->text('brief_purpose')->nullable();

@@ -24,7 +24,6 @@ class MasterlistRegistration extends Model
         'effectivity_date',
         'revise_no',
         'no_pages',
-        'office_id',
         'originator_name',
         'deadline',
         'brief_purpose',
@@ -60,11 +59,6 @@ class MasterlistRegistration extends Model
         return $this->belongsTo(DocType::class, 'doc_type_id');
     }
 
-    public function office()
-    {
-        return $this->belongsTo(Office::class, 'office_id');
-    }
-
     public function creator()
     {
         return $this->belongsTo(Account::class, 'created_by');
@@ -95,8 +89,8 @@ class MasterlistRegistration extends Model
         return $this->relatedDocuments->merge($this->relatedToDocuments)->unique('masterlist_id');
     }
 
-    public function origins()
+    public function sourceOffices()
     {
-        return $this->hasMany(MasterlistOrigin::class, 'masterlist_id', 'masterlist_id');
+        return $this->hasMany(MasterlistSourceOffice::class, 'masterlist_id', 'masterlist_id');
     }
 }

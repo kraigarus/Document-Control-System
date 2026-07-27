@@ -4,15 +4,14 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class MasterlistOrigin extends Model
+class MasterlistSourceOffice extends Model
 {
-    protected $table = 'masterlist_origins';
-    protected $primaryKey = 'origin_id';
+    protected $table = 'masterlist_source_offices';
+    protected $primaryKey = 'masterlist_office_id';
 
     protected $fillable = [
         'masterlist_id',
         'office_id',
-        'originator_name',
     ];
 
     public function masterlist()

@@ -29,12 +29,10 @@ class Syllabi extends Model
         'date_of_registration',
         'time_of_registration',
         'time_spent',
+        'scanned_registration', 
     ];
 
     protected $casts = [
-        'syllabi_availability' => 'boolean',
-        'drf_availability'     => 'boolean',
-        'registered'           => 'boolean',
         'date_received'        => 'date',
         'date_of_registration' => 'date',
     ];

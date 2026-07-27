@@ -26,7 +26,7 @@ return new class extends Migration
 
             // Course Info (Step 1)
             $table->string('course_name')->nullable();
-            $table->boolean('syllabi_availability')->default(false);
+            $table->string('syllabi_availability')->default('not available');
             $table->integer('no_copies')->nullable();
             $table->string('originator')->nullable();
             $table->integer('no_pages')->nullable();
@@ -34,13 +34,14 @@ return new class extends Migration
             $table->time('time_received')->nullable();
 
             // DRF (Step 2) — physical-availability flag, independent of drf_id being set
-            $table->boolean('drf_availability')->default(false);
+            $table->string('drf_availability')->default('not available');
 
             // Registration (Step 3)
-            $table->boolean('registered')->default(false);
+            $table->string('registered')->default('not registered');
             $table->date('date_of_registration')->nullable();
             $table->time('time_of_registration')->nullable();
             $table->integer('time_spent')->nullable();
+            $table->string('scanned_registration')->nullable();
 
             $table->timestamps();
         });

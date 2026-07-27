@@ -16,8 +16,6 @@
     --db-amber-light: #fffbeb;
     --db-red: #dc2626;
     --db-red-light: #fef2f2;
-    --db-purple: #7c3aed;
-    --db-purple-light: #f5f3ff;
     --db-border: #e2e8f0;
     --db-border-hover: #cbd5e1;
     --db-bg: #f8fafc;
@@ -28,13 +26,6 @@
     --db-radius: 6px;
     --db-shadow: 0 1px 3px rgba(0,0,0,0.08);
     --db-shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
-    --db-col-approval: #dbeafe;
-    --db-col-deadline: #fef3c7;
-    --db-col-masterlist: #d1fae5;
-    --db-col-dcn: #ede9fe;
-    --db-col-drf: #fce7f3;
-    --db-col-distribution: #e0f2fe;
-    --db-col-retrieval: #fff7ed;
 }
 
 body {
@@ -46,7 +37,6 @@ body {
     overflow-y: auto;
     margin: 0;
 }
-
 
 /* ── PAGE ── */
 .db-page {
@@ -141,41 +131,38 @@ body {
 .db-search-wrap input:focus { outline: none; border-color: var(--db-accent); box-shadow: 0 0 0 3px rgba(37,99,235,0.08); }
 .db-search-wrap input::placeholder { color: var(--db-text-muted); }
 
-.db-filter-btn, .db-export-btn {
+.db-filter-btn, .db-export-btn, .db-collapse-btn {
     display: inline-flex; align-items: center; gap: 6px;
-    height: 34px; padding: 0 14px;
+    height: 34px; min-width: 100px; padding: 0 14px;
     border: 1px solid var(--db-border); border-radius: var(--db-radius);
     background: var(--db-white); color: var(--db-text-sec);
     font-size: 12px; font-weight: 600;
     cursor: pointer; transition: all 0.15s;
+    justify-content: center; flex-shrink: 0; white-space: nowrap;
 }
-.db-filter-btn:hover, .db-export-btn:hover { border-color: var(--db-border-hover); background: var(--db-bg); }
+.db-filter-btn:hover, .db-export-btn:hover, .db-collapse-btn:hover {
+    border-color: var(--db-border-hover); background: var(--db-bg);
+}
+.db-collapse-btn.is-collapsed {
+    background: var(--db-accent-light);
+    border-color: var(--db-accent);
+    color: var(--db-accent);
+}
 
 /* ── FILTER PANEL ── */
 .db-filter-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 1001;
+    position: fixed; inset: 0; z-index: 1001;
     background: rgba(15,23,42,0.4);
-    opacity: 0;
-    visibility: hidden;
-    transition: all 0.2s;
+    opacity: 0; visibility: hidden; transition: all 0.2s;
 }
 .db-filter-overlay.db-open { opacity: 1; visibility: visible; }
 .db-filter-panel {
-    position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 380px;
-    max-width: 95vw;
-    z-index: 1002;
+    position: fixed; top: 0; right: 0; bottom: 0;
+    width: 380px; max-width: 95vw; z-index: 1002;
     background: var(--db-white);
     box-shadow: -4px 0 24px rgba(0,0,0,0.15);
-    display: flex;
-    flex-direction: column;
-    transform: translateX(100%);
-    transition: transform 0.25s ease;
+    display: flex; flex-direction: column;
+    transform: translateX(100%); transition: transform 0.25s ease;
 }
 .db-filter-panel.db-open { transform: translateX(0); }
 .db-filter-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--db-border); }
@@ -202,17 +189,13 @@ body {
     background: var(--db-white);
     border: 1px solid var(--db-border);
     border-radius: 8px;
-    flex: 1;
-    min-height: 0;
+    flex: 1; min-height: 0;
     position: relative;
-    display: flex;
-    flex-direction: column;
+    display: flex; flex-direction: column;
 }
 
 .db-table-scroll {
-    flex: 1;
-    overflow: auto;
-    min-height: 0;
+    flex: 1; overflow: auto; min-height: 0;
 }
 
 .db-table-scroll table {
@@ -229,14 +212,11 @@ body {
 }
 
 .db-empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
     padding: 60px 20px;
     color: var(--db-text-muted);
-    flex: 1;
-    min-height: 200px;
+    flex: 1; min-height: 200px;
 }
 
 .db-empty svg { margin-bottom: 12px; opacity: 0.4; }
@@ -268,19 +248,16 @@ body {
 .db-head-tertiary th:last-child { border-right: none; }
 
 .db-head-primary th {
-    top: 0;
-    z-index: 30;
+    top: 0; z-index: 30;
     background: #f1f5f9;
 }
 .db-head-secondary th {
     top: var(--header-row1-h, 36px);
-    z-index: 29;
-    background: #f8fafc;
+    z-index: 29; background: #f8fafc;
 }
 .db-head-tertiary th {
     top: var(--header-row2-top, 68px);
-    z-index: 28;
-    background: #fdfdfe;
+    z-index: 28; background: #fdfdfe;
 }
 
 /* ── STICKY COLUMN HEADERS ── */
@@ -330,27 +307,134 @@ body {
     background: #f8fafc; background-clip: padding-box;
 }
 
-/* ── COLUMN GROUP COLORS ── */
-.col-group-approval { background: var(--db-col-approval) !important; color: #1e40af; background-clip: padding-box; }
-.col-group-deadline { background: var(--db-col-deadline) !important; color: #92400e; background-clip: padding-box; }
-.col-group-masterlist { background: var(--db-col-masterlist) !important; color: #065f46; background-clip: padding-box; }
-.col-group-dcn { background: var(--db-col-dcn) !important; color: #5b21b6; background-clip: padding-box; }
-.col-group-drf { background: var(--db-col-drf) !important; color: #9d174d; background-clip: padding-box; }
-.col-group-distribution { background: var(--db-col-distribution) !important; color: #0369a1; background-clip: padding-box; }
-.col-group-retrieval { background: var(--db-col-retrieval) !important; color: #9a3412; background-clip: padding-box; }
+/* ═══════════════════════════════════
+   COLUMN GROUPS — GRAY / WHITE
+   Gray:  approval, masterlist, drf, retrieval
+   White: deadline, dcn, distribution
+   ═══════════════════════════════════ */
 
-.col-group-summary { cursor: pointer; transition: all 0.15s; }
-.col-group-summary:hover { filter: brightness(0.93); }
-.col-group-summary[data-group="approval"] { background: var(--db-col-approval) !important; color: #1e40af; }
-.col-group-summary[data-group="deadline"] { background: var(--db-col-deadline) !important; color: #92400e; }
-.col-group-summary[data-group="masterlist"] { background: var(--db-col-masterlist) !important; color: #065f46; }
-.col-group-summary[data-group="dcn"] { background: var(--db-col-dcn) !important; color: #5b21b6; }
-.col-group-summary[data-group="drf"] { background: var(--db-col-drf) !important; color: #9d174d; }
-.col-group-summary[data-group="distribution"] { background: var(--db-col-distribution) !important; color: #0369a1; }
-.col-group-summary[data-group="retrieval"] { background: var(--db-col-retrieval) !important; color: #9a3412; }
+/* Neutralize all group colors */
+.col-group-approval,
+.col-group-deadline,
+.col-group-masterlist,
+.col-group-dcn,
+.col-group-drf,
+.col-group-distribution,
+.col-group-retrieval {
+    background: transparent !important;
+    color: var(--db-text) !important;
+}
 
+.col-group-summary[data-group="approval"],
+.col-group-summary[data-group="deadline"],
+.col-group-summary[data-group="masterlist"],
+.col-group-summary[data-group="dcn"],
+.col-group-summary[data-group="drf"],
+.col-group-summary[data-group="distribution"],
+.col-group-summary[data-group="retrieval"] {
+    background: transparent !important;
+    color: var(--db-text-sec) !important;
+}
+
+.col-group-summary {
+    min-width: 65px;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: all 0.15s;
+}
 .collapse-arrow { font-size: 8px; margin-left: 4px; cursor: pointer; }
 [data-toggle] { cursor: pointer; }
+
+/* ── GRAY GROUPS: header th ── */
+.db-head-primary th.col-group-approval,
+.db-head-primary th.col-group-masterlist,
+.db-head-primary th.col-group-drf,
+.db-head-primary th.col-group-retrieval,
+.db-head-secondary th.col-group-approval,
+.db-head-secondary th.col-group-masterlist,
+.db-head-secondary th.col-group-drf,
+.db-head-secondary th.col-group-retrieval,
+.db-head-tertiary th.col-group-approval,
+.db-head-tertiary th.col-group-masterlist,
+.db-head-tertiary th.col-group-drf,
+.db-head-tertiary th.col-group-retrieval {
+    background: #f8fafc !important;
+    background-clip: padding-box;
+}
+
+/* ── GRAY GROUPS: summary header ── */
+.col-group-summary[data-group="approval"],
+.col-group-summary[data-group="masterlist"],
+.col-group-summary[data-group="drf"],
+.col-group-summary[data-group="retrieval"] {
+    background: #f8fafc !important;
+    background-clip: padding-box;
+}
+.col-group-summary[data-group="approval"]:hover,
+.col-group-summary[data-group="masterlist"]:hover,
+.col-group-summary[data-group="drf"]:hover,
+.col-group-summary[data-group="retrieval"]:hover {
+    background: #f1f5f9 !important;
+}
+
+/* ── GRAY GROUPS: body cells ── */
+td.col-group-approval,
+td.col-group-masterlist,
+td.col-group-drf,
+td.col-group-retrieval,
+td.col-group-summary-approval,
+td.col-group-summary-masterlist,
+td.col-group-summary-drf,
+td.col-group-summary-retrieval,
+td.col-bg-approval,
+td.col-bg-masterlist,
+td.col-bg-drf,
+td.col-bg-retrieval {
+    background-color: #f8fafc !important;
+    background-clip: padding-box;
+}
+
+/* ── GRAY GROUPS: hover ── */
+.db-parent-row:hover td.col-group-approval,
+.db-parent-row:hover td.col-group-masterlist,
+.db-parent-row:hover td.col-group-drf,
+.db-parent-row:hover td.col-group-retrieval,
+.db-parent-row:hover td.col-bg-approval,
+.db-parent-row:hover td.col-bg-masterlist,
+.db-parent-row:hover td.col-bg-drf,
+.db-parent-row:hover td.col-bg-retrieval {
+    background-color: #f1f5f9 !important;
+}
+
+.db-child-row:hover td.col-group-approval,
+.db-child-row:hover td.col-group-masterlist,
+.db-child-row:hover td.col-group-drf,
+.db-child-row:hover td.col-group-retrieval,
+.db-child-row:hover td.col-bg-approval,
+.db-child-row:hover td.col-bg-masterlist,
+.db-child-row:hover td.col-bg-drf,
+.db-child-row:hover td.col-bg-retrieval {
+    background-color: #f1f5f9 !important;
+}
+
+/* ── WHITE GROUPS: hover (deadline, dcn, distribution) ── */
+.db-parent-row:hover td.col-group-deadline,
+.db-parent-row:hover td.col-group-dcn,
+.db-parent-row:hover td.col-group-distribution,
+.db-parent-row:hover td.col-bg-deadline,
+.db-parent-row:hover td.col-bg-dcn,
+.db-parent-row:hover td.col-bg-distribution {
+    background-color: #f8fafc !important;
+}
+
+.db-child-row:hover td.col-group-deadline,
+.db-child-row:hover td.col-group-dcn,
+.db-child-row:hover td.col-group-distribution,
+.db-child-row:hover td.col-bg-deadline,
+.db-child-row:hover td.col-bg-dcn,
+.db-child-row:hover td.col-bg-distribution {
+    background-color: #f8fafc !important;
+}
 
 /* ═══════════════════════════════════
    BODY CELLS
@@ -367,7 +451,6 @@ body {
     line-height: 1.4;
 }
 
-/* to delete later */
 .db-table td:nth-child(4) { max-width: 300px; }
 .db-table td:nth-child(6) { max-width: 200px; }
 
@@ -427,7 +510,6 @@ td.col-group-summary-body {
     font-size: 13px;
 }
 
-/* Child row summary cells (slightly faded) */
 .db-child-row td.col-group-summary-body {
     opacity: 0.55;
 }
@@ -435,13 +517,9 @@ td.col-group-summary-body {
     opacity: 0.8;
 }
 
-/* Header summary column always keeps space */
-.col-group-summary {
-    min-width: 65px;
-    white-space: nowrap;
+.db-table tbody tr:hover td {
+    background-color: #f8fafc !important;
 }
-
-.db-table tbody tr:hover td { background-color: #f8fafc !important; }
 
 /* ── STICKY BODY CELLS ── */
 td.sticky-col-1 {
@@ -489,32 +567,9 @@ td.sticky-col-4::after {
 .db-pdf-link { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 4px; color: var(--db-red); background: var(--db-red-light); transition: all 0.15s; }
 .db-pdf-link:hover { filter: brightness(0.9); }
 
-/* ── Cell group backgrounds ── */
-td.col-bg-approval { background-color: rgba(219,234,254,0.25) !important; background-clip: padding-box; }
-td.col-bg-deadline { background-color: rgba(254,243,199,0.25) !important; background-clip: padding-box; }
-td.col-bg-masterlist { background-color: rgba(209,250,229,0.25) !important; background-clip: padding-box; }
-td.col-bg-dcn { background-color: rgba(237,233,254,0.25) !important; background-clip: padding-box; }
-td.col-bg-drf { background-color: rgba(252,231,243,0.25) !important; background-clip: padding-box; }
-td.col-bg-distribution { background-color: rgba(224,242,254,0.25) !important; background-clip: padding-box; }
-td.col-bg-retrieval { background-color: rgba(255,247,237,0.25) !important; background-clip: padding-box; }
-
-.db-table tbody tr:hover td.col-bg-approval { background-color: rgba(219,234,254,0.5) !important; }
-.db-table tbody tr:hover td.col-bg-deadline { background-color: rgba(254,243,199,0.5) !important; }
-.db-table tbody tr:hover td.col-bg-masterlist { background-color: rgba(209,250,229,0.5) !important; }
-.db-table tbody tr:hover td.col-bg-dcn { background-color: rgba(237,233,254,0.5) !important; }
-.db-table tbody tr:hover td.col-bg-drf { background-color: rgba(252,231,243,0.5) !important; }
-.db-table tbody tr:hover td.col-bg-distribution { background-color: rgba(224,242,254,0.5) !important; }
-.db-table tbody tr:hover td.col-bg-retrieval { background-color: rgba(255,247,237,0.5) !important; }
-
 .db-scan-link { color: var(--db-accent); font-size: 11px; text-decoration: none; }
 .db-scan-link:hover { text-decoration: underline; }
 .db-na { color: var(--db-text-muted); font-style: italic; }
-
-/* ── EMPTY STATE ── */
-.db-empty { text-align: center; padding: 60px 20px; color: var(--db-text-muted); }
-.db-empty svg { margin-bottom: 12px; opacity: 0.4; }
-.db-empty h3 { font-size: 15px; font-weight: 600; color: var(--db-text-sec); margin-bottom: 4px; }
-.db-empty p { font-size: 13px; }
 
 /* ── PAGINATION ── */
 .db-pagination { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; flex-shrink: 0; }
@@ -530,19 +585,14 @@ td.col-bg-retrieval { background-color: rgba(255,247,237,0.25) !important; backg
    EXPAND / COLLAPSE REVISIONS
    ═══════════════════════════════════ */
 
-/* Parent row */
 .db-parent-row {
     background: var(--db-white);
 }
 
-/* Expand button */
 .db-expand-btn {
     display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    font-size: 7px;
+    align-items: center; justify-content: center;
+    width: 18px; height: 18px; font-size: 7px;
     cursor: pointer;
     border: 1px solid var(--db-border);
     border-radius: 3px;
@@ -565,7 +615,6 @@ td.col-bg-retrieval { background-color: rgba(255,247,237,0.25) !important; backg
     font-size: 8px;
 }
 
-/* Child rows — older revisions */
 .db-child-row {
     background: #f9fafb !important;
 }
@@ -575,46 +624,25 @@ td.col-bg-retrieval { background-color: rgba(255,247,237,0.25) !important; backg
     border-bottom: 1px solid #f1f5f9 !important;
 }
 
-/* Child row hover */
 .db-table tbody tr.db-child-row:hover td {
     background-color: #f1f5f9 !important;
 }
 
-/* Child indicator cell */
 .db-child-ind {
     color: var(--db-text-muted) !important;
     font-size: 10px !important;
     padding-left: 14px !important;
 }
 
-/* Child dot */
 .db-child-dot {
     display: inline-block;
-    width: 5px;
-    height: 5px;
+    width: 5px; height: 5px;
     border-radius: 50%;
     background: var(--db-accent);
     margin-right: 6px;
     vertical-align: middle;
     opacity: 0.5;
 }
-
-/* Child row group cell colors (lighter) */
-.db-child-row td.col-bg-approval { background-color: rgba(219,234,254,0.12) !important; }
-.db-child-row td.col-bg-deadline { background-color: rgba(254,243,199,0.12) !important; }
-.db-child-row td.col-bg-masterlist { background-color: rgba(209,250,229,0.12) !important; }
-.db-child-row td.col-bg-dcn { background-color: rgba(237,233,254,0.12) !important; }
-.db-child-row td.col-bg-drf { background-color: rgba(252,231,243,0.12) !important; }
-.db-child-row td.col-bg-distribution { background-color: rgba(224,242,254,0.12) !important; }
-.db-child-row td.col-bg-retrieval { background-color: rgba(255,247,237,0.12) !important; }
-
-.db-table tbody tr.db-child-row:hover td.col-bg-approval { background-color: rgba(219,234,254,0.25) !important; }
-.db-table tbody tr.db-child-row:hover td.col-bg-deadline { background-color: rgba(254,243,199,0.25) !important; }
-.db-table tbody tr.db-child-row:hover td.col-bg-masterlist { background-color: rgba(209,250,229,0.25) !important; }
-.db-table tbody tr.db-child-row:hover td.col-bg-dcn { background-color: rgba(237,233,254,0.25) !important; }
-.db-table tbody tr.db-child-row:hover td.col-bg-drf { background-color: rgba(252,231,243,0.25) !important; }
-.db-table tbody tr.db-child-row:hover td.col-bg-distribution { background-color: rgba(224,242,254,0.25) !important; }
-.db-table tbody tr.db-child-row:hover td.col-bg-retrieval { background-color: rgba(255,247,237,0.25) !important; }
 
 /* ═══════ RESPONSIVE ═══════ */
 @media (max-width: 1024px) {

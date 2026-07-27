@@ -18,6 +18,7 @@ class DocumentRequestForm extends Model
         'drf_date',
         'drf_receipt_date',
         'drf_receipt_time',
+        'office_id', 
         'doc_title',
         'scanned_drf',
         'created_by',

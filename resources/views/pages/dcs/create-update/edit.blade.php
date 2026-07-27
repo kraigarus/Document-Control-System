@@ -776,6 +776,7 @@
                                         </td>
                                     </tr>
                                     @endforelse
+                                </tbody>
                                 <tfoot>
                                     <tr>
                                         <td colspan="2" style="text-align:right; font-weight:700;">Total Copies:</td>
@@ -831,13 +832,16 @@
 </body>
 </html>
 
+@php
+    $relatedDocsData = $masterlist
+        ? $masterlist->allRelatedDocuments()->map(fn($m) => [
+            'masterlist_id' => $m->masterlist_id,
+            'doc_no' => $m->doc_no,
+            'doc_title' => $m->doc_title,
+            'label' => $m->doc_title . ($m->doc_no ? ' ('.$m->doc_no.')' : ''),
+        ])
+        : collect([]);
+@endphp
 <script>
-  window.__existingRelatedDocs = @json(
-      $masterlist ? $masterlist->allRelatedDocuments()->map(fn($m) => [
-          'masterlist_id' => $m->masterlist_id,
-          'doc_no' => $m->doc_no,
-          'doc_title' => $m->doc_title,
-          'label' => $m->doc_title . ($m->doc_no ? ' ('.$m->doc_no.')' : ''),
-      ]) : []
-  );
+  window.__existingRelatedDocs = {!! $relatedDocsData->toJson() !!};
 </script>

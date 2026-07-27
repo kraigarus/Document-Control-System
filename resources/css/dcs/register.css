@@ -2131,6 +2131,136 @@ body {
     font-size: 0.9rem;
 }
 
+/* ═══ MISSING INFORMATION — redesigned card ═══ */
+.review-missing-warning {
+    border: 1px solid #fbbf24;
+    background: linear-gradient(180deg, #fffbeb 0%, #fff8e6 100%);
+    border-radius: var(--reg-radius-sm);
+    margin-bottom: 20px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(217, 119, 6, 0.08);
+}
+
+.review-missing-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(217, 119, 6, 0.15);
+}
+
+.review-missing-icon {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fef3c7;
+    border-radius: 50%;
+    color: #d97706;
+    font-size: 1rem;
+}
+
+.review-missing-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.review-missing-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #92400e;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.review-missing-count {
+    font-size: 0.78rem;
+    color: #b45309;
+    font-weight: 500;
+}
+
+.review-missing-body {
+    padding: 14px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 240px;
+    overflow-y: auto;
+}
+
+.missing-group-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #b45309;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+}
+
+.missing-group-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.missing-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: #fff;
+    border: 1px solid #fcd34d;
+    border-radius: 20px;
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: #b91c1c;
+}
+
+.missing-chip i {
+    font-size: 0.65rem;
+    color: #dc2626;
+}
+
+.review-missing-confirm {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 18px;
+    background: rgba(217, 119, 6, 0.06);
+    border-top: 1px solid rgba(217, 119, 6, 0.15);
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: #78350f;
+    cursor: pointer;
+}
+
+.review-missing-confirm input[type="checkbox"] {
+    width: 17px;
+    height: 17px;
+    accent-color: #d97706;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+/* ═══ REVIEW ROWS — red for missing values ═══ */
+.review-row-empty .review-label {
+    color: #b91c1c;
+}
+
+.review-value-missing {
+    color: #dc2626 !important;
+    font-weight: 600 !important;
+    font-style: normal !important;
+}
+
+.review-value-missing i {
+    color: #dc2626;
+    margin-right: 4px;
+}
+
 /* ═══ VALIDATION TOAST ═══ */
 .reg-validation-toast {
     background: var(--reg-surface);
