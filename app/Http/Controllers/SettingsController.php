@@ -11,6 +11,7 @@ use App\Models\DocumentChangeNotice;
 use App\Models\MasterlistOrigin;
 use App\Models\RetrievalOffice;
 use App\Models\DistributionOffice;
+use App\Models\Originator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -48,8 +49,10 @@ class SettingsController extends Controller
 
         $versionTypes = VersionType::orderBy(self::VERSION_NAME_FIELD)->get();
 
+        $originators = Originator::orderBy('originator_name')->get();
+
         return view('pages.dcs.settings.index', compact(
-            'docTypes', 'offices', 'versionTypes'
+            'docTypes', 'offices', 'versionTypes', 'originators'
         ));
     }
 
@@ -286,6 +289,28 @@ class SettingsController extends Controller
             'success' => true,
             'message' => 'Version type deleted.',
         ]);
+    }
+
+    // ── Originators ──
+    public function storeOriginator(Request $request)
+    {
+        $request->validate(['originator_name' => 'required|string|max:255|unique:originators,originator_name']);
+        Originator::create(['originator_name' => $request->originator_name]);
+        return response()->json(['success' => true, 'message' => 'Originator added.']);
+    }
+
+    public function updateOriginator(Request $request, $id)
+    {
+        $request->validate(['originator_name' => 'required|string|max:255|unique:originators,originator_name,' . $id . ',originator_id']);
+        $orig = Originator::findOrFail($id);
+        $orig->update(['originator_name' => $request->originator_name]);
+        return response()->json(['success' => true, 'message' => 'Originator updated.']);
+    }
+
+    public function destroyOriginator($id)
+    {
+        Originator::findOrFail($id)->delete();
+        return response()->json(['success' => true, 'message' => 'Originator deleted.']);
     }
 
 }

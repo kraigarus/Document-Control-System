@@ -21,7 +21,7 @@
 <main class="settings-main">
     <div class="settings-header">
         <div class="welcome-text">
-            <p class="header-greeting">System Configuration</p>
+            <p class="header-greeting">Document Control System / Settings</p>
             <h1 class="page-title">Settings</h1>
         </div>
     </div>
@@ -35,6 +35,9 @@
         </button>
         <button class="tab-btn" data-tab="versiontypes">
             <i class="fa-solid fa-code-branch"></i> Version Types
+        </button>
+        <button class="tab-btn" data-tab="originators">
+            <i class="fa-solid fa-user-pen"></i> Originators
         </button>
     </div>
 
@@ -179,6 +182,44 @@
                     </tr>
                 @empty
                     <tr><td colspan="2" class="empty-cell">No version types yet.</td></tr>
+                @endforelse
+            </tbody>
+        </table>
+    </section>
+
+    <!-- ══════════════ ORIGINATORS ══════════════ -->
+    <section class="tab-panel" id="panel-originators">
+        <div class="panel-toolbar">
+            <span class="panel-subtitle">Manage document originators (authors/creators)</span>
+            <button class="btn-primary" onclick="openOriginatorModal()">
+                <i class="fa-solid fa-plus"></i> Add Originator
+            </button>
+        </div>
+
+        <table class="settings-table">
+            <thead>
+                <tr>
+                    <th>Originator Name</th>
+                    <th style="width:140px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="originatorsTableBody">
+                @forelse($originators as $orig)
+                    <tr data-id="{{ $orig->originator_id }}">
+                        <td>{{ $orig->originator_name }}</td>
+                        <td>
+                            <div class="row-actions">
+                                <button class="icon-btn" title="Edit" onclick="openOriginatorModal({{ $orig->originator_id }})" data-name="{{ $orig->originator_name }}">
+                                    <i class="fa-solid fa-pen"></i>
+                                </button>
+                                <button class="icon-btn icon-btn-danger" title="Delete" onclick="deleteOriginator({{ $orig->originator_id }})">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                @empty
+                    <tr><td colspan="2" class="empty-cell">No originators yet.</td></tr>
                 @endforelse
             </tbody>
         </table>

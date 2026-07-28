@@ -22,55 +22,59 @@
     </div>
     <div class="db-filter-body">
         <div class="db-filter-group">
-            <label>Sub-type</label>
-            <select id="filterSubType">
-                <option value="all">All Sub-types</option>
-                @foreach($subTypes ?? [] as $sub)
-                    <option value="{{ $sub->doc_type_id }}">{{ $sub->doc_type_name }}</option>
-                @endforeach
-            </select>
-        </div>
-        <div class="db-filter-group">
-            <label>Originator</label>
-            <input type="text" id="filterOriginator" placeholder="Search originator...">
-        </div>
-        <div class="db-filter-group">
-            <label>Source Unit</label>
-            <select id="filterSourceUnit">
-                <option value="">All Units</option>
-                @foreach($offices ?? [] as $office)
-                    <option value="{{ $office->office_id }}">{{ $office->office_name }}</option>
-                @endforeach
-            </select>
-        </div>
-        <div class="db-filter-group">
-            <label>Approval Status</label>
-            <select id="filterStatus">
-                <option value="">Any</option>
-                <option value="applicable">Applicable</option>
-                <option value="not_applicable">Not Applicable</option>
-            </select>
-        </div>
-        <div class="db-filter-group">
-            <label>Revision</label>
-            <select id="filterRevisionScope">
-                <option value="all">All Documents</option>
-                <option value="latest">Latest Revision Only</option>
-                <option value="obsolete">Has Obsolete Revisions</option>
-            </select>
-        </div>
-        <div class="db-filter-group">
-            <label>Effectivity Date From</label>
-            <input type="date" id="filterDateFrom">
-        </div>
-        <div class="db-filter-group">
-            <label>Effectivity Date To</label>
-            <input type="date" id="filterDateTo">
-        </div>
-        <div class="db-filter-group">
-            <label>Revision No</label>
-            <input type="text" id="filterRevNo" placeholder="e.g. 3">
-        </div>
+        <label>Sub-type</label>
+        <select id="filterSubType">
+            <option value="all">All Sub-types</option>
+            @foreach($subTypes ?? [] as $sub)
+                <option value="{{ $sub->doc_type_id }}">{{ $sub->doc_type_name }}</option>
+            @endforeach
+        </select>
+    </div>
+    <div class="db-filter-group">
+        <label>Originator</label>
+        <select id="filterOriginator">
+            <option value="">All Originators</option>
+            @foreach($originators as $orig)
+                <option value="{{ $orig->originator_name }}">{{ $orig->originator_name }}</option>
+            @endforeach
+        </select>
+    </div>
+    <div class="db-filter-group">
+        <label>Source Unit</label>
+        <select id="filterSourceUnit">
+            <option value="">All Units</option>
+            @foreach($offices ?? [] as $office)
+                <option value="{{ $office->office_id }}">{{ $office->office_name }}</option>
+            @endforeach
+        </select>
+    </div>
+    <div class="db-filter-group">
+        <label>Approval Status</label>
+        <select id="filterStatus">
+            <option value="">Any</option>
+            <option value="applicable">Applicable</option>
+            <option value="not_applicable">Not Applicable</option>
+        </select>
+    </div>
+    <div class="db-filter-group">
+        <label>Revision</label>
+        <select id="filterRevisionScope">
+            <option value="all">All Documents</option>
+            <option value="obsolete">Has Obsolete Revisions</option>
+        </select>
+    </div>
+    <div class="db-filter-group">
+        <label>Effectivity Date From</label>
+        <input type="date" id="filterDateFrom">
+    </div>
+    <div class="db-filter-group">
+        <label>Effectivity Date To</label>
+        <input type="date" id="filterDateTo">
+    </div>
+    <div class="db-filter-group">
+        <label>Revision No</label>
+        <input type="text" id="filterRevNo" placeholder="e.g. 3">
+    </div>
     </div>
     <div class="db-filter-foot">
         <button class="db-btn db-btn-ghost" id="resetFilterBtn">Reset</button>

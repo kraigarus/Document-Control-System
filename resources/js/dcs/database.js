@@ -70,6 +70,20 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // ── Make all column group header cells clickable to toggle ──
+    const groupClassList = groups.map(g => 'col-group-' + g);
+    document.querySelectorAll('.db-table thead th').forEach(th => {
+        const matchedClass = Array.from(th.classList).find(cls => groupClassList.includes(cls));
+        if (matchedClass) {
+            const groupName = matchedClass.replace('col-group-', '');
+            th.style.cursor = 'pointer';
+            th.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleColumnGroup(groupName);
+            });
+        }
+    });
+
     document.querySelectorAll('.col-group-summary').forEach(el => {
         el.style.cursor = 'pointer';
         el.addEventListener('click', () => {
@@ -152,6 +166,8 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('filterDateFrom').value = '';
         document.getElementById('filterDateTo').value = '';
         document.getElementById('filterRevNo').value = '';
+        if (document.getElementById('filterSubType')) document.getElementById('filterSubType').value = 'all';
+        if (document.getElementById('filterRevisionScope')) document.getElementById('filterRevisionScope').value = 'all';
     });
 
     document.getElementById('applyFilterBtn').addEventListener('click', () => {
@@ -176,12 +192,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const dateFrom = document.getElementById('filterDateFrom').value;
         const dateTo = document.getElementById('filterDateTo').value;
         const revNo = document.getElementById('filterRevNo').value.trim();
+        const subType = document.getElementById('filterSubType')?.value;
+        const revisionScope = document.getElementById('filterRevisionScope')?.value;
         if (originator) p.originator = originator;
         if (sourceUnit) p.source_unit = sourceUnit;
         if (status) p.status = status;
         if (dateFrom) p.date_from = dateFrom;
         if (dateTo) p.date_to = dateTo;
         if (revNo) p.rev_no = revNo;
+        if (subType && subType !== 'all') p.sub_type_id = subType;
+        if (revisionScope && revisionScope !== 'all') p.revision_scope = revisionScope;
         return p;
     }
 
@@ -287,40 +307,56 @@ document.addEventListener('DOMContentLoaded', () => {
         return '<td class="col-group-summary-body col-group-summary-' + group + ' col-bg-' + group + '"' + hidden + '>' + icon + '</td>';
     }
 
-    // ═══════════════════════════════════════════
-    // Render grouped rows
-    // ═══════════════════════════════════════════
+    const categoryState = {}; // slug -> expanded(bool), persists while the page is open
+
+    function categorySlug(name) {
+        return (name || 'uncategorized').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    }
+
     function renderRows(groups) {
         const offset = (currentPage - 1) * perPage;
+        let lastCategory = null;
+        let html = '';
 
-        const html = groups.map((group, i) => {
+        groups.forEach((group, i) => {
             const itemNo = offset + i + 1;
             const parent = group.parent;
             const children = group.children || [];
             const hasRevisions = group.has_revisions;
             const groupId = 'rev-' + itemNo;
 
-            let firstCell = '';
-            if (hasRevisions) {
-                firstCell = '<td><span class="db-expand-btn" data-target="' + groupId + '" title="Show ' + children.length + ' older revision(s)">\u25B6</span>' + itemNo + '</td>';
-            } else {
-                firstCell = '<td>' + itemNo + '</td>';
+            const catName = parent.doc_type_name || 'Uncategorized';
+            const catSlug = categorySlug(catName);
+
+            if (catName !== lastCategory) {
+                if (!(catSlug in categoryState)) categoryState[catSlug] = false; // collapsed by default
+                const expanded = categoryState[catSlug];
+                html += '<tr class="db-category-row">' +
+                    '<td colspan="60">' +
+                        '<span class="db-category-toggle' + (expanded ? ' expanded' : '') + '" data-category="' + catSlug + '">' +
+                            '<span class="db-category-chevron">' + (expanded ? '\u25B2' : '\u25BC') + '</span>' +
+                            esc(catName.toUpperCase()) +
+                        '</span>' +
+                    '</td>' +
+                '</tr>';
+                lastCategory = catName;
             }
 
-            let rows = '<tr class="db-parent-row">' + firstCell + rowCells(parent) + '</tr>';
+            const rowDisplay = categoryState[catSlug] ? '' : ' style="display:none"';
+
+            let firstCell = hasRevisions
+                ? '<td><span class="db-expand-btn" data-target="' + groupId + '" title="Show ' + children.length + ' older revision(s)">\u25B6</span>' + itemNo + '</td>'
+                : '<td>' + itemNo + '</td>';
+
+            html += '<tr class="db-parent-row" data-category-row="' + catSlug + '"' + rowDisplay + '>' + firstCell + rowCells(parent) + '</tr>';
 
             children.forEach((child, ci) => {
-                rows += '<tr class="db-child-row" data-group="' + groupId + '" style="display:none">' +
-                    '<td class="db-child-ind">' +
-                        '<span class="db-child-dot"></span>' +
-                        itemNo + '.' + (ci + 1) +
-                    '</td>' +
+                html += '<tr class="db-child-row" data-group="' + groupId + '" data-category-row="' + catSlug + '" style="display:none">' +
+                    '<td class="db-child-ind"><span class="db-child-dot"></span>' + itemNo + '.' + (ci + 1) + '</td>' +
                     rowCells(child) +
                 '</tr>';
             });
-
-            return rows;
-        }).join('');
+        });
 
         tableBody.innerHTML = html;
 
@@ -331,7 +367,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 const childRows = document.querySelectorAll('tr[data-group="' + target + '"]');
                 const expanded = this.classList.toggle('expanded');
                 this.textContent = expanded ? '\u25BC' : '\u25B6';
-                childRows.forEach(row => {
+                childRows.forEach(row => { row.style.display = expanded ? '' : 'none'; });
+            });
+        });
+
+        document.querySelectorAll('.db-category-toggle').forEach(el => {
+            el.addEventListener('click', () => {
+                const slug = el.dataset.category;
+                const expanded = !categoryState[slug];
+                categoryState[slug] = expanded;
+                el.classList.toggle('expanded', expanded);
+                el.querySelector('.db-category-chevron').textContent = expanded ? '\u25B2' : '\u25BC';
+                document.querySelectorAll('tr[data-category-row="' + slug + '"]').forEach(row => {
+                    // Only reveal parent rows here — child revision rows stay collapsed
+                    // until their own expand arrow is clicked
+                    if (row.classList.contains('db-child-row')) return;
                     row.style.display = expanded ? '' : 'none';
                 });
             });
@@ -350,7 +400,7 @@ document.addEventListener('DOMContentLoaded', () => {
             '<td style="text-align:center">' + esc(r.pages) + '</td>' +
             '<td style="text-align:center">' + statusBadge(r.status) + '</td>' +
             '<td style="text-align:center">' + pdfLink(r.pdf_path) + '</td>' +
-            '<td>' + esc(r.source_unit) + '</td>' +
+            '<td class="db-source-unit">' + esc(r.source_unit) + '</td>' +
             '<td>' + relatedDocsCell(r.related) + '</td>' +
             // ── Approval ──
             summaryCell('approval', r) +

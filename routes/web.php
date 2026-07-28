@@ -6,6 +6,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\RegisterController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\StampingController;
+use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\ProfileController;
 
@@ -126,9 +127,9 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::post('/stamp/remove', [StampingController::class, 'remove'])->name('dcs.stamp.remove');
 
     // Database
-    Route::get('/database', [RegisterController::class, 'databaseIndex'])->name('database.index');
-    Route::get('/database/data', [RegisterController::class, 'databaseData'])->name('database.data');
-    Route::get('/database/export', [RegisterController::class, 'databaseExport'])->name('database.export');
+    Route::get('/database', [DatabaseController::class, 'index'])->name('database.index');
+    Route::get('/database/data', [DatabaseController::class, 'data'])->name('database.data');
+    Route::get('/database/export', [DatabaseController::class, 'export'])->name('database.export');
 
     Route::prefix('settings')->name('settings.')->group(function () {
         Route::get('/', [SettingsController::class, 'index'])->name('index');
@@ -148,6 +149,10 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('/version-types', [SettingsController::class, 'storeVersionType'])->name('versiontypes.store');
         Route::put('/version-types/{id}', [SettingsController::class, 'updateVersionType'])->name('versiontypes.update');
         Route::delete('/version-types/{id}', [SettingsController::class, 'destroyVersionType'])->name('versiontypes.destroy');
+
+        Route::post('/originators', [SettingsController::class, 'storeOriginator'])->name('originators.store');
+        Route::put('/originators/{id}', [SettingsController::class, 'updateOriginator'])->name('originators.update');
+        Route::delete('/originators/{id}', [SettingsController::class, 'destroyOriginator'])->name('originators.destroy');
     });
 
     Route::middleware('auth')->prefix('profile')->name('profile.')->group(function () {

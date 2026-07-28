@@ -517,8 +517,13 @@ td.col-group-summary-body {
     opacity: 0.8;
 }
 
-.db-table tbody tr:hover td {
-    background-color: #f8fafc !important;
+.db-source-unit {
+    max-width: 200px;
+    min-width: 150px;
+    width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* ── STICKY BODY CELLS ── */
@@ -581,6 +586,32 @@ td.sticky-col-4::after {
 .db-pg:disabled { opacity: 0.4; cursor: not-allowed; }
 .db-pg-active { background: var(--db-primary) !important; color: #fff !important; border-color: var(--db-primary) !important; }
 
+.db-category-row td {
+    background: var(--db-primary);
+    padding: 10px 16px;
+    border: 1px solid rgb(252, 252, 252);
+} 
+
+.db-category-row td:hover{
+    background: var(--db-primary-hover) !important;
+}
+
+.db-category-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #fff;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    user-select: none;
+}
+
+.db-category-chevron {
+    font-size: 11px;
+    transition: transform 0.15s ease;
+}
 
 /* ═══════════════════════════════════
    EXPAND / COLLAPSE REVISIONS

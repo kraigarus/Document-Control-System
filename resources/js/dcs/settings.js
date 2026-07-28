@@ -283,4 +283,66 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     };
 
+    // ══════════════════════════════════════════════
+    // ORIGINATORS
+    // ══════════════════════════════════════════════
+    window.openOriginatorModal = function (id = null) {
+        const isEdit = !!id;
+        let currentName = "";
+        if (isEdit) {
+            const row = document.querySelector(`#originatorsTableBody tr[data-id="${id}"] .icon-btn[data-name]`);
+            currentName = row ? row.getAttribute("data-name") : "";
+        }
+
+        openModal(`
+            <div class="st-modal">
+                <div class="st-modal-top">
+                    <div class="st-modal-icon"><i class="fa-solid fa-user-pen"></i></div>
+                    <button class="st-modal-close" onclick="closeSettingsModal()"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="st-modal-title">${isEdit ? "Edit Originator" : "Add Originator"}</div>
+                <div class="st-field">
+                    <label class="st-label">Originator Name</label>
+                    <input type="text" id="originatorNameInput" class="st-input" placeholder="e.g. Juan Dela Cruz" value="${escapeHtml(currentName)}">
+                </div>
+                <div class="st-actions-row">
+                    <button class="st-btn st-btn-ghost" onclick="closeSettingsModal()">Cancel</button>
+                    <button class="st-btn st-btn-primary" onclick="submitOriginator(${id ?? "null"})">
+                        <i class="fa-solid fa-check"></i> Save
+                    </button>
+                </div>
+            </div>
+        `);
+        setTimeout(() => document.getElementById("originatorNameInput")?.focus(), 50);
+    };
+
+    window.submitOriginator = async function (id) {
+        const name = document.getElementById("originatorNameInput").value.trim();
+        if (!name) { showToast("Originator name is required.", "error"); return; }
+
+        const isEdit = id !== null;
+        const url = isEdit ? `${BASE}/originators/${id}` : `${BASE}/originators`;
+        const method = isEdit ? "PUT" : "POST";
+
+        const data = await apiCall(url, method, { originator_name: name });
+        if (data.success) {
+            showToast(data.message, "success");
+            closeModal();
+            setTimeout(() => window.location.reload(), 600);
+        } else {
+            showToast(data.message || "Something went wrong.", "error");
+        }
+    };
+
+    window.deleteOriginator = async function (id) {
+        if (!confirm("Delete this originator? This cannot be undone.")) return;
+        const data = await apiCall(`${BASE}/originators/${id}`, "DELETE");
+        if (data.success) {
+            showToast(data.message, "success");
+            setTimeout(() => window.location.reload(), 600);
+        } else {
+            showToast(data.message || "Delete failed.", "error");
+        }
+    };
+
 });
