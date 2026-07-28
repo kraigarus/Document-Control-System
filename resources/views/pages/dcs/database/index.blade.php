@@ -22,6 +22,15 @@
     </div>
     <div class="db-filter-body">
         <div class="db-filter-group">
+            <label>Sub-type</label>
+            <select id="filterSubType">
+                <option value="all">All Sub-types</option>
+                @foreach($subTypes ?? [] as $sub)
+                    <option value="{{ $sub->doc_type_id }}">{{ $sub->doc_type_name }}</option>
+                @endforeach
+            </select>
+        </div>
+        <div class="db-filter-group">
             <label>Originator</label>
             <input type="text" id="filterOriginator" placeholder="Search originator...">
         </div>
@@ -35,12 +44,19 @@
             </select>
         </div>
         <div class="db-filter-group">
-            <label>Status</label>
+            <label>Approval Status</label>
             <select id="filterStatus">
-                <option value="">All Status</option>
-                <option value="active">Active</option>
-                <option value="obsolete">Obsolete</option>
-                <option value="pending">Pending</option>
+                <option value="">Any</option>
+                <option value="applicable">Applicable</option>
+                <option value="not_applicable">Not Applicable</option>
+            </select>
+        </div>
+        <div class="db-filter-group">
+            <label>Revision</label>
+            <select id="filterRevisionScope">
+                <option value="all">All Documents</option>
+                <option value="latest">Latest Revision Only</option>
+                <option value="obsolete">Has Obsolete Revisions</option>
             </select>
         </div>
         <div class="db-filter-group">

@@ -725,129 +725,6 @@ body {
     animation: fadeIn 0.2s ease;
 }
 
-.reg-source-suggestions {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    background: var(--reg-surface);
-    border: 1px solid var(--reg-border);
-    border-radius: var(--reg-radius-sm);
-    max-height: 180px;
-    overflow-y: auto;
-    z-index: 100;
-    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
-    margin-top: 2px;
-}
-
-.reg-source-wrap {
-    position: relative;
-}
-
-.reg-source-item {
-    padding: 9px 14px;
-    font-size: 0.82rem;
-    color: var(--reg-text);
-    cursor: pointer;
-    transition: background 0.15s ease;
-}
-.reg-source-suggestions div {
-    padding: 9px 14px;
-    font-size: 0.82rem;
-    color: var(--reg-text, #333);
-    cursor: pointer;
-    transition: background 0.15s ease;
-}
-.reg-related-wrap {
-    position: relative;
-}
-
-.reg-related-docs-list {
-    position: relative;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    min-height: 0;
-    margin-bottom: 8px;
-}
-
-.reg-related-docs-list:empty::before,
-.reg-related-empty {
-    display: block;
-    width: 100%;
-    padding: 10px 12px;
-    font-size: 0.78rem;
-    color: var(--reg-text-subtle);
-    font-style: italic;
-    background: rgba(148, 163, 184, 0.06);
-    border: 1px dashed var(--reg-border);
-    border-radius: var(--reg-radius-sm);
-}
-
-.reg-related-doc-chip {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 8px 6px 12px;
-    background: rgba(238, 242, 255, 0.75);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-    border: 1px solid rgba(0, 0, 128, 0.12);
-    border-radius: 20px;
-    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
-    animation: fadeSlideUp 0.2s ease;
-    max-width: 100%;
-    transition: all 0.15s ease;
-}
-
-.reg-related-doc-chip:hover {
-    background: rgba(238, 242, 255, 0.95);
-    border-color: rgba(0, 0, 128, 0.22);
-    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.1);
-}
-
-.reg-related-doc-title {
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--reg-accent);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 220px;
-}
-
-.reg-related-doc-no {
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: var(--reg-text-muted);
-    background: rgba(255, 255, 255, 0.6);
-    padding: 2px 7px;
-    border-radius: 10px;
-    white-space: nowrap;
-}
-
-.reg-related-doc-chip button {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 20px;
-    height: 20px;
-    border: none;
-    border-radius: 50%;
-    background: rgba(0, 0, 128, 0.08);
-    color: var(--reg-accent);
-    font-size: 0.65rem;
-    cursor: pointer;
-    flex-shrink: 0;
-    transition: all 0.15s ease;
-}
-
-.reg-related-doc-chip button:hover {
-    background: var(--reg-error);
-    color: #fff;
-    transform: scale(1.1);
-}
-
 /* ══════════════════════════════════════════════
    RELATED DOCUMENTS — single search input + arrow toggle
    ══════════════════════════════════════════════ */
@@ -1025,9 +902,6 @@ body {
     background: var(--reg-error);
     color: #fff;
 }
-.reg-source-suggestions div:hover {
-    background: var(--reg-accent-subtle, #f0f0f0);
-}
 
 .reg-inline-chips {
     display: flex;
@@ -1087,13 +961,6 @@ body {
     overflow: visible;
 }
 
-.reg-syllabi-basic-grid {
-    display: grid;
-    grid-template-columns: 1fr 1.6fr 1fr 1fr;
-    gap: 16px;
-    margin-bottom: 20px;
-}
-
 .reg-table td input[type="checkbox"] {
     width: 18px;
     height: 18px;
@@ -1101,27 +968,6 @@ body {
     accent-color: var(--accent);
     display: block;
     margin: 0 auto;
-}
-
-.reg-checkbox-cell {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-}
-
-.reg-checkbox-cell input[type="checkbox"] {
-    width: 18px;
-    height: 18px;
-    cursor: pointer;
-    accent-color: var(--accent);
-}
-
-.reg-checkbox-cell label {
-    font-size: 0.82rem;
-    cursor: pointer;
-    user-select: none;
-    white-space: nowrap;
 }
 
 .reg-grid-2-1 {

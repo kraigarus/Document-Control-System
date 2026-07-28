@@ -10,19 +10,78 @@
     @vite([
         'resources/css/dcs/edit.css',
         'resources/js/dcs/edit.js',
-
         'resources/css/dcs/register.css',
     ])
-    
+
+    @php
+        // ── Seed data for the chip-style source/originator widgets ──
+        $drfOfficesSeed = collect($drfOffices ?? [])->map(fn($o) => [
+            'id'    => $o->office->office_id ?? $o->office_id,
+            'label' => $o->office->office_name ?? 'Unknown',
+        ])->values();
+
+        $masterlistSourceSeed = collect($sourceOffices ?? [])->map(fn($o) => [
+            'id'    => $o->office->office_id ?? ('name_' . $o->masterlist_source_id),
+            'label' => $o->office->office_name ?? $o->source_name ?? 'Unknown',
+        ])->values();
+
+        $masterlistOriginatorSeed = ($masterlist && $masterlist->originator_name)
+            ? [['label' => $masterlist->originator_name]]
+            : [];
+
+        // ── Group flat Syllabi rows back into wizard "course groups" ──
+        $syllabiGroupsSeed = collect($syllabi ?? [])->groupBy('course_name')->map(function ($rows, $courseName) {
+            $first = $rows->first();
+            return [
+                'course_name'    => $courseName,
+                'availability'   => $first->syllabi_availability === 'available',
+                'college_id'     => $first->college_id,
+                'program_id'     => $first->program_id,
+                'semester_id'    => $first->semester_id,
+                'school_year_id' => $first->school_year_id,
+                'rows' => $rows->values()->map(function ($r) {
+                    return [
+                        'originator'             => $r->originator,
+                        'no_pages'               => $r->no_pages,
+                        'date_received'          => fmtDate($r->date_received),
+                        'time_received'          => fmtTime($r->time_received),
+                        'drf_available'          => $r->drf_availability === 'available',
+                        'drf_no'                 => $r->drf_no,
+                        'drf_date'               => fmtDate($r->drf_date),
+                        'drf_received_date'      => fmtDate($r->drf_received_date),
+                        'registered'             => $r->registered === 'registered',
+                        'date_of_registration'   => fmtDate($r->date_of_registration),
+                        'time_of_registration'   => fmtTime($r->time_of_registration),
+                        'time_spent'             => $r->time_spent,
+                        'scanned_registration_name' => $r->scanned_registration ? basename($r->scanned_registration) : null,
+                    ];
+                })->values(),
+            ];
+        })->values();
+
+        $relatedDocsData = $masterlist
+            ? $masterlist->allRelatedDocuments()->map(fn($m) => [
+                'masterlist_id' => $m->masterlist_id,
+                'doc_no' => $m->doc_no,
+                'doc_title' => $m->doc_title,
+                'label' => $m->doc_title . ($m->doc_no ? ' ('.$m->doc_no.')' : ''),
+            ])
+            : collect([]);
+    @endphp
+
     <script>
         window.APP_CONFIG = {
             CURRENT_VERSION_ID: {{ isset($docRequest) ? $docRequest->version_id : 'null' }},
             CURRENT_DOC_TYPE_ID: {{ isset($docRequest) ? $docRequest->doc_type_id : 'null' }},
             CURRENT_SUB_TYPE_ID: {{ isset($docRequest) && $docRequest->sub_type_id ? $docRequest->sub_type_id : 'null' }},
-            CURRENT_DRF_SOURCE: '{{ isset($drf) && $drf ? $drf->office_id : "" }}',
             CURRENT_DCN_SOURCE: '{{ isset($dcn) && $dcn ? $dcn->office_id : "" }}',
             CURRENT_APPROVAL_BODY: '{{ isset($approval) && $approval ? $approval->approval_body_id : "" }}',
         };
+        window.__existingRelatedDocs = {!! $relatedDocsData->toJson() !!};
+        window.__existingDrfOffices = {!! $drfOfficesSeed->toJson() !!};
+        window.__existingMasterlistSource = {!! $masterlistSourceSeed->toJson() !!};
+        window.__existingMasterlistOriginator = {!! json_encode($masterlistOriginatorSeed) !!};
+        window.__existingSyllabiGroups = {!! $syllabiGroupsSeed->toJson() !!};
     </script>
 
 </head>
@@ -59,7 +118,6 @@
             </a>
         </div>
 
-        <!-- Toast -->
         @if(session('success'))
             <div class="reg-toast reg-toast-success" id="successToast">
                 <div class="reg-toast-icon"><i class="fa-solid fa-check"></i></div>
@@ -83,7 +141,6 @@
             </div>
         @endif
 
-        <!-- Form -->
         <form id="masterForm" method="POST" action="{{ route('register.updateDoc', $docRequest->request_id) }}" enctype="multipart/form-data">
             <input type="hidden" id="requestId" value="{{ $docRequest->request_id }}">
             @csrf
@@ -107,7 +164,7 @@
                         <input type="hidden" name="doc_type_id" value="{{ $docRequest->doc_type_id }}">
                     </div>
                     <div class="reg-field">
-                        <label>Sub-Type</label>
+                        <label>Sub-Type Document</label>
                         <select id="subType" name="sub_type_id" autocomplete="off" disabled>
                             <option value="" selected disabled>Select sub-type</option>
                         </select>
@@ -139,156 +196,114 @@
                 </div>
             </div>
 
-            <!-- ═══ SYLLABI ═══ -->
+            <!-- ═══ SYLLABI (full wizard — mirrors register.blade.php) ═══ -->
             <section class="reg-card" id="section-syllabi" style="display: {{ $syllabi->count() > 0 ? 'block' : 'none' }};">
                 <div class="reg-card-header">
                     <span>Syllabi</span>
                 </div>
                 <div class="reg-card-body">
+
+                    <div class="reg-grid-4">
+                        <div class="reg-field">
+                            <label>College</label>
+                            <select id="syllabiCollege" name="college_id">
+                                <option value="" selected disabled>Select college</option>
+                            </select>
+                        </div>
+                        <div class="reg-field">
+                            <label>Program</label>
+                            <select id="syllabiProgram" name="program_id" disabled>
+                                <option value="" selected disabled>Select program</option>
+                            </select>
+                        </div>
+                        <div class="reg-field">
+                            <label>Semester</label>
+                            <select id="syllabiSemester" name="semester_id" disabled>
+                                <option value="" selected disabled>Select semester</option>
+                            </select>
+                        </div>
+                        <div class="reg-field">
+                            <label>School Year</label>
+                            <select id="syllabiSchoolYear" name="school_year_id" disabled>
+                                <option value="" selected disabled>Select school year</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="reg-grid-4">
+                        <div class="reg-field">
+                            <label>Document No.</label>
+                            <input type="text" id="syllabiDocNo" name="syllabiDocNo" placeholder="Enter Document No." value="{{ $masterlist->doc_no ?? '' }}">
+                        </div>
+                        <div class="reg-field">
+                            <label>Document Title</label>
+                            <input type="text" id="syllabiDocTitle" name="syllabiDocTitle" placeholder="Enter Document Title" value="{{ $masterlist->doc_title ?? '' }}">
+                        </div>
+                        <div class="reg-field">
+                            <label>Effectivity Date</label>
+                            <input type="date" id="syllabiEffectivityDate" name="syllabiEffectivityDate" value="{{ fmtDate($masterlist->effectivity_date ?? '') }}">
+                        </div>
+                        <div class="reg-field">
+                            <label>Deadline of Submission</label>
+                            <input type="date" id="syllabiDeadline" name="syllabiDeadline" value="{{ fmtDate($masterlist->deadline ?? '') }}">
+                        </div>
+                    </div>
+
+                    <div class="reg-wizard-steps" id="syllabiStepIndicator">
+                        <div class="reg-wizard-step is-active" data-step="1"><span>1</span> Course Info</div>
+                        <div class="reg-wizard-step" data-step="2"><span>2</span> DRF</div>
+                        <div class="reg-wizard-step" data-step="3"><span>3</span>Masterlist  Registration</div>
+                    </div>
+
                     <div class="reg-field">
-                        <label>Syllabi Details</label>
                         <div class="reg-table-wrap">
-                            <table class="reg-table">
+                            <table class="reg-table reg-wizard-table" id="syllabiWizardTable" data-active-step="1">
                                 <thead>
                                     <tr>
-                                        <th>Course Name</th>
-                                        <th>Availability</th>
-                                        <th>No. Pages</th>
-                                        <th>DRF Avail.</th>
-                                        <th>DRF No.</th>
-                                        <th>DRF Date</th>
-                                        <th>DRF Received</th>
-                                        <th>Scanned DRF</th>
-                                        <th></th>
+                                        <th class="col-pinned">Course Name</th>
+                                        <th class="col-step1">Syllabi Availability</th>
+                                        <th class="col-step1">No. Copies</th>
+                                        <th class="col-step1">Originator</th>
+                                        <th class="col-step1">No. Pages</th>
+                                        <th class="col-step1">Date Received</th>
+                                        <th class="col-step1">Time Received</th>
+
+                                        <th class="col-step2">DRF Availability</th>
+                                        <th class="col-step2">DRF No.</th>
+                                        <th class="col-step2">DRF Date</th>
+                                        <th class="col-step2">DRF Received Date</th>
+
+                                        <th class="col-step3">Registered</th>
+                                        <th class="col-step3">Date of Registration</th>
+                                        <th class="col-step3">Time of Registration</th>
+                                        <th class="col-step3">Time Spent</th>
+                                        <th class="col-step3">Scanned DRF</th>
+
+                                        <th class="col-pinned"></th>
                                     </tr>
                                 </thead>
-                                <tbody id="syllabiTableBody">
-                                    @forelse($syllabi as $syl)
-                                    <tr style="animation: fadeSlideUp 0.25s ease;">
-                                        <td><input type="text" name="syllabiCourseName[]" placeholder="Enter course name" value="{{ $syl->course_name }}"></td>
-                                        <td>
-                                            <select name="syllabiAvailability[]">
-                                                <option value="" disabled>Select</option>
-                                                <option value="available" {{ $syl->syllabi_availability === 'available' ? 'selected' : '' }}>Available</option>
-                                                <option value="not_available" {{ $syl->syllabi_availability === 'not_available' ? 'selected' : '' }}>Not Available</option>
-                                            </select>
-                                        </td>
-                                        <td><input type="number" name="syllabiNoPages[]" min="0" placeholder="0" value="{{ $syl->no_pages }}"></td>
-                                        <td>
-                                            <select name="syllabiDrfAvailability[]">
-                                                <option value="" disabled>Select</option>
-                                                <option value="available" {{ $syl->drf_availability === 'available' ? 'selected' : '' }}>Available</option>
-                                                <option value="not_available" {{ $syl->drf_availability === 'not_available' ? 'selected' : '' }}>Not Available</option>
-                                            </select>
-                                        </td>
-                                        <td><input type="text" name="syllabiDrfNo[]" placeholder="DRF-001" value="{{ $syl->drf_no }}"></td>
-                                        <td><input type="date" name="syllabiDrfDate[]" value="{{ fmtDate($syl->drf_date) }}"></td>
-                                        <td><input type="date" name="syllabiDrfReceived[]" value="{{ fmtDate($syl->drf_received_date) }}"></td>
-                                        <td>
-                                            <label class="reg-upload-cell">
-                                                <input type="file" name="syllabiScannedDrf[]" accept=".pdf,.docx">
-                                                <i class="fa-solid fa-cloud-arrow-up"></i>
-                                                <span>{{ $syl->scanned_drf ? basename($syl->scanned_drf) : 'No file chosen' }}</span>
-                                            </label>
-                                        </td>
-                                        <td><button type="button" class="reg-row-del" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash-can"></i></button></td>
-                                    </tr>
-                                    @empty
-                                    <tr style="animation: fadeSlideUp 0.25s ease;">
-                                        <td><input type="text" name="syllabiCourseName[]" placeholder="Enter course name"></td>
-                                        <td>
-                                            <select name="syllabiAvailability[]">
-                                                <option value="" disabled selected>Select</option>
-                                                <option value="available">Available</option>
-                                                <option value="not_available">Not Available</option>
-                                            </select>
-                                        </td>
-                                        <td><input type="number" name="syllabiNoPages[]" min="0" placeholder="0"></td>
-                                        <td>
-                                            <select name="syllabiDrfAvailability[]">
-                                                <option value="" disabled selected>Select</option>
-                                                <option value="available">Available</option>
-                                                <option value="not_available">Not Available</option>
-                                            </select>
-                                        </td>
-                                        <td><input type="text" name="syllabiDrfNo[]" placeholder="DRF-001"></td>
-                                        <td><input type="date" name="syllabiDrfDate[]"></td>
-                                        <td><input type="date" name="syllabiDrfReceived[]"></td>
-                                        <td>
-                                            <label class="reg-upload-cell">
-                                                <input type="file" name="syllabiScannedDrf[]" accept=".pdf,.docx">
-                                                <i class="fa-solid fa-cloud-arrow-up"></i>
-                                                <span>No file chosen</span>
-                                            </label>
-                                        </td>
-                                        <td><button type="button" class="reg-row-del" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash-can"></i></button></td>
-                                    </tr>
-                                    @endforelse
-                                </tbody>
+                                <tbody id="syllabiTableBody"></tbody>
                             </table>
                         </div>
-                        <button type="button" class="reg-add-row" onclick="addSyllabiRow()">
-                            <i class="fa-solid fa-plus"></i> Add Course Row
+                        <button type="button" id="btnAddSyllabiRow" onclick="addSyllabiRow()">
+                            <i class="fa-solid fa-plus"></i> Add Course
+                        </button>
+                        <div class="reg-syllabi-copies-total">
+                            Total No. of Copies: <span id="totalSyllabiCopies">0</span>
+                        </div>
+                    </div>
+
+                    <div class="reg-wizard-nav">
+                        <button type="button" class="reg-btn reg-btn-cancel" id="syllabiBackBtn" onclick="syllabiStepBack()" style="display:none;">
+                            <i class="fa-solid fa-arrow-left"></i> Back
+                        </button>
+                        <button type="button" class="reg-btn reg-btn-save" id="syllabiNextBtn" onclick="syllabiStepNext()">
+                            Next <i class="fa-solid fa-arrow-right"></i>
                         </button>
                     </div>
                 </div>
             </section>
 
-            <!-- ═══ SECTION 1 — DRF ═══ -->
-            <section class="reg-card" id="section-1" style="display: {{ $drf ? 'block' : 'none' }};">
-                <div class="reg-card-header">
-                    <span>Document Request Form</span>
-                </div>
-                <div class="reg-card-body">
-                    <div class="reg-grid-3">
-                        <div class="reg-field">
-                            <label>DRF No.</label>
-                            <input type="text" id="drfNo" name="drfNo" placeholder="DRF-001" value="{{ $drf->drf_no ?? '' }}">
-                        </div>
-                        <div class="reg-field">
-                            <label>DRF Date</label>
-                            <input type="date" id="drfDate" name="drfDate" value="{{ fmtDate($drf->drf_date ?? '') }}">
-                        </div>
-                        <div class="reg-field">
-                            <label>Source Unit</label>
-                            <select id="drfSourceUnit" name="drfSourceUnit" autocomplete="off">
-                                <option value="" selected disabled>Select office</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="reg-grid-3">
-                        <div class="reg-field">
-                            <label>Date Receipt</label>
-                            <input type="date" id="drfReceiptDate" name="drfReceiptDate" value="{{ fmtDate($drf->drf_receipt_date ?? '') }}">
-                        </div>
-                        <div class="reg-field">
-                            <label>Time Receipt</label>
-                            <input type="time" id="drfTime" name="drfTime" value="{{ fmtTime($drf->drf_receipt_time ?? '') }}">
-                        </div>
-                        <div class="reg-field">
-                            <label>Document Title</label>
-                            <input type="text" id="drfTitle" name="drfTitle" placeholder="Title" value="{{ $drf->doc_title ?? '' }}">
-                        </div>
-                    </div>
-                    <div class="reg-field">
-                        <label>Upload Scanned DRF</label>
-                        @if($drf && $drf->scanned_drf)
-                            <div class="reg-current-file">
-                                <i class="fa-solid fa-file-pdf"></i>
-                                <span>{{ basename($drf->scanned_drf) }}</span>
-                                <a href="{{ asset('storage/' . $drf->scanned_drf) }}" target="_blank">View</a>
-                            </div>
-                        @endif
-                        <label class="reg-upload">
-                            <input type="file" id="drfFile" name="drfFile" accept=".pdf,.docx">
-                            <i class="fa-solid fa-cloud-arrow-up"></i>
-                            <span>{{ $drf && $drf->scanned_drf ? 'Replace file' : 'Choose .pdf or .docx file' }}</span>
-                        </label>
-                    </div>
-                </div>
-            </section>
-
-            <!-- ═══ SECTION 2 — DCN ═══ -->
             <section class="reg-card" id="section-2" style="display: {{ $dcn ? 'block' : 'none' }};">
                 <div class="reg-card-header">
                     <span>Document Change Notice</span>
@@ -304,39 +319,37 @@
                             <input type="date" id="noticeDate" name="noticeDate" value="{{ fmtDate($dcn->dcn_date ?? '') }}">
                         </div>
                         <div class="reg-field">
+                            <label>DCN Receipt</label>
+                            <div class="reg-dual">
+                                <input type="date" id="receiptDate" name="receiptDate" value="{{ fmtDate($dcn->dcn_receipt_date ?? '') }}">
+                                <input type="time" id="receiptTime" name="receiptTime" value="{{ fmtTime($dcn->dcn_receipt_time ?? '') }}">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="reg-grid-2-1">
+                        <div class="reg-field">
+                            <label>Upload Scanned DCN</label>
+                            @if($dcn && $dcn->scanned_dcn)
+                                <div class="reg-current-file">
+                                    <i class="fa-solid fa-file-pdf"></i>
+                                    <span>{{ basename($dcn->scanned_dcn) }}</span>
+                                    <a href="{{ asset('storage/' . $dcn->scanned_dcn) }}" target="_blank">View</a>
+                                </div>
+                            @endif
+                            <label class="reg-upload">
+                                <input type="file" id="dcnFile" name="dcnFile" accept=".pdf,.docx">
+                                <i class="fa-solid fa-cloud-arrow-up"></i>
+                                <span>{{ $dcn && $dcn->scanned_dcn ? 'Replace file' : 'Choose .pdf or .docx file' }}</span>
+                            </label>
+                        </div>
+                        <div class="reg-field">
                             <label>Source Unit</label>
                             <select id="dcnSourceUnit" name="dcnSourceUnit" autocomplete="off">
                                 <option value="" selected disabled>Select office</option>
                             </select>
                         </div>
                     </div>
-                    <div class="reg-grid-2">
-                        <div class="reg-field">
-                            <label>Receipt Date</label>
-                            <input type="date" id="receiptDate" name="receiptDate" value="{{ fmtDate($dcn->dcn_receipt_date ?? '') }}">
-                        </div>
-                        <div class="reg-field">
-                            <label>Receipt Time</label>
-                            <input type="time" id="receiptTime" name="receiptTime" value="{{ fmtTime($dcn->dcn_receipt_time ?? '') }}">
-                        </div>
-                    </div>
-                    <div class="reg-field">
-                        <label>Upload Scanned DCN</label>
-                        @if($dcn && $dcn->scanned_dcn)
-                            <div class="reg-current-file">
-                                <i class="fa-solid fa-file-pdf"></i>
-                                <span>{{ basename($dcn->scanned_dcn) }}</span>
-                                <a href="{{ asset('storage/' . $dcn->scanned_dcn) }}" target="_blank">View</a>
-                            </div>
-                        @endif
-                        <label class="reg-upload">
-                            <input type="file" id="dcnFile" name="dcnFile" accept=".pdf,.docx">
-                            <i class="fa-solid fa-cloud-arrow-up"></i>
-                            <span>{{ $dcn && $dcn->scanned_dcn ? 'Replace file' : 'Choose .pdf or .docx file' }}</span>
-                        </label>
-                    </div>
 
-                    <!-- Revision Table -->
                     <div class="reg-field reg-revision-table">
                         <label>Document Revisions</label>
                         <div class="reg-table-wrap">
@@ -403,6 +416,67 @@
                 </div>
             </section>
 
+            <!-- ═══ SECTION 1 — DRF ═══ -->
+            <section class="reg-card" id="section-1" style="display: {{ $drf ? 'block' : 'none' }};">
+                <div class="reg-card-header">
+                    <span>Document Request Form</span>
+                </div>
+                <div class="reg-card-body">
+                    <div class="reg-grid-3">
+                        <div class="reg-field">
+                            <label>DRF No.</label>
+                            <input type="text" id="drfNo" name="drfNo" placeholder="DRF-001" value="{{ $drf->drf_no ?? '' }}">
+                        </div>
+                        <div class="reg-field">
+                            <label>DRF Date</label>
+                            <input type="date" id="drfDate" name="drfDate" value="{{ fmtDate($drf->drf_date ?? '') }}">
+                        </div>
+                        <div class="reg-field">
+                            <label>Date Receipt</label>
+                            <div class="reg-dual">
+                                <input type="date" id="drfReceiptDate" name="drfReceiptDate" value="{{ fmtDate($drf->drf_receipt_date ?? '') }}">
+                                <input type="time" id="drfTime" name="drfTime" value="{{ fmtTime($drf->drf_receipt_time ?? '') }}">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="reg-grid-2-1">
+                        <div class="reg-field">
+                            <label>Document Title</label>
+                            <input type="text" id="drfTitle" name="drfTitle" placeholder="Title" value="{{ $drf->doc_title ?? '' }}">
+                        </div>
+                        <div class="reg-field">
+                            <label>Source Unit</label>
+                            <div class="reg-reldocs" id="drfSourceUnitWidget">
+                                <div class="reg-reldocs-inputwrap">
+                                    <input type="text" id="drfSourceUnitSearch" class="reg-reldocs-input"
+                                        placeholder="Type to search offices..." autocomplete="off">
+                                    <button type="button" class="reg-reldocs-arrow-btn" id="drfSourceArrowBtn">
+                                        <i class="fa-solid fa-chevron-down"></i>
+                                    </button>
+                                </div>
+                                <div id="drfSourceResults" class="reg-reldocs-dropdown" style="display:none;"></div>
+                                <div id="drfSourceInlineChips" class="reg-reldocs-dropdown reg-reldocs-selected-panel" style="display:none;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="reg-field">
+                        <label>Upload Scanned DRF</label>
+                        @if($drf && $drf->scanned_drf)
+                            <div class="reg-current-file">
+                                <i class="fa-solid fa-file-pdf"></i>
+                                <span>{{ basename($drf->scanned_drf) }}</span>
+                                <a href="{{ asset('storage/' . $drf->scanned_drf) }}" target="_blank">View</a>
+                            </div>
+                        @endif
+                        <label class="reg-upload">
+                            <input type="file" id="drfFile" name="drfFile" accept=".pdf,.docx">
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                            <span>{{ $drf && $drf->scanned_drf ? 'Replace file' : 'Choose .pdf or .docx file' }}</span>
+                        </label>
+                    </div>
+                </div>
+            </section>    
+
             <!-- ═══ SECTION 3 — MASTERLIST ═══ -->
             <section class="reg-card" id="section-3" style="display: {{ $masterlist ? 'block' : 'none' }};">
                 <div class="reg-card-header">
@@ -426,7 +500,7 @@
                             </div>
                         </div>
                         <div class="reg-field reg-ml-timespent">
-                            <label>Time Spent/Minute(s)</label>
+                            <label>Time Spent</label>
                             <input type="text" id="masterlistTimeSpentDisplay" readonly placeholder="--"
                                 style="background: #f8fafc; cursor: default; font-weight: 700; text-align: center; font-size: 18px; height: 100%; min-height: 80px;">
                             <input type="hidden" id="masterlistTimeSpent" name="masterlistTimeSpent">
@@ -450,7 +524,7 @@
                         </div>
                         <div class="reg-field">
                             <label>Revision No.</label>
-                            <input type="number" id="masterlistRevisionNo" name="masterlistRevisionNo" placeholder="0"
+                            <input type="number" id="masterlistRevisionNo" placeholder="0"
                                 value="{{ $masterlist->revise_no ?? '' }}" disabled
                                 style="background:#f1f5f9; cursor:not-allowed; opacity:0.7;">
                             <input type="hidden" name="masterlistRevisionNo" value="{{ $masterlist->revise_no ?? '0' }}">
@@ -460,26 +534,32 @@
                             <input type="number" id="masterlistNoOfPages" name="masterlistNoOfPages" min="0" placeholder="0" value="{{ $masterlist->no_pages ?? '' }}">
                         </div>
                         <div class="reg-field">
-                            <label>In-charge</label>
-                            <input type="text" id="masterlistInCharge" name="masterlistInCharge" placeholder="Name" value="{{ $masterlist->in_charge ?? '' }}">
+                            <label>Originator</label>
+                            <div class="reg-reldocs" id="masterlistOriginatorWidget">
+                                <div class="reg-reldocs-inputwrap">
+                                    <input type="text" id="masterlistOriginatorSearch" class="reg-reldocs-input"
+                                        placeholder="Type a name" autocomplete="off">
+                                    <button type="button" class="reg-reldocs-arrow-btn" id="masterlistOriginatorArrowBtn">
+                                        <i class="fa-solid fa-chevron-down"></i>
+                                    </button>
+                                </div>
+                                <div id="masterlistOriginatorResults" class="reg-reldocs-dropdown" style="display:none;"></div>
+                                <div id="masterlistOriginatorInlineChips" class="reg-reldocs-dropdown reg-reldocs-selected-panel" style="display:none;"></div>
+                            </div>
                         </div>
                         <div class="reg-field">
-                            <label>Source Unit / Originator</label>
-                            <div class="reg-source-wrap">
-                                <input type="hidden" id="masterlistOfficeId" name="masterlistOfficeId" value="">
-                                <input type="text" id="masterlistSourceUnit" name="masterlistSourceUnit"
-                                    value="{{ old('masterlistSourceUnit', $masterlistSourceUnit ?? '') }}"
-                                    placeholder="e.g. Office of the President, Juan dela Cruz"
-                                    autocomplete="off"
-                                    oninput="handleSourceSearch(this, 'masterlistSourceResults')"
-                                    onfocus="handleSourceSearch(this, 'masterlistSourceResults')">
-                                <div id="masterlistSourceResults" class="reg-source-suggestions"
-                                    style="display:none;"></div>
+                            <label>Source Unit</label>
+                            <div class="reg-reldocs" id="masterlistSourceWidget">
+                                <div class="reg-reldocs-inputwrap">
+                                    <input type="text" id="masterlistSourceSearch" class="reg-reldocs-input"
+                                        placeholder="Type office name" autocomplete="off">
+                                    <button type="button" class="reg-reldocs-arrow-btn" id="masterlistSourceArrowBtn">
+                                        <i class="fa-solid fa-chevron-down"></i>
+                                    </button>
+                                </div>
+                                <div id="masterlistSourceSuggestions" class="reg-reldocs-dropdown" style="display:none;"></div>
+                                <div id="masterlistSourceInlineChips" class="reg-reldocs-dropdown reg-reldocs-selected-panel" style="display:none;"></div>
                             </div>
-                            <small style="color:#888; font-size:12px; margin-top:4px; display:block;">
-                                Separate multiple entries with commas. Select an office from suggestions
-                                or type a person's name.
-                            </small>
                         </div>
                     </div>
                     <div class="reg-grid-2">
@@ -489,15 +569,20 @@
                         </div>
                         <div class="reg-field">
                             <label>Related Documents</label>
-                            <div class="reg-related-wrap">
-                                <div id="relatedDocsList" class="reg-related-docs-list"></div>
-                                <div class="reg-search">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
-                                    </svg>
-                                    <input type="text" id="relatedDocsSearch" placeholder="Type a document title to search..."
-                                        autocomplete="off" oninput="handleRelatedDocSearch(this)">
-                                    <div id="relatedDocsResults" class="reg-search-dropdown" style="display:none;"></div>
+                            <div class="reg-reldocs" id="relatedDocsWidget">
+                                <div class="reg-reldocs-inputwrap">
+                                    <input type="text" id="relatedDocsSearch" class="reg-reldocs-input"
+                                        placeholder="Type a document title to search..."
+                                        autocomplete="off"
+                                        oninput="handleRelatedDocSearch(this)"
+                                        onfocus="handleRelatedDocFocus()">
+                                    <button type="button" class="reg-reldocs-arrow-btn" onclick="toggleRelatedDocsSelected(event)">
+                                        <i class="fa-solid fa-chevron-down" id="relatedDocsArrowIcon"></i>
+                                    </button>
+                                </div>
+                                <div id="relatedDocsResults" class="reg-reldocs-dropdown" style="display:none;"></div>
+                                <div id="relatedDocsSelectedPanel" class="reg-reldocs-dropdown reg-reldocs-selected-panel" style="display:none;">
+                                    <div id="relatedDocsChips" class="reg-reldocs-chips"></div>
                                 </div>
                             </div>
                         </div>
@@ -520,7 +605,7 @@
                 </div>
             </section>
 
-            <!-- ═══ SECTION — APPROVAL ═══ -->
+            <!-- ═══ APPROVAL ═══ -->
             <section class="reg-card" id="section-approval" style="display: {{ $approval ? 'block' : 'none' }};">
                 <div class="reg-card-header">
                     <span>Approval Details</span>
@@ -534,7 +619,7 @@
                             </select>
                         </div>
                         <div class="reg-field">
-                            <label>Date</label>
+                            <label>Approval Date</label>
                             <input type="date" id="approvalDate" name="approvalDate" value="{{ fmtDate($approval->approval_date ?? '') }}">
                         </div>
                         <div class="reg-field">
@@ -554,30 +639,24 @@
                     <div class="reg-split-left">
                         <div class="reg-split-form-grid">
                             <div class="reg-split-form-stack">
-                                <div class="reg-grid-2">
-                                    <div class="reg-field">
-                                        <label>Form Date</label>
+                                <div class="reg-field">
+                                    <label>Retrieval Form Date</label>
+                                    <div class="reg-dual">
                                         <input type="date" id="retrievalFormDate" name="retrievalFormDate" value="{{ fmtDate($retrieval->doc_retrieval_date_file ?? '') }}" oninput="calcRetrievalTimeSpent()">
-                                    </div>
-                                    <div class="reg-field">
-                                        <label>Form Time</label>
                                         <input type="time" id="retrievalFormTime" name="retrievalFormTime" value="{{ fmtTime($retrieval->doc_retrieval_time_file ?? '') }}" oninput="calcRetrievalTimeSpent()">
                                     </div>
                                 </div>
-                                <div class="reg-grid-2">
-                                    <div class="reg-field">
-                                        <label>Retrieval Date</label>
+                                <div class="reg-field">
+                                    <label>Retrieval Date & Time</label>
+                                    <div class="reg-dual">
                                         <input type="date" id="retrievalDate" name="retrievalDate" value="{{ fmtDate($retrieval->doc_retrieval_date_actual ?? '') }}" oninput="calcRetrievalTimeSpent()">
-                                    </div>
-                                    <div class="reg-field">
-                                        <label>Retrieval Time</label>
                                         <input type="time" id="retrievalTime" name="retrievalTime" value="{{ fmtTime($retrieval->doc_retrieval_time_actual ?? '') }}" oninput="calcRetrievalTimeSpent()">
                                     </div>
                                 </div>
                             </div>
                             <div class="reg-field">
-                                <label>Time Spent</label>
-                                <input type="text" id="retrievalTimeSpentDisplay" readonly placeholder="--">
+                                <label>Time Spent/Minute(s)</label>
+                                <input type="text" id="retrievalTimeSpentDisplay" readonly placeholder="--" style="background: #f8fafc; cursor: default;">
                                 <input type="hidden" id="retrievalTimeSpent" name="retrievalTimeSpent">
                             </div>
                         </div>
@@ -586,7 +665,7 @@
                             <input type="text" id="retrievalRemarks" name="retrievalRemarks" placeholder="Optional remarks" value="{{ $retrieval->remarks ?? '' }}">
                         </div>
                         <div class="reg-field">
-                            <label>Upload Scanned Retrieval</label>
+                            <label>Upload Scanned D&amp;R</label>
                             @if($retrieval && $retrieval->scanned_retrieval)
                                 <div class="reg-current-file">
                                     <i class="fa-solid fa-file-pdf"></i>
@@ -603,13 +682,13 @@
                     </div>
                     <div class="reg-split-right">
                         <div class="reg-field">
-                            <label>Receiving Offices</label>
+                            <label>Select office(s) for retrieval</label>
                             <div class="reg-search">
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <circle cx="11" cy="11" r="8"/>
                                     <path d="M21 21l-4.35-4.35"/>
                                 </svg>
-                                <input type="text" id="retrievalSearch" placeholder="Search office..."
+                                <input type="text" id="retrievalSearch" placeholder="Search and add office..."
                                     oninput="handleSearch(this, 'retrievalResults', 'retrievalBody', 'retrievalTotal')"
                                     autocomplete="off">
                                 <div id="retrievalResults" class="reg-search-dropdown" style="display:none;"></div>
@@ -619,8 +698,8 @@
                             <table class="reg-dist-table">
                                 <thead>
                                     <tr>
-                                        <th>Office / Unit</th>
-                                        <th style="width:80px; text-align:center;">Copies</th>
+                                        <th>Receiving Office(s)</th>
+                                        <th style="width:110px; text-align:center;">No. of Copies</th>
                                         <th style="width:40px;"></th>
                                     </tr>
                                 </thead>
@@ -657,7 +736,7 @@
                                 </tbody>
                                 <tfoot>
                                     <tr>
-                                        <td colspan="2" style="text-align:right; font-weight:700;">Total Copies:</td>
+                                        <td colspan="2" style="text-align:right; font-weight:700;">Total No. of Copies:</td>
                                         <td id="retrievalTotal" style="text-align:center; font-weight:700;">{{ $retrievalOffices->sum('copies') }}</td>
                                     </tr>
                                 </tfoot>
@@ -676,30 +755,24 @@
                     <div class="reg-split-left">
                         <div class="reg-split-form-grid">
                             <div class="reg-split-form-stack">
-                                <div class="reg-grid-2">
-                                    <div class="reg-field">
-                                        <label>Form Date</label>
+                                <div class="reg-field">
+                                    <label>Distribution Form Date</label>
+                                    <div class="reg-dual">
                                         <input type="date" id="distributionFormDate" name="distributionFormDate" value="{{ fmtDate($distribution->doc_distribution_date_file ?? '') }}" oninput="calcDistributionTimeSpent()">
-                                    </div>
-                                    <div class="reg-field">
-                                        <label>Form Time</label>
                                         <input type="time" id="distributionFormTime" name="distributionFormTime" value="{{ fmtTime($distribution->doc_distribution_time_file ?? '') }}" oninput="calcDistributionTimeSpent()">
                                     </div>
                                 </div>
-                                <div class="reg-grid-2">
-                                    <div class="reg-field">
-                                        <label>Distribution Date</label>
+                                <div class="reg-field">
+                                    <label>Distribution Date & Time</label>
+                                    <div class="reg-dual">
                                         <input type="date" id="distributionDate" name="distributionDate" value="{{ fmtDate($distribution->doc_distribution_date_actual ?? '') }}" oninput="calcDistributionTimeSpent()">
-                                    </div>
-                                    <div class="reg-field">
-                                        <label>Distribution Time</label>
                                         <input type="time" id="distributionTime" name="distributionTime" value="{{ fmtTime($distribution->doc_distribution_time_actual ?? '') }}" oninput="calcDistributionTimeSpent()">
                                     </div>
                                 </div>
                             </div>
                             <div class="reg-field">
-                                <label>Time Spent</label>
-                                <input type="text" id="distributionTimeSpentDisplay" readonly placeholder="--">
+                                <label>Time Spent/Minute(s)</label>
+                                <input type="text" id="distributionTimeSpentDisplay" readonly placeholder="--" style="background: #f8fafc; cursor: default;">
                                 <input type="hidden" id="distributionTimeSpent" name="distributionTimeSpent">
                             </div>
                         </div>
@@ -708,7 +781,7 @@
                             <input type="text" id="distributionRemarks" name="distributionRemarks" placeholder="Optional remarks" value="{{ $distribution->remarks ?? '' }}">
                         </div>
                         <div class="reg-field">
-                            <label>Upload Scanned Distribution</label>
+                            <label>Upload Scanned D&amp;R</label>
                             @if($distribution && $distribution->scanned_distribution)
                                 <div class="reg-current-file">
                                     <i class="fa-solid fa-file-pdf"></i>
@@ -725,13 +798,13 @@
                     </div>
                     <div class="reg-split-right">
                         <div class="reg-field">
-                            <label>Receiving Offices</label>
+                            <label>Select office(s) for distribution</label>
                             <div class="reg-search">
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <circle cx="11" cy="11" r="8"/>
                                     <path d="M21 21l-4.35-4.35"/>
                                 </svg>
-                                <input type="text" id="distSearch" placeholder="Search office..."
+                                <input type="text" id="distSearch" placeholder="Search and add office..."
                                     oninput="handleSearch(this, 'distResults', 'distBody', 'distTotal')"
                                     autocomplete="off">
                                 <div id="distResults" class="reg-search-dropdown" style="display:none;"></div>
@@ -741,8 +814,8 @@
                             <table class="reg-dist-table">
                                 <thead>
                                     <tr>
-                                        <th>Office / Unit</th>
-                                        <th style="width:80px; text-align:center;">Copies</th>
+                                        <th>Receiving Office(s)</th>
+                                        <th style="width:110px; text-align:center;">No. of Copies</th>
                                         <th style="width:40px;"></th>
                                     </tr>
                                 </thead>
@@ -779,7 +852,7 @@
                                 </tbody>
                                 <tfoot>
                                     <tr>
-                                        <td colspan="2" style="text-align:right; font-weight:700;">Total Copies:</td>
+                                        <td colspan="2" style="text-align:right; font-weight:700;">Total No. of Copies:</td>
                                         <td id="distTotal" style="text-align:center; font-weight:700;">{{ $distributionOffices->sum('copies') }}</td>
                                     </tr>
                                 </tfoot>
@@ -831,17 +904,3 @@
 
 </body>
 </html>
-
-@php
-    $relatedDocsData = $masterlist
-        ? $masterlist->allRelatedDocuments()->map(fn($m) => [
-            'masterlist_id' => $m->masterlist_id,
-            'doc_no' => $m->doc_no,
-            'doc_title' => $m->doc_title,
-            'label' => $m->doc_title . ($m->doc_no ? ' ('.$m->doc_no.')' : ''),
-        ])
-        : collect([]);
-@endphp
-<script>
-  window.__existingRelatedDocs = {!! $relatedDocsData->toJson() !!};
-</script>

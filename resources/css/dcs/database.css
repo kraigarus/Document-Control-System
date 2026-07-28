@@ -581,6 +581,7 @@ td.sticky-col-4::after {
 .db-pg:disabled { opacity: 0.4; cursor: not-allowed; }
 .db-pg-active { background: var(--db-primary) !important; color: #fff !important; border-color: var(--db-primary) !important; }
 
+
 /* ═══════════════════════════════════
    EXPAND / COLLAPSE REVISIONS
    ═══════════════════════════════════ */
