@@ -1738,6 +1738,7 @@ class RegisterController extends Controller
         return view('pages.dcs.create-update.history', compact('revisions', 'docNo', 'docTitle'));
     }
 
+
     /**
      * Label-based extraction tuned to your DRF form's own vocabulary.
      * We'll adjust these labels once we see a real scanned DRF's raw OCR text.
