@@ -1,3 +1,10 @@
+import { initFilterPanel } from './report-filter';
+
+const filters = initFilterPanel({
+    onApply: () => loadReport(),
+    onReset: () => loadReport(),
+});
+
 const $ = (id) => document.getElementById(id);
 
 const subTabs   = $('monSubTabs');
@@ -51,6 +58,7 @@ async function loadReport() {
     const params = new URLSearchParams();
     params.set('category', 'monitoring');
     params.set('sub', currentSub);
+    filters.apply(params);
 
     try {
         const res = await fetch('/reports/data?' + params.toString());

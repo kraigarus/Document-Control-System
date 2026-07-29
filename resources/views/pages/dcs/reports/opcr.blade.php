@@ -20,6 +20,8 @@
 @include('partials.sidebar')
 @include('partials.inactivity-modal')
 
+@include('partials.filter-panel')
+
 <main class="rpt-page" id="rptPage">
 
     <header class="rpt-hdr">
@@ -37,6 +39,14 @@
         <button class="rpt-sub" data-sub="control_logbooks" type="button">Controlling of Logbooks</button>
         <button class="rpt-sub" data-sub="control_internal_forms" type="button">Controlling of Internal Forms</button>
     </nav>
+
+    <div class="rpt-filter visible" id="filterBar" style="justify-content:flex-end;">
+        <div class="rpt-filter-actions">
+            <button class="rpt-btn rpt-btn-ghost" id="openFilterBtn" type="button">
+                <i class="fa-solid fa-filter"></i> Filters
+            </button>
+        </div>
+    </div>
 
     <section class="rpt-results visible" id="opcrResults">
         <div class="rpt-results-head">

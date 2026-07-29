@@ -1,3 +1,10 @@
+import { initFilterPanel } from './report-filter';
+
+const filters = initFilterPanel({
+    onApply: () => loadReport(),
+    onReset: () => loadReport(),
+});
+
 const $ = (id) => document.getElementById(id);
 
 const subTabs   = $('opcrSubTabs');
@@ -44,6 +51,7 @@ async function loadReport() {
     const params = new URLSearchParams();
     params.set('category', 'opcr');
     params.set('sub', currentSub);
+    filters.apply(params);
 
     try {
         const res = await fetch('/reports/data?' + params.toString());

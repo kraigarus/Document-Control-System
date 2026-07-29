@@ -223,11 +223,6 @@
 
     </section>
 
-    <div class="db-pagination" id="pagination">
-        <span class="db-page-info" id="pageInfo">Loading...</span>
-        <div class="db-page-btns" id="pageBtns"></div>
-    </div>
-
 </main>
 
 @vite(['resources/js/dcs/database.js'])

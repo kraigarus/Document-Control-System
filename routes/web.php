@@ -109,7 +109,6 @@ Route::middleware(['auth', 'active'])->group(function () {
     ->name('register.extractScan');
 
     // Reports
-    Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
     Route::get('/reports/masterlist', [ReportController::class, 'masterlist'])->name('reports.masterlist');
     Route::get('/reports/monitoring', [ReportController::class, 'monitoring'])->name('reports.monitoring');
     Route::get('/reports/opcr', [ReportController::class, 'opcr'])->name('reports.opcr');
@@ -153,6 +152,26 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('/originators', [SettingsController::class, 'storeOriginator'])->name('originators.store');
         Route::put('/originators/{id}', [SettingsController::class, 'updateOriginator'])->name('originators.update');
         Route::delete('/originators/{id}', [SettingsController::class, 'destroyOriginator'])->name('originators.destroy');
+
+        // Colleges
+        Route::post('/colleges',       [SettingsController::class, 'storeCollege'])->name('colleges.store');
+        Route::put('/colleges/{id}',   [SettingsController::class, 'updateCollege'])->name('colleges.update');
+        Route::delete('/colleges/{id}',[SettingsController::class, 'destroyCollege'])->name('colleges.destroy');
+
+        // Programs
+        Route::post('/programs',       [SettingsController::class, 'storeProgram'])->name('programs.store');
+        Route::put('/programs/{id}',   [SettingsController::class, 'updateProgram'])->name('programs.update');
+        Route::delete('/programs/{id}',[SettingsController::class, 'destroyProgram'])->name('programs.destroy');
+
+        // Semesters
+        Route::post('/semesters',       [SettingsController::class, 'storeSemester'])->name('semesters.store');
+        Route::put('/semesters/{id}',   [SettingsController::class, 'updateSemester'])->name('semesters.update');
+        Route::delete('/semesters/{id}',[SettingsController::class, 'destroySemester'])->name('semesters.destroy');
+
+        // School Years
+        Route::post('/school-years',       [SettingsController::class, 'storeSchoolYear'])->name('schoolyears.store');
+        Route::put('/school-years/{id}',   [SettingsController::class, 'updateSchoolYear'])->name('schoolyears.update');
+        Route::delete('/school-years/{id}',[SettingsController::class, 'destroySchoolYear'])->name('schoolyears.destroy');
     });
 
     Route::middleware('auth')->prefix('profile')->name('profile.')->group(function () {

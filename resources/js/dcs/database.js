@@ -3,13 +3,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const emptyState = document.getElementById('emptyState');
     const docCount = document.getElementById('docCount');
     const searchInput = document.getElementById('dbSearch');
-    const pageInfo = document.getElementById('pageInfo');
-    const pageBtns = document.getElementById('pageBtns');
 
     let currentTypeId = 'all';
-    let currentPage = 1;
-    const perPage = 20;
-
+    
     // ═══════════════════════════════════════════
     // Header row heights
     // ═══════════════════════════════════════════
@@ -126,7 +122,6 @@ document.addEventListener('DOMContentLoaded', () => {
             document.querySelectorAll('.db-type-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             currentTypeId = btn.dataset.typeId;
-            currentPage = 1;
             loadData();
         });
     });
@@ -137,7 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let searchTimer;
     searchInput.addEventListener('input', () => {
         clearTimeout(searchTimer);
-        searchTimer = setTimeout(() => { currentPage = 1; loadData(); }, 400);
+        searchTimer = setTimeout(() => { loadData(); }, 400);
     });
 
     // ═══════════════════════════════════════════
@@ -172,7 +167,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('applyFilterBtn').addEventListener('click', () => {
         closeFilter();
-        currentPage = 1;
         loadData();
     });
 
@@ -183,7 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function buildParams() {
-        const p = { page: currentPage, per_page: perPage };
+        const p = {};
         if (currentTypeId !== 'all') p.doc_type_id = currentTypeId;
         if (searchInput.value.trim()) p.search = searchInput.value.trim();
         const originator = document.getElementById('filterOriginator').value.trim();
@@ -239,14 +233,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (!json.data || json.data.length === 0) {
                 showEmpty('No documents found for the selected filters.', false);
-                renderPagination(json);
                 return;
             }
 
             document.querySelector('.db-table-scroll').style.display = '';
             emptyState.style.display = 'none';
             renderRows(json.data);
-            renderPagination(json);
 
         } catch (e) {
             console.error('Database load error:', e);
@@ -307,19 +299,38 @@ document.addEventListener('DOMContentLoaded', () => {
         return '<td class="col-group-summary-body col-group-summary-' + group + ' col-bg-' + group + '"' + hidden + '>' + icon + '</td>';
     }
 
-    const categoryState = {}; // slug -> expanded(bool), persists while the page is open
+    const CATEGORY_STATE_KEY = 'dcs_category_state';
+
+    function loadCategoryState() {
+        try {
+            const raw = localStorage.getItem(CATEGORY_STATE_KEY);
+            return raw ? JSON.parse(raw) : {};
+        } catch (e) {
+            console.warn('Could not read category state:', e);
+            return {};
+        }
+    }
+
+    function saveCategoryState() {
+        try {
+            localStorage.setItem(CATEGORY_STATE_KEY, JSON.stringify(categoryState));
+        } catch (e) {
+            console.warn('Could not save category state:', e);
+        }
+    }
+
+    const categoryState = loadCategoryState();
 
     function categorySlug(name) {
         return (name || 'uncategorized').toLowerCase().replace(/[^a-z0-9]+/g, '-');
     }
 
     function renderRows(groups) {
-        const offset = (currentPage - 1) * perPage;
         let lastCategory = null;
         let html = '';
 
         groups.forEach((group, i) => {
-            const itemNo = offset + i + 1;
+            const itemNo = i + 1;
             const parent = group.parent;
             const children = group.children || [];
             const hasRevisions = group.has_revisions;
@@ -329,7 +340,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const catSlug = categorySlug(catName);
 
             if (catName !== lastCategory) {
-                if (!(catSlug in categoryState)) categoryState[catSlug] = false; // collapsed by default
+                if (!(catSlug in categoryState)) categoryState[catSlug] = false;
                 const expanded = categoryState[catSlug];
                 html += '<tr class="db-category-row">' +
                     '<td colspan="60">' +
@@ -376,11 +387,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const slug = el.dataset.category;
                 const expanded = !categoryState[slug];
                 categoryState[slug] = expanded;
+                saveCategoryState();
                 el.classList.toggle('expanded', expanded);
                 el.querySelector('.db-category-chevron').textContent = expanded ? '\u25B2' : '\u25BC';
                 document.querySelectorAll('tr[data-category-row="' + slug + '"]').forEach(row => {
-                    // Only reveal parent rows here — child revision rows stay collapsed
-                    // until their own expand arrow is clicked
                     if (row.classList.contains('db-child-row')) return;
                     row.style.display = expanded ? '' : 'none';
                 });
@@ -501,48 +511,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const d = document.createElement('div');
         d.textContent = String(str);
         return d.innerHTML;
-    }
-
-    // ═══════════════════════════════════════════
-    // Pagination
-    // ═══════════════════════════════════════════
-    function renderPagination(json) {
-        const total = json.total || 0;
-        const lastPage = json.last_page || 1;
-        const from = total === 0 ? 0 : (currentPage - 1) * perPage + 1;
-        const to = Math.min(currentPage * perPage, total);
-
-        pageInfo.innerHTML = 'Showing <strong>' + from + '\u2013' + to + '</strong> of <strong>' + total + '</strong> documents';
-
-        let btns = '<button class="db-pg" ' + (currentPage <= 1 ? 'disabled' : '') + ' data-page="' + (currentPage - 1) + '">&laquo;</button>';
-
-        const start = Math.max(1, currentPage - 2);
-        const end = Math.min(lastPage, currentPage + 2);
-
-        if (start > 1) {
-            btns += '<button class="db-pg" data-page="1">1</button>';
-            if (start > 2) btns += '<span style="padding:0 6px;color:#94a3b8">...</span>';
-        }
-        for (let p = start; p <= end; p++) {
-            btns += '<button class="db-pg ' + (p === currentPage ? 'db-pg-active' : '') + '" data-page="' + p + '">' + p + '</button>';
-        }
-        if (end < lastPage) {
-            if (end < lastPage - 1) btns += '<span style="padding:0 6px;color:#94a3b8">...</span>';
-            btns += '<button class="db-pg" data-page="' + lastPage + '">' + lastPage + '</button>';
-        }
-        btns += '<button class="db-pg" ' + (currentPage >= lastPage ? 'disabled' : '') + ' data-page="' + (currentPage + 1) + '">&raquo;</button>';
-
-        pageBtns.innerHTML = btns;
-        pageBtns.querySelectorAll('.db-pg[data-page]').forEach(b => {
-            b.addEventListener('click', () => {
-                const p = parseInt(b.dataset.page);
-                if (p >= 1 && p <= lastPage) {
-                    currentPage = p;
-                    loadData();
-                    document.querySelector('.db-table-scroll').scrollTop = 0;
-                }
-            });
-        });
     }
 
     // ═══════════════════════════════════════════

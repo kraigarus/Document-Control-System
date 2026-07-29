@@ -68,7 +68,7 @@
             </a>
         </li>
         <li data-page="settings" class="nav-item">
-            <a href="{{ route('settings.index') }}">
+            <a href="/settings">
                 <i class="fa-solid fa-gear"></i>
                 <span>Settings</span>
                 <span class="tooltip">Settings</span>

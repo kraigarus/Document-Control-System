@@ -30,9 +30,6 @@ class DatabaseController extends Controller
     public function data(Request $request)
     {
         try {
-            $perPage     = (int) $request->input('per_page', 20);
-            $currentPage = max(1, (int) $request->input('page', 1));
-
             $query = DocumentRequest::with([
                 'docType',
                 'documentRequestForm',
@@ -247,25 +244,33 @@ class DatabaseController extends Controller
                 $groups = $groups->filter(fn ($g) => $wantObsoleteOnly ? $g['has_revisions'] : true)->values();
             }
 
-            $groups = $groups->sort(function ($a, $b) {
+            $categoryOrder = [
+                'internal'         => 0,
+                'internal forms'   => 1,
+                'external'         => 2,
+                'forms'            => 3,
+                'logbooks'         => 4,
+            ];
+
+            $groups = $groups->sort(function ($a, $b) use ($categoryOrder) {
                 $catA = $a['parent']['doc_type_name'] ?? 'zzz';
                 $catB = $b['parent']['doc_type_name'] ?? 'zzz';
+
+                $rankA = $categoryOrder[strtolower($catA)] ?? PHP_INT_MAX;
+                $rankB = $categoryOrder[strtolower($catB)] ?? PHP_INT_MAX;
+
+                if ($rankA !== $rankB) return $rankA <=> $rankB;
+
+                // Same rank (either both matched the same custom slot, or both unmatched) — fall back to alphabetical
                 $catCompare = strcmp($catA, $catB);
                 if ($catCompare !== 0) return $catCompare;
+
                 return ($b['parent']['request_id'] ?? 0) <=> ($a['parent']['request_id'] ?? 0);
             })->values();
 
-            $totalGroups     = $groups->count();
-            $lastPage        = max(1, (int) ceil($totalGroups / $perPage));
-            $currentPage     = min($currentPage, $lastPage);
-            $paginatedGroups = $groups->slice(($currentPage - 1) * $perPage, $perPage)->values();
-
             return response()->json([
-                'data'         => $paginatedGroups,
-                'total'        => $totalGroups,
-                'current_page' => $currentPage,
-                'last_page'    => $lastPage,
-                'per_page'     => $perPage,
+                'data'  => $groups,
+                'total' => $groups->count(),
             ]);
 
         } catch (\Exception $e) {
@@ -273,8 +278,9 @@ class DatabaseController extends Controller
             \Log::error("Database data error [{$refId}]: " . $e->getMessage());
             \Log::error($e->getTraceAsString());
             return response()->json([
-                'error' => "An error occurred (ref: {$refId})", 'data' => [],
-                'total' => 0, 'current_page' => 1, 'last_page' => 1, 'per_page' => 20,
+                'error' => "An error occurred (ref: {$refId})",
+                'data'  => [],
+                'total' => 0,
             ], 500);
         }
     }

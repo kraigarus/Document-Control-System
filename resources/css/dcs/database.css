@@ -576,16 +576,6 @@ td.sticky-col-4::after {
 .db-scan-link:hover { text-decoration: underline; }
 .db-na { color: var(--db-text-muted); font-style: italic; }
 
-/* ── PAGINATION ── */
-.db-pagination { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; flex-shrink: 0; }
-.db-page-info { font-size: 13px; color: var(--db-text-muted); }
-.db-page-info strong { color: var(--db-text); }
-.db-page-btns { display: flex; gap: 4px; }
-.db-pg { min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--db-border); border-radius: var(--db-radius); background: var(--db-white); color: var(--db-text-sec); font-size: 13px; cursor: pointer; transition: all 0.15s; }
-.db-pg:hover:not(:disabled) { background: var(--db-bg); }
-.db-pg:disabled { opacity: 0.4; cursor: not-allowed; }
-.db-pg-active { background: var(--db-primary) !important; color: #fff !important; border-color: var(--db-primary) !important; }
-
 .db-category-row td {
     background: var(--db-primary);
     padding: 10px 16px;

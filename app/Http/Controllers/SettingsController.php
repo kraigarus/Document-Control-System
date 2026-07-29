@@ -12,6 +12,7 @@ use App\Models\MasterlistOrigin;
 use App\Models\RetrievalOffice;
 use App\Models\DistributionOffice;
 use App\Models\Originator;
+use App\Models\{College, Program, Semester, SchoolYear};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -38,21 +39,18 @@ class SettingsController extends Controller
 
     public function index()
     {
-        $docTypes = DocType::whereNull('parent_id')
-            ->with(['subTypes' => function ($q) {
-                $q->orderBy('doc_type_name');
-            }])
-            ->orderBy('doc_type_name')
-            ->get();
-
-        $offices = Office::orderBy('office_name')->get();
-
+        $docTypes    = DocType::whereNull('parent_id')->with('subTypes')->orderBy('doc_type_name')->get();
+        $offices     = Office::orderBy('office_name')->get();
         $versionTypes = VersionType::orderBy(self::VERSION_NAME_FIELD)->get();
-
         $originators = Originator::orderBy('originator_name')->get();
+        $colleges    = College::with('programs')->orderBy('college_code')->get();
+        $programs    = Program::with('college')->orderBy('program_name')->get();
+        $semesters   = Semester::orderBy('semester_id')->get();
+        $schoolYears = SchoolYear::orderBy('school_year')->get();
 
         return view('pages.dcs.settings.index', compact(
-            'docTypes', 'offices', 'versionTypes', 'originators'
+            'docTypes', 'offices', 'versionTypes', 'originators',
+            'colleges', 'programs', 'semesters', 'schoolYears'
         ));
     }
 
@@ -311,6 +309,141 @@ class SettingsController extends Controller
     {
         Originator::findOrFail($id)->delete();
         return response()->json(['success' => true, 'message' => 'Originator deleted.']);
+    }
+
+    // ── storeCollege ──
+    public function storeCollege(Request $request)
+    {
+        $request->validate([
+            'college_name' => 'required|string|max:255|unique:colleges,college_name',
+        ]);
+
+        $name = $request->college_name;
+        // Auto-generate code from initials, e.g. "College of Computer Studies" → "COCS"
+        $code = collect(explode(' ', $name))
+            ->filter(fn($w) => strlen($w) > 0)
+            ->map(fn($w) => mb_strtoupper(mb_substr($w, 0, 2)))
+            ->join('');
+
+        // Ensure uniqueness by appending a number if needed
+        $base = $code;
+        $counter = 1;
+        while (College::where('college_code', $code)->exists()) {
+            $code = $base . $counter;
+            $counter++;
+        }
+
+        College::create([
+            'college_code' => $code,
+            'college_name' => $name,
+        ]);
+
+        return response()->json(['success' => true, 'message' => 'College added.']);
+    }
+
+    public function updateCollege(Request $request, $id)
+    {
+        $request->validate([
+            'college_name' => 'required|string|max:255|unique:colleges,college_name,' . $id . ',college_id',
+        ]);
+
+        $college = College::findOrFail($id);
+
+        // Optionally regenerate code when name changes
+        $name = $request->college_name;
+        $code = collect(explode(' ', $name))
+            ->filter(fn($w) => strlen($w) > 0)
+            ->map(fn($w) => mb_strtoupper(mb_substr($w, 0, 2)))
+            ->join('');
+
+        $base = $code;
+        $counter = 1;
+        while (College::where('college_code', $code)->where('college_id', '!=', $id)->exists()) {
+            $code = $base . $counter;
+            $counter++;
+        }
+
+        $college->update([
+            'college_code' => $code,
+            'college_name' => $name,
+        ]);
+
+        return response()->json(['success' => true, 'message' => 'College updated.']);
+    }
+
+    public function destroyCollege($id)
+    {
+        College::findOrFail($id)->delete();
+        return response()->json(['success' => true, 'message' => 'College deleted.']);
+    }
+
+    // ── Programs ──
+    public function storeProgram(Request $request)
+    {
+        $request->validate([
+            'college_id'   => 'required|exists:colleges,college_id',
+            'program_name' => 'required|string|max:255',
+        ]);
+        Program::create($request->only('college_id', 'program_name'));
+        return response()->json(['success' => true, 'message' => 'Program added.']);
+    }
+
+    public function updateProgram(Request $request, $id)
+    {
+        $request->validate([
+            'college_id'   => 'required|exists:colleges,college_id',
+            'program_name' => 'required|string|max:255',
+        ]);
+        Program::findOrFail($id)->update($request->only('college_id', 'program_name'));
+        return response()->json(['success' => true, 'message' => 'Program updated.']);
+    }
+
+    public function destroyProgram($id)
+    {
+        Program::findOrFail($id)->delete();
+        return response()->json(['success' => true, 'message' => 'Program deleted.']);
+    }
+
+    // ── Semesters ──
+    public function storeSemester(Request $request)
+    {
+        $request->validate(['semester_name' => 'required|string|max:50|unique:semesters,semester_name']);
+        Semester::create($request->only('semester_name'));
+        return response()->json(['success' => true, 'message' => 'Semester added.']);
+    }
+
+    public function updateSemester(Request $request, $id)
+    {
+        $request->validate(['semester_name' => 'required|string|max:50|unique:semesters,semester_name,' . $id . ',semester_id']);
+        Semester::findOrFail($id)->update($request->only('semester_name'));
+        return response()->json(['success' => true, 'message' => 'Semester updated.']);
+    }
+
+    public function destroySemester($id)
+    {
+        Semester::findOrFail($id)->delete();
+        return response()->json(['success' => true, 'message' => 'Semester deleted.']);
+    }
+
+    // ── School Years ──
+    public function storeSchoolYear(Request $request)
+    {
+        $request->validate(['school_year' => 'required|string|max:50|unique:school_years,school_year']);
+        SchoolYear::create($request->only('school_year'));
+        return response()->json(['success' => true, 'message' => 'School year added.']);
+    }
+
+    public function updateSchoolYear(Request $request, $id)
+    {
+        $request->validate(['school_year' => 'required|string|max:50|unique:school_years,school_year,' . $id . ',school_year_id']);
+        SchoolYear::findOrFail($id)->update($request->only('school_year'));
+        return response()->json(['success' => true, 'message' => 'School year updated.']);
+    }
+
+    public function destroySchoolYear($id)
+    {
+        SchoolYear::findOrFail($id)->delete();
+        return response()->json(['success' => true, 'message' => 'School year deleted.']);
     }
 
 }

@@ -1,3 +1,5 @@
+import { initFilterPanel } from './report-filter';
+
 const CATEGORIES = window.CATEGORIES;
 
 let currentCategory = window.ACTIVE_CATEGORY || null;
@@ -24,6 +26,10 @@ const exportBtn      = $('exportBtn');
 const exportMenu     = $('exportMenu');
 const dateFromInput  = $('filterDateFrom');
 const dateToInput    = $('filterDateTo');
+
+const filters = initFilterPanel({
+    onApply: () => generateBtn.click(),
+});
 
 // ═══════════════════════════════════════════
 // DATE RANGE PRESETS
@@ -145,7 +151,8 @@ function buildParams() {
     const to   = dateToInput.value;
     if (from) params.set('date_from', from);
     if (to)   params.set('date_to', to);
-    return params;
+
+    return filters.apply(params);
 }
 
 // ═══════════════════════════════════════════
@@ -216,42 +223,54 @@ generateBtn.addEventListener('click', async () => {
         const cols = json.columns;
         const colKeys = Object.keys(cols);
 
-        // Build header — support two-row headers (sub_headers)
-        const subHeaders = json.sub_headers || {};
-        const hasSubHeaders = Object.keys(subHeaders).length > 0;
+        // Build header — support two-row grouped headers
+        const groupHeaders = json.group_headers || {};
+        const hasGroups = Object.keys(groupHeaders).length > 0;
 
-        let row1 = '<tr>';
-        row1 += '<th class="rpt-th-check"' + (hasSubHeaders ? ' rowspan="2"' : '') + '>';
-        row1 += '<input type="checkbox" id="selectAllRows" title="Select all"></th>';
+        if (hasGroups) {
+            let row1 = '<tr>';
+            row1 += '<th class="rpt-th-check" rowspan="2">';
+            row1 += '<input type="checkbox" id="selectAllRows" title="Select all"></th>';
 
-        colKeys.forEach(key => {
-            if (hasSubHeaders) {
-                if (subHeaders[key]) {
-                    // This column HAS a sub-header — single row, no rowspan
-                    row1 += '<th>' + esc(cols[key]) + '</th>';
-                } else {
-                    // This column has NO sub-header — spans both rows
+            let i = 0;
+            while (i < colKeys.length) {
+                const key = colKeys[i];
+                const group = groupHeaders[key];
+
+                if (group === null || group === undefined) {
                     row1 += '<th rowspan="2">' + esc(cols[key]) + '</th>';
+                    i++;
+                } else {
+                    let span = 0;
+                    let j = i;
+                    while (j < colKeys.length && groupHeaders[colKeys[j]] === group) {
+                        span++;
+                        j++;
+                    }
+                    row1 += '<th colspan="' + span + '">' + esc(group) + '</th>';
+                    i = j;
                 }
-            } else {
-                row1 += '<th>' + esc(cols[key]) + '</th>';
             }
-        });
-        row1 += '</tr>';
+            row1 += '</tr>';
 
-        let row2 = '';
-        if (hasSubHeaders) {
-            row2 = '<tr>';
+            let row2 = '<tr>';
             colKeys.forEach(key => {
-                if (subHeaders[key]) {
-                    // Only output <th> for columns that have sub-headers
-                    row2 += '<th>' + esc(subHeaders[key]) + '</th>';
+                if (groupHeaders[key] !== null && groupHeaders[key] !== undefined) {
+                    row2 += '<th>' + esc(cols[key]) + '</th>';
                 }
             });
             row2 += '</tr>';
-        }
 
-        reportHead.innerHTML = row1 + row2;
+            reportHead.innerHTML = row1 + row2;
+        } else {
+            let row1 = '<tr>';
+            row1 += '<th class="rpt-th-check"><input type="checkbox" id="selectAllRows" title="Select all"></th>';
+            colKeys.forEach(key => {
+                row1 += '<th>' + esc(cols[key]) + '</th>';
+            });
+            row1 += '</tr>';
+            reportHead.innerHTML = row1;
+        }
 
         if (!json.rows || json.rows.length === 0) {
             reportBody.innerHTML =
@@ -449,10 +468,10 @@ resetBtn.addEventListener('click', () => {
     exportDropdown.classList.remove('open');
     exportMenu.classList.remove('open');
 
-    // Re-render subs (resets to first tab)
+    filters.clear();
+
     renderSubs();
 
-    // Reset presets to 6-month default
     presetBtns.forEach(b => b.classList.remove('active'));
     const defaultPreset = document.querySelector('.rpt-preset[data-months="6"]');
     if (defaultPreset) defaultPreset.classList.add('active');

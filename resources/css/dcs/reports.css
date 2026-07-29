@@ -303,6 +303,117 @@ body {
     border: 1px solid #d1d5db;
 }
 
+/* ── Advanced Filter Panel (Originator / Source Unit / Status / Rev No) ── */
+.db-filter-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.35);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+    z-index: 900;
+}
+.db-filter-overlay.visible { opacity: 1; visibility: visible; }
+
+.db-filter-panel {
+    position: fixed;
+    top: 0; right: 0; bottom: 0;
+    width: 320px;
+    max-width: 90vw;
+    background: var(--rpt-surface);
+    box-shadow: -8px 0 32px rgba(15,23,42,0.15);
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 901;
+}
+.db-filter-panel.visible { transform: translateX(0); }
+
+.db-filter-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--rpt-border);
+}
+.db-filter-head h3 { font-size: 0.95rem; font-weight: 700; color: var(--rpt-text); }
+.db-close-btn {
+    background: none; border: none; font-size: 1.3rem; line-height: 1;
+    color: var(--rpt-text-subtle); cursor: pointer; padding: 4px;
+}
+.db-close-btn:hover { color: var(--rpt-text); }
+
+.db-filter-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+.db-filter-group { display: flex; flex-direction: column; gap: 6px; }
+.db-filter-group label {
+    font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--rpt-text-subtle);
+}
+.db-filter-group select,
+.db-filter-group input[type="text"] {
+    height: 38px;
+    padding: 0 12px;
+    border: 1.5px solid var(--rpt-border);
+    border-radius: var(--rpt-radius);
+    font-family: inherit;
+    font-size: 0.85rem;
+    color: var(--rpt-text);
+    background: var(--rpt-surface);
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+.db-filter-group select:focus,
+.db-filter-group input[type="text"]:focus {
+    outline: none;
+    border-color: var(--rpt-accent);
+    box-shadow: 0 0 0 3px rgba(13,42,122,0.07);
+}
+
+.db-filter-foot {
+    display: flex;
+    gap: 10px;
+    padding: 16px 20px;
+    border-top: 1px solid var(--rpt-border);
+}
+.db-btn {
+    flex: 1;
+    height: 38px;
+    border-radius: var(--rpt-radius);
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1.5px solid;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.15s;
+}
+.db-btn-ghost {
+    background: var(--rpt-surface);
+    color: var(--rpt-text-secondary);
+    border-color: var(--rpt-border);
+}
+.db-btn-ghost:hover { background: var(--rpt-border-light); color: var(--rpt-text); }
+.db-btn-primary {
+    background: var(--rpt-accent);
+    color: #fff;
+    border-color: var(--rpt-accent);
+}
+.db-btn-primary:hover { background: var(--rpt-accent-hover); border-color: var(--rpt-accent-hover); }
+
+@media (max-width: 480px) {
+    .db-filter-panel { width: 100%; max-width: 100%; }
+}
+
 /* Header row 1 — blue */
 .rpt-table th {
     position: sticky;

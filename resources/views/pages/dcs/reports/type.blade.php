@@ -16,6 +16,7 @@
 @include('partials.sidebar')
 @include('partials.inactivity-modal')
 
+@include('partials.filter-panel')
 <main class="rpt-page" id="rptPage">
 
     <header class="rpt-hdr">

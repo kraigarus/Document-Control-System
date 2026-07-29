@@ -16,6 +16,16 @@
 @include('partials.sidebar')
 @include('partials.inactivity-modal')
 
+@include('partials.filter-panel')
+
+<div class="rpt-filter visible" id="filterBar" style="justify-content:flex-end;">
+    <div class="rpt-filter-actions">
+        <button class="rpt-btn rpt-btn-ghost" id="openFilterBtn" type="button">
+            <i class="fa-solid fa-filter"></i> Filters
+        </button>
+    </div>
+</div>
+
 <main class="rpt-page" id="rptPage">
 
     <header class="rpt-hdr">
