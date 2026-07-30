@@ -419,6 +419,56 @@ body {
 }
 
 /* ═══════════════════════════════════
+   DELETE CONFIRMATION MODAL
+   ═══════════════════════════════════ */
+.delete-modal .st-modal-icon {
+    background: var(--set-red-bg);
+    color: var(--set-red);
+}
+
+.delete-modal .delete-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--set-text);
+    margin-bottom: 6px;
+}
+
+.delete-modal .delete-message {
+    font-size: 0.82rem;
+    color: var(--set-text-sec);
+    line-height: 1.5;
+    margin-bottom: 20px;
+}
+
+.delete-modal .st-btn-danger {
+    flex: 1;
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 44px;
+    border: none;
+    background: var(--set-red);
+    color: #fff;
+}
+
+.delete-modal .st-btn-danger:hover {
+    background: #b91c1c;
+}
+
+.delete-modal .st-btn-danger:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+/* ═══════════════════════════════════
    STATUS TOGGLE
    ═══════════════════════════════════ */
 .status-toggle {

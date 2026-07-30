@@ -192,6 +192,47 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     // ══════════════════════════════════════════════
+// DELETE CONFIRMATION MODAL
+// ══════════════════════════════════════════════
+function confirmDelete({ title = "Delete", message = "This action cannot be undone.", url, successCallback }) {
+    openModal(`
+        <div class="st-modal delete-modal">
+            <div class="st-modal-top">
+                <div class="st-modal-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                <button class="st-modal-close" onclick="closeSettingsModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="delete-title">${escapeHtml(title)}</div>
+            <div class="delete-message">${escapeHtml(message)}</div>
+            <div class="st-actions-row">
+                <button class="st-btn st-btn-ghost" onclick="closeSettingsModal()">Cancel</button>
+                <button class="st-btn st-btn-danger" id="confirmDeleteBtn">
+                    <i class="fa-solid fa-trash"></i> Delete
+                </button>
+            </div>
+        </div>
+    `);
+
+    document.getElementById("confirmDeleteBtn").addEventListener("click", async () => {
+        const btn = document.getElementById("confirmDeleteBtn");
+            setButtonLoading(btn, true);
+            const data = await apiCall(url, "DELETE");
+            setButtonLoading(btn, false);
+
+            if (data.success) {
+                showToast(data.message, "success");
+                closeModal();
+                if (successCallback) {
+                    successCallback(data);
+                } else {
+                    setTimeout(() => window.location.reload(), 600);
+                }
+            } else {
+                showToast(data.message || "Delete failed.", "error");
+            }
+        });
+    }
+
+    // ══════════════════════════════════════════════
     // GENERIC SUBMIT HANDLER
     // ══════════════════════════════════════════════
     async function handleSubmit(btnSelector, url, method, body, onSuccess) {
@@ -302,15 +343,12 @@ document.addEventListener("DOMContentLoaded", function () {
         await handleSubmit("#docTypeSubmitBtn", url, method, body);
     };
 
-    window.deleteDocType = async function (id) {
-        if (!confirm("Delete this document type? This cannot be undone.")) return;
-        const data = await apiCall(`${BASE}/doc-types/${id}`, "DELETE");
-        if (data.success) {
-            showToast(data.message, "success");
-            setTimeout(() => window.location.reload(), 600);
-        } else {
-            showToast(data.message || "Delete failed.", "error");
-        }
+    window.deleteDocType = function (id) {
+        confirmDelete({
+            title: "Delete Document Type",
+            message: "This document type will be permanently removed. This cannot be undone.",
+            url: `${BASE}/doc-types/${id}`,
+        });
     };
 
     // ══════════════════════════════════════════════
@@ -369,15 +407,12 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     };
 
-    window.deleteOffice = async function (id) {
-        if (!confirm("Delete this office? Consider setting it Inactive instead.")) return;
-        const data = await apiCall(`${BASE}/offices/${id}`, "DELETE");
-        if (data.success) {
-            showToast(data.message, "success");
-            setTimeout(() => window.location.reload(), 600);
-        } else {
-            showToast(data.message || "Delete failed.", "error");
-        }
+    window.deleteOffice = function (id) {
+        confirmDelete({
+            title: "Delete Office",
+            message: "This office will be permanently removed. Consider setting it inactive instead.",
+            url: `${BASE}/offices/${id}`,
+        });
     };
 
     // ══════════════════════════════════════════════
@@ -424,15 +459,12 @@ document.addEventListener("DOMContentLoaded", function () {
         await handleSubmit("#versionTypeSubmitBtn", url, method, { version_name: name });
     };
 
-    window.deleteVersionType = async function (id) {
-        if (!confirm("Delete this version type?")) return;
-        const data = await apiCall(`${BASE}/version-types/${id}`, "DELETE");
-        if (data.success) {
-            showToast(data.message, "success");
-            setTimeout(() => window.location.reload(), 600);
-        } else {
-            showToast(data.message || "Delete failed.", "error");
-        }
+    window.deleteVersionType = function (id) {
+        confirmDelete({
+            title: "Delete Version Type",
+            message: "This version type will be permanently removed.",
+            url: `${BASE}/version-types/${id}`,
+        });
     };
 
     // ══════════════════════════════════════════════
@@ -479,15 +511,12 @@ document.addEventListener("DOMContentLoaded", function () {
         await handleSubmit("#originatorSubmitBtn", url, method, { originator_name: name });
     };
 
-    window.deleteOriginator = async function (id) {
-        if (!confirm("Delete this originator? This cannot be undone.")) return;
-        const data = await apiCall(`${BASE}/originators/${id}`, "DELETE");
-        if (data.success) {
-            showToast(data.message, "success");
-            setTimeout(() => window.location.reload(), 600);
-        } else {
-            showToast(data.message || "Delete failed.", "error");
-        }
+    window.deleteOriginator = function (id) {
+        confirmDelete({
+            title: "Delete Originator",
+            message: "This originator will be permanently removed. This cannot be undone.",
+            url: `${BASE}/originators/${id}`,
+        });
     };
 
     // ══════════════════════════════════════════════
@@ -534,16 +563,14 @@ document.addEventListener("DOMContentLoaded", function () {
         await handleSubmit("#collegeSubmitBtn", url, method, { college_name: name });
     };
 
-    window.deleteCollege = async function (id) {
-        if (!confirm("Delete this college? All its programs will also be removed.")) return;
-        const data = await apiCall(`${BASE}/colleges/${id}`, "DELETE");
-        if (data.success) {
-            showToast(data.message, "success");
-            setTimeout(() => window.location.reload(), 600);
-        } else {
-            showToast(data.message || "Delete failed.", "error");
-        }
+    window.deleteCollege = function (id) {
+        confirmDelete({
+            title: "Delete College",
+            message: "This college and all its programs will be permanently removed.",
+            url: `${BASE}/colleges/${id}`,
+        });
     };
+
 
     // ══════════════════════════════════════════════
     // PROGRAMS
@@ -604,15 +631,12 @@ document.addEventListener("DOMContentLoaded", function () {
         await handleSubmit("#programSubmitBtn", url, method, { college_id: collegeId, program_name: name });
     };
 
-    window.deleteProgram = async function (id) {
-        if (!confirm("Delete this program?")) return;
-        const data = await apiCall(`${BASE}/programs/${id}`, "DELETE");
-        if (data.success) {
-            showToast(data.message, "success");
-            setTimeout(() => window.location.reload(), 600);
-        } else {
-            showToast(data.message || "Delete failed.", "error");
-        }
+    window.deleteProgram = function (id) {
+        confirmDelete({
+            title: "Delete Program",
+            message: "This program will be permanently removed.",
+            url: `${BASE}/programs/${id}`,
+        });
     };
 
     // ══════════════════════════════════════════════
@@ -659,15 +683,12 @@ document.addEventListener("DOMContentLoaded", function () {
         await handleSubmit("#semesterSubmitBtn", url, method, { semester_name: name });
     };
 
-    window.deleteSemester = async function (id) {
-        if (!confirm("Delete this semester?")) return;
-        const data = await apiCall(`${BASE}/semesters/${id}`, "DELETE");
-        if (data.success) {
-            showToast(data.message, "success");
-            setTimeout(() => window.location.reload(), 600);
-        } else {
-            showToast(data.message || "Delete failed.", "error");
-        }
+    window.deleteSemester = function (id) {
+        confirmDelete({
+            title: "Delete Semester",
+            message: "This semester will be permanently removed.",
+            url: `${BASE}/semesters/${id}`,
+        });
     };
 
     // ══════════════════════════════════════════════
@@ -714,15 +735,12 @@ document.addEventListener("DOMContentLoaded", function () {
         await handleSubmit("#schoolYearSubmitBtn", url, method, { school_year: name });
     };
 
-    window.deleteSchoolYear = async function (id) {
-        if (!confirm("Delete this school year?")) return;
-        const data = await apiCall(`${BASE}/school-years/${id}`, "DELETE");
-        if (data.success) {
-            showToast(data.message, "success");
-            setTimeout(() => window.location.reload(), 600);
-        } else {
-            showToast(data.message || "Delete failed.", "error");
-        }
+    window.deleteSchoolYear = function (id) {
+        confirmDelete({
+            title: "Delete School Year",
+            message: "This school year will be permanently removed.",
+            url: `${BASE}/school-years/${id}`,
+        });
     };
 
 });

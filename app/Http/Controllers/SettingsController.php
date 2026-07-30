@@ -8,7 +8,7 @@ use App\Models\VersionType;
 use App\Models\DocumentRequest;
 use App\Models\DocumentRequestForm;
 use App\Models\DocumentChangeNotice;
-use App\Models\MasterlistOrigin;
+use App\Models\MasterlistSourceOffice;
 use App\Models\RetrievalOffice;
 use App\Models\DistributionOffice;
 use App\Models\Originator;
@@ -212,7 +212,7 @@ class SettingsController extends Controller
 
         $inUse = DocumentRequestForm::where('office_id', $id)->exists()
             || DocumentChangeNotice::where('office_id', $id)->exists()
-            || MasterlistOrigin::where('office_id', $id)->exists()
+            || MasterlistSourceOffice::where('office_id', $id)->exists()
             || RetrievalOffice::where('office_id', $id)->exists()
             || DistributionOffice::where('office_id', $id)->exists();
 
