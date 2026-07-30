@@ -113,15 +113,15 @@
                     <line x1="14" y1="10" x2="21" y2="3"/>
                     <line x1="3" y1="21" x2="10" y2="14"/>
                 </svg>
-                <span id="collapseBtnLabel">Collapse</span>
+                <span id="collapseBtnLabel" class="btn-label">Collapse</span>
             </button>
             <button class="db-filter-btn" id="openFilterBtn">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-                Filter
+                <span class="btn-label">Filter</span>
             </button>
             <button class="db-export-btn" id="exportBtn">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Export
+                <span class="btn-label">Export</span>
             </button>
         </div>
     </section>

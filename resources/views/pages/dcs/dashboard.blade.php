@@ -35,7 +35,7 @@
 
             <!-- Stats Row -->
             <section class="stats-row">
-                <div class="stat-box" data-accent="blue">
+                <div class="stat-box">
                     <div class="stat-icon-wrap">
                         <i class="fa-solid fa-file-shield"></i>
                     </div>

@@ -7,11 +7,12 @@
 
 :root {
     --db-primary: #0d2a7a;
-    --db-primary-hover: #0a2060;
-    --db-accent: #2563eb;
-    --db-accent-light: #eff6ff;
-    --db-green: #16a34a;
-    --db-green-light: #f0fdf4;
+    --db-primary-hover: #1a3a9e;     
+    --db-accent: #0d2a7a;              
+    --db-accent-light: #eef2ff;      
+    --db-gold: #c9a227;                
+    --db-green: #059669;    
+    --db-green-light: #ecfdf5;
     --db-amber: #d97706;
     --db-amber-light: #fffbeb;
     --db-red: #dc2626;
@@ -23,9 +24,13 @@
     --db-text: #1e293b;
     --db-text-sec: #475569;
     --db-text-muted: #94a3b8;
-    --db-radius: 6px;
-    --db-shadow: 0 1px 3px rgba(0,0,0,0.08);
-    --db-shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+    --db-radius: 8px;
+    --db-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.03);
+    --db-shadow-lg: 0 4px 16px rgba(15, 23, 42, 0.08), 0 1px 4px rgba(15, 23, 42, 0.04);
+    --sticky-1-w: 60px;
+    --sticky-2-w: 150px;
+    --sticky-3-w: 60px;
+    --sticky-4-w: 300px;
 }
 
 body {
@@ -52,6 +57,7 @@ body {
     flex-direction: column;
     transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
 .db-related-tag {
     display: inline-block;
     padding: 2px 8px;
@@ -59,8 +65,8 @@ body {
     border-radius: 4px;
     font-size: 0.72rem;
     font-weight: 600;
-    background: #eef2ff;
-    color: #000080;
+    background: var(--db-accent-light);
+    color: var(--db-primary);
     white-space: nowrap;
 }
 
@@ -128,7 +134,12 @@ body {
     font-size: 13px; color: var(--db-text); background: var(--db-white);
     transition: border-color 0.2s;
 }
-.db-search-wrap input:focus { outline: none; border-color: var(--db-accent); box-shadow: 0 0 0 3px rgba(37,99,235,0.08); }
+.db-search-wrap input:focus {
+    outline: none;
+    border-color: var(--db-accent);
+    box-shadow: 0 0 0 3px rgba(13, 42, 122, 0.08);
+}
+
 .db-search-wrap input::placeholder { color: var(--db-text-muted); }
 
 .db-filter-btn, .db-export-btn, .db-collapse-btn {
@@ -173,7 +184,12 @@ body {
 .db-filter-group { display: flex; flex-direction: column; gap: 5px; }
 .db-filter-group label { font-size: 12px; font-weight: 600; color: var(--db-text-sec); }
 .db-filter-group input, .db-filter-group select { height: 36px; padding: 0 10px; border: 1px solid var(--db-border); border-radius: var(--db-radius); font-size: 13px; color: var(--db-text); background: var(--db-white); transition: border-color 0.15s; }
-.db-filter-group input:focus, .db-filter-group select:focus { outline: none; border-color: var(--db-accent); box-shadow: 0 0 0 3px rgba(37,99,235,0.08); }
+.db-filter-group input:focus,
+.db-filter-group select:focus {
+    outline: none;
+    border-color: var(--db-accent);
+    box-shadow: 0 0 0 3px rgba(13, 42, 122, 0.08);
+}
 .db-filter-foot { display: flex; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--db-border); background: var(--db-bg); }
 
 .db-btn { height: 36px; padding: 0 18px; font-size: 13px; font-weight: 600; border-radius: var(--db-radius); border: 1px solid transparent; cursor: pointer; transition: all 0.15s; }
@@ -261,45 +277,58 @@ body {
 }
 
 /* ── STICKY COLUMN HEADERS ── */
-.db-head-primary th.db-sticky-1 {
-    left: 0; top: 0; z-index: 35;
-    width: 60px; min-width: 60px; max-width: 60px;
-    background: #f1f5f9; background-clip: padding-box;
-}
-.db-head-primary th.db-sticky-2 {
-    left: 60px; top: 0; z-index: 35;
-    width: 150px; min-width: 150px; max-width: 150px;
-    background: #f1f5f9; background-clip: padding-box;
-}
-.db-head-primary th.db-sticky-3 {
-    left: 210px; top: 0; z-index: 35;
-    width: 60px; min-width: 60px; max-width: 60px;
-    background: #f1f5f9; background-clip: padding-box;
-}
-.db-head-primary th.db-sticky-4 {
-    left: 270px; top: 0; z-index: 35;
-    width: 300px; min-width: 300px; max-width: 300px;
-    background: #f1f5f9; background-clip: padding-box;
-}
-
+.db-head-primary th.db-sticky-1,
 .db-head-secondary th.db-sticky-1,
 .db-head-tertiary th.db-sticky-1 {
-    left: 0; z-index: 35;
-    width: 60px; min-width: 60px; max-width: 60px;
-    background: #f8fafc; background-clip: padding-box;
+    left: 0;
+    width: var(--sticky-1-w);
+    min-width: var(--sticky-1-w);
+    max-width: var(--sticky-1-w);
+    background-clip: padding-box;
 }
+
+.db-head-primary th.db-sticky-2,
+.db-head-secondary th.db-sticky-2,
+.db-head-tertiary th.db-sticky-2 {
+    left: var(--sticky-1-w);
+    width: var(--sticky-2-w); min-width: var(--sticky-2-w); max-width: var(--sticky-2-w);
+    background-clip: padding-box;
+}
+
+.db-head-primary th.db-sticky-3,
+.db-head-secondary th.db-sticky-3,
+.db-head-tertiary th.db-sticky-3 {
+    left: calc(var(--sticky-1-w) + var(--sticky-2-w));
+    width: var(--sticky-3-w); min-width: var(--sticky-3-w); max-width: var(--sticky-3-w);
+    background-clip: padding-box;
+}
+
+.db-head-primary th.db-sticky-4,
+.db-head-secondary th.db-sticky-4,
+.db-head-tertiary th.db-sticky-4 {
+    left: calc(var(--sticky-1-w) + var(--sticky-2-w) + var(--sticky-3-w));
+    width: var(--sticky-4-w); min-width: var(--sticky-4-w); max-width: var(--sticky-4-w);
+    background-clip: padding-box;
+}
+
+.db-head-primary th.db-sticky-1,
+.db-head-primary th.db-sticky-2,
+.db-head-primary th.db-sticky-3,
+.db-head-primary th.db-sticky-4 { top: 0; z-index: 35; background: #f1f5f9; }
 .db-head-secondary th.db-sticky-2,
 .db-head-tertiary th.db-sticky-2 {
     left: 60px; z-index: 35;
     width: 150px; min-width: 150px; max-width: 150px;
     background: #f8fafc; background-clip: padding-box;
 }
+.db-head-secondary th.db-sticky-1,
+.db-head-secondary th.db-sticky-2,
 .db-head-secondary th.db-sticky-3,
-.db-head-tertiary th.db-sticky-3 {
-    left: 210px; z-index: 35;
-    width: 60px; min-width: 60px; max-width: 60px;
-    background: #f8fafc; background-clip: padding-box;
-}
+.db-head-secondary th.db-sticky-4,
+.db-head-tertiary th.db-sticky-1,
+.db-head-tertiary th.db-sticky-2,
+.db-head-tertiary th.db-sticky-3,
+.db-head-tertiary th.db-sticky-4 { z-index: 35; background: #f8fafc; }
 .db-head-secondary th.db-sticky-4,
 .db-head-tertiary th.db-sticky-4 {
     left: 270px; z-index: 35;
@@ -482,10 +511,10 @@ td.col-bg-retrieval {
     white-space: nowrap;
 }
 
-.db-sticky-1 { min-width: 80px; }
-.db-sticky-2 { min-width: 140px; }
-.db-sticky-3 { min-width: 50px; }
-.db-sticky-4 { min-width: 200px; }
+.db-sticky-1 { min-width: var(--sticky-1-w); }
+.db-sticky-2 { min-width: var(--sticky-2-w); }
+.db-sticky-3 { min-width: var(--sticky-3-w); }
+.db-sticky-4 { min-width: var(--sticky-4-w); }
 
 .db-table td:last-child { border-right: none; }
 
@@ -528,26 +557,26 @@ td.col-group-summary-body {
 
 /* ── STICKY BODY CELLS ── */
 td.sticky-col-1 {
-    left: 0; z-index: 15;
-    width: 60px; min-width: 60px; max-width: 60px;
+    left: 0;
+    width: var(--sticky-1-w); min-width: var(--sticky-1-w); max-width: var(--sticky-1-w);
     background: var(--db-white); background-clip: padding-box;
     text-align: center; color: var(--db-text-muted); font-weight: 500;
 }
 td.sticky-col-2 {
-    left: 60px; z-index: 15;
-    width: 150px; min-width: 150px; max-width: 150px;
+    left: var(--sticky-1-w);
+    width: var(--sticky-2-w); min-width: var(--sticky-2-w); max-width: var(--sticky-2-w);
     background: var(--db-white); background-clip: padding-box;
     font-size: 11px; color: var(--db-accent); font-weight: 500;
 }
 td.sticky-col-3 {
-    left: 210px; z-index: 15;
-    width: 60px; min-width: 60px; max-width: 60px;
+    left: calc(var(--sticky-1-w) + var(--sticky-2-w));
+    width: var(--sticky-3-w); min-width: var(--sticky-3-w); max-width: var(--sticky-3-w);
     background: var(--db-white); background-clip: padding-box;
     text-align: center;
 }
 td.sticky-col-4 {
-    left: 270px; z-index: 15;
-    width: 300px; min-width: 300px; max-width: 300px;
+    left: calc(var(--sticky-1-w) + var(--sticky-2-w) + var(--sticky-3-w));
+    width: var(--sticky-4-w); min-width: var(--sticky-4-w); max-width: var(--sticky-4-w);
     background: var(--db-white); background-clip: padding-box;
     font-weight: 500; overflow: hidden; white-space: nowrap;
 }
@@ -667,11 +696,91 @@ td.sticky-col-4::after {
 }
 
 /* ═══════ RESPONSIVE ═══════ */
+/* ═══════ RESPONSIVE ═══════ */
+
+/* ── Tablets ── */
 @media (max-width: 1024px) {
+    .db-page { padding: 20px; }
+    .db-header h1 { font-size: clamp(1.3rem, 1.1rem + 1vw, 1.6rem); }
     .db-controls { flex-direction: column; align-items: stretch; }
-    .db-controls-right { justify-content: flex-end; }
+    .db-controls-right { justify-content: flex-end; flex-wrap: wrap; }
 }
+
+/* ── Small tablets / large phones ── */
+@media (max-width: 768px) {
+    :root {
+        --sticky-2-w: 120px;
+        --sticky-4-w: 200px;
+    }
+
+    .db-header { flex-wrap: wrap; gap: 8px; }
+    .db-controls-right { width: 100%; }
+    .db-search-wrap { flex: 1 1 auto; width: auto; min-width: 140px; }
+
+    .db-filter-btn, .db-export-btn, .db-collapse-btn {
+        min-width: 0;
+        padding: 0 12px;
+    }
+}
+
+/* ── Phones ── */
 @media (max-width: 640px) {
-    .db-type-grid { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; }
-    .db-search-wrap { width: 180px; }
+    .db-page { padding: 14px; }
+    .db-header h1 { font-size: 1.2rem; }
+    .db-breadcrumb { font-size: 0.68rem; }
+
+    .db-type-grid {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        padding-bottom: 4px;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+        -webkit-overflow-scrolling: touch;
+        mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent 100%);
+        -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent 100%);
+    }
+    .db-type-grid::-webkit-scrollbar { display: none; }
+    .db-type-btn { flex-shrink: 0; }
+
+    /* Controls stack: search on its own full-width row, action buttons wrap below it */
+    .db-controls-right {
+        gap: 6px;
+        flex-wrap: wrap;
+        width: 100%;
+    }
+    .db-search-wrap {
+        width: 100%;
+        flex: 1 1 100%;
+    }
+
+    /* Action buttons: icon-only, equal width, share the row and wrap if needed */
+    .db-filter-btn,
+    .db-export-btn,
+    .db-collapse-btn {
+        flex: 1 1 0;
+        min-width: 44px;
+        width: auto;
+        padding: 0;
+        gap: 0;
+    }
+
+    .db-filter-btn .btn-label,
+    .db-export-btn .btn-label,
+    .db-collapse-btn .btn-label {
+        display: none;
+    }
+
+    .db-filter-panel { width: 100%; max-width: 100vw; }
+    .db-filter-body { padding: 16px; gap: 12px; }
+    .db-filter-foot { padding: 12px 16px; }
+
+    :root {
+        --sticky-1-w: 46px;
+        --sticky-2-w: 100px;
+        --sticky-3-w: 46px;
+        --sticky-4-w: 160px;
+    }
+
+    .db-table { font-size: 11px; }
+    .db-table th, .db-table td { padding: 6px 8px; }
 }

@@ -6,6 +6,20 @@ document.addEventListener("DOMContentLoaded", function () {
     const allNavItems = document.querySelectorAll(".nav-item");
     const pagePath = window.location.pathname.replace(/\/+$/, "") || "/";
 
+    // ── State ──
+    const BREAKPOINT_TABLET = 900;
+    const isMobile = () => window.innerWidth <= BREAKPOINT_TABLET;
+
+    // ── Create mobile elements ──
+    let backdrop = document.querySelector(".nav-backdrop");
+    if (!backdrop) {
+        backdrop = document.createElement("div");
+        backdrop.className = "nav-backdrop";
+        document.body.appendChild(backdrop);
+    }
+
+    let mobileToggle = document.querySelector(".mobile-nav-toggle");
+
     // ── Utility ──
     const normalizePath = (value) => {
         if (!value) return "";
@@ -24,21 +38,17 @@ document.addEventListener("DOMContentLoaded", function () {
         item.classList.remove("active", "soft-active", "open");
     });
 
-    // Direct link matching
     document.querySelectorAll(".nav-item > a").forEach((link) => {
         const href = link.getAttribute("href");
         if (linkMatchesPage(href)) {
             const item = link.closest(".nav-item");
             if (item) item.classList.add("active");
-
-            // Mark sub-dropdown link
             if (link.closest(".sub-dropdown")) {
                 link.classList.add("active-sub");
             }
         }
     });
 
-    // Dropdown parent matching
     dropdownItems.forEach((item) => {
         const childLinks = item.querySelectorAll(".sub-dropdown a");
         const hasActiveChild = Array.from(childLinks).some((link) =>
@@ -57,7 +67,8 @@ document.addEventListener("DOMContentLoaded", function () {
         header.addEventListener("click", function (e) {
             e.stopPropagation();
 
-            if (sideNav.classList.contains("collapsed")) {
+            // On mobile, never use collapsed float behavior
+            if (!isMobile() && sideNav.classList.contains("collapsed")) {
                 handleCollapsedDropdownClick(item);
                 return;
             }
@@ -76,7 +87,7 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     });
 
-    // ── Collapsed Dropdown Float ──
+    // ── Collapsed Dropdown Float (desktop only) ──
     function handleCollapsedDropdownClick(item) {
         const existingFloat = item.querySelector(".dropdown-float");
         if (existingFloat) {
@@ -92,7 +103,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const float = document.createElement("div");
         float.className = "dropdown-float";
 
-        // ── Header showing parent label ──
+        // Header with parent label
         const header = document.createElement("div");
         header.className = "dropdown-float-header";
 
@@ -111,7 +122,7 @@ document.addEventListener("DOMContentLoaded", function () {
         }
         float.appendChild(header);
 
-        // ── Links ──
+        // Links
         const links = subDropdown.querySelectorAll("li a");
         links.forEach((link) => {
             const clonedLink = link.cloneNode(true);
@@ -121,7 +132,7 @@ document.addEventListener("DOMContentLoaded", function () {
             float.appendChild(clonedLink);
         });
 
-        // ── Position ──
+        // Position
         const navRect = sideNav.getBoundingClientRect();
         const itemRect = item.getBoundingClientRect();
 
@@ -161,7 +172,69 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     }
 
-    // ── Collapse / Expand ──
+    // ══════════════════════════════════
+    //  MOBILE: open / close drawer
+    // ══════════════════════════════════
+    function openMobileNav() {
+        sideNav.classList.add("mobile-open");
+        backdrop.classList.add("visible");
+        document.body.style.overflow = "hidden"; // lock scroll
+
+        // Update hamburger if present
+        if (mobileToggle) {
+            mobileToggle.setAttribute("aria-expanded", "true");
+        }
+    }
+
+    function closeMobileNav() {
+        sideNav.classList.remove("mobile-open");
+        backdrop.classList.remove("visible");
+        document.body.style.overflow = "";
+
+        dropdownItems.forEach((el) => {
+            el.classList.remove("open");
+            removeFloatingDropdown(el);
+        });
+
+        if (mobileToggle) {
+            mobileToggle.setAttribute("aria-expanded", "false");
+        }
+    }
+
+    // Backdrop click closes drawer
+    backdrop.addEventListener("click", closeMobileNav);
+
+    // Mobile toggle button
+    if (mobileToggle) {
+        mobileToggle.addEventListener("click", () => {
+            if (sideNav.classList.contains("mobile-open")) {
+                closeMobileNav();
+            } else {
+                openMobileNav();
+            }
+        });
+    }
+
+    // Close on Escape
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && sideNav.classList.contains("mobile-open")) {
+            closeMobileNav();
+        }
+    });
+
+    // Close when a nav link is clicked on mobile (navigate away)
+    sideNav.querySelectorAll(".nav-item > a, .sub-dropdown a").forEach((link) => {
+        link.addEventListener("click", () => {
+            if (isMobile() && sideNav.classList.contains("mobile-open")) {
+                // Small delay so navigation can start
+                setTimeout(closeMobileNav, 50);
+            }
+        });
+    });
+
+    // ══════════════════════════════════
+    //  DESKTOP: collapse / expand
+    // ══════════════════════════════════
     let isAnimating = false;
 
     const setCollapsedState = (collapsed) => {
@@ -179,29 +252,37 @@ document.addEventListener("DOMContentLoaded", function () {
         sideNav.classList.toggle("collapsed", collapsed);
         collapseBtn.setAttribute("aria-expanded", String(!collapsed));
 
-        updateMainContentMargin(collapsed);
+        updateMainContentPosition(collapsed);
 
         setTimeout(() => {
             isAnimating = false;
         }, 350);
     };
 
-    function updateMainContentMargin(collapsed) {
+    function updateMainContentPosition(collapsed) {
         const main = document.querySelector(".dashboard-main, main, .main-content, .content-wrapper");
-        if (main) {
-            const value = collapsed ? "68px" : "280px";
-            main.style.left = value;   // ← use `left`, not marginLeft
+        if (!main) return;
+
+        if (isMobile()) {
+            // On mobile, sidebar is off-canvas — main goes full width
+            main.style.left = "0";
+        } else {
+            main.style.left = collapsed ? "var(--nav-collapsed)" : "var(--nav-width)";
         }
     }
 
+    // Restore saved state (desktop only)
     const savedState = localStorage.getItem("sidebar-collapsed");
-    if (savedState === "1" && sideNav && collapseBtn) {
+    if (savedState === "1" && !isMobile()) {
         setCollapsedState(true);
     }
 
-
-    // Toggle click
+    // Toggle click (desktop collapse button)
     collapseBtn.addEventListener("click", () => {
+        if (isMobile()) {
+            closeMobileNav();
+            return;
+        }
         const willCollapse = !sideNav.classList.contains("collapsed");
         setCollapsedState(willCollapse);
     });
@@ -214,48 +295,75 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     });
 
-    // ── Responsive: auto-collapse on small screens ──
-    const mediaQuery = window.matchMedia("(max-width: 768px)");
+    // ══════════════════════════════════
+    //  RESPONSIVE: handle breakpoint
+    // ══════════════════════════════════
+    function handleBreakpointChange() {
+        if (isMobile()) {
+            // Entering mobile: hide sidebar, ensure off-canvas
+            sideNav.classList.remove("mobile-open");
+            backdrop.classList.remove("visible");
+            document.body.style.overflow = "";
+            updateMainContentPosition(true);
+        } else {
+            // Entering desktop: ensure sidebar is visible, restore collapse state
+            sideNav.classList.remove("mobile-open");
+            backdrop.classList.remove("visible");
+            document.body.style.overflow = "";
 
-    function handleResize(e) {
-        if (e.matches && !sideNav.classList.contains("collapsed")) {
-            setCollapsedState(true);
+            const isCollapsed = localStorage.getItem("sidebar-collapsed") === "1";
+            setCollapsedState(isCollapsed);
         }
     }
 
-    mediaQuery.addEventListener("change", handleResize);
-    handleResize(mediaQuery);
+    // Use matchMedia for efficient listener
+    const mediaQuery = window.matchMedia(`(max-width: ${BREAKPOINT_TABLET}px)`);
+    mediaQuery.addEventListener("change", handleBreakpointChange);
+
+    // Run on load
+    handleBreakpointChange();
+
+    // ── Handle resize (debounced) ──
+    let resizeTimer;
+    window.addEventListener("resize", () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+            updateMainContentPosition(
+                sideNav.classList.contains("collapsed") && !isMobile()
+            );
+        }, 100);
+    });
 
     // ── Close float on scroll ──
     document.addEventListener("scroll", () => {
         dropdownItems.forEach((el) => removeFloatingDropdown(el));
     }, true);
+
+    // ── Tooltip Positioning ──
+    function initTooltips() {
+        const navItems = document.querySelectorAll(".nav-item");
+
+        navItems.forEach((item) => {
+            const tooltip = item.querySelector(".tooltip");
+            if (!tooltip) return;
+
+            item.addEventListener("mouseenter", () => {
+                if (isMobile()) return;
+                if (!sideNav.classList.contains("collapsed")) return;
+
+                const navRect = sideNav.getBoundingClientRect();
+                const itemRect = item.getBoundingClientRect();
+
+                tooltip.style.left = (navRect.right + 6) + "px";
+                tooltip.style.top = (itemRect.top + itemRect.height / 2) + "px";
+                tooltip.style.transform = "translateY(-50%)";
+            });
+
+            item.addEventListener("mouseleave", () => {
+                tooltip.style.opacity = "0";
+            });
+        });
+    }
+
+    initTooltips();
 });
-
-
-// ── Tooltip Positioning ──
-function initTooltips() {
-    const navItems = document.querySelectorAll('.nav-item');
-
-    navItems.forEach((item) => {
-        const tooltip = item.querySelector('.tooltip');
-        if (!tooltip) return;
-
-        item.addEventListener('mouseenter', () => {
-            if (!sideNav.classList.contains('collapsed')) return;
-
-            const navRect = sideNav.getBoundingClientRect();
-            const itemRect = item.getBoundingClientRect();
-
-            tooltip.style.left = (navRect.right + 6) + 'px';
-            tooltip.style.top = (itemRect.top + itemRect.height / 2) + 'px';
-            tooltip.style.transform = 'translateY(-50%)';
-        });
-
-        item.addEventListener('mouseleave', () => {
-            tooltip.style.opacity = '0';
-        });
-    });
-}
-
-initTooltips();

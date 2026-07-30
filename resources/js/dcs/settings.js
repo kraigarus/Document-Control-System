@@ -27,7 +27,9 @@ document.addEventListener("DOMContentLoaded", function () {
         toast.textContent = message;
         toast.className = "settings-toast show " + type;
         clearTimeout(toast._timer);
-        toast._timer = setTimeout(() => { toast.className = "settings-toast"; }, 3500);
+        toast._timer = setTimeout(() => {
+            toast.className = "settings-toast";
+        }, 3500);
     }
 
     // ══════════════════════════════════════════════
@@ -36,16 +38,25 @@ document.addEventListener("DOMContentLoaded", function () {
     function openModal(html) {
         modalBox.innerHTML = html;
         overlay.style.display = "flex";
+        document.body.style.overflow = "hidden";
     }
 
     function closeModal() {
         overlay.style.display = "none";
         modalBox.innerHTML = "";
+        document.body.style.overflow = "";
     }
     window.closeSettingsModal = closeModal;
 
     overlay.addEventListener("click", (e) => {
         if (e.target === overlay) closeModal();
+    });
+
+    // Close on Escape
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && overlay.style.display === "flex") {
+            closeModal();
+        }
     });
 
     // ══════════════════════════════════════════════
@@ -59,8 +70,6 @@ document.addEventListener("DOMContentLoaded", function () {
     function showFieldErrors(errors) {
         clearFieldErrors();
         for (const [field, messages] of Object.entries(errors)) {
-            // Laravel sends field names; find matching input by id convention
-            // Try common patterns: field_name → fieldNameInput, field_name → field_name_input
             const input = findFieldInput(field);
             if (input) {
                 input.classList.add("error");
@@ -70,24 +79,21 @@ document.addEventListener("DOMContentLoaded", function () {
                 input.parentNode.appendChild(msg);
             }
         }
-        // Focus the first errored field
         const first = modalBox.querySelector(".st-input.error");
         if (first) first.focus();
     }
 
     function findFieldInput(fieldName) {
-        // Try exact id match first: college_name → college_name_input or collegeNameInput
         const candidates = [
-            fieldName + "Input",                        // college_nameInput
-            fieldName.replace(/_([a-z])/g, (_, c) => c.toUpperCase()) + "Input", // collegeNameInput
-            fieldName + "_input",                       // college_name_input
-            fieldName,                                  // college_name (direct id)
+            fieldName + "Input",
+            fieldName.replace(/_([a-z])/g, (_, c) => c.toUpperCase()) + "Input",
+            fieldName + "_input",
+            fieldName,
         ];
         for (const id of candidates) {
             const el = document.getElementById(id);
             if (el) return el;
         }
-        // Fallback: search by name attribute
         return modalBox.querySelector(`[name="${fieldName}"]`);
     }
 
@@ -127,7 +133,6 @@ document.addEventListener("DOMContentLoaded", function () {
         try {
             res = await fetch(url, options);
         } catch (err) {
-            // Network error — no response at all
             return {
                 success: false,
                 status: 0,
@@ -136,7 +141,6 @@ document.addEventListener("DOMContentLoaded", function () {
             };
         }
 
-        // Parse JSON (handle non-JSON responses gracefully)
         try {
             data = await res.json();
         } catch (e) {
@@ -148,7 +152,6 @@ document.addEventListener("DOMContentLoaded", function () {
             };
         }
 
-        // Normalize: success is true only for 2xx with data.success !== false
         const isSuccess = res.ok && data.success !== false;
 
         if (isSuccess) {
@@ -160,14 +163,12 @@ document.addEventListener("DOMContentLoaded", function () {
             };
         }
 
-        // ── Map HTTP status to user-friendly messages ──
         let message = data.message || "";
 
         if (res.status === 422) {
-            // Validation errors — keep message brief, details go inline
             message = message || "Please fix the highlighted fields.";
         } else if (res.status === 404) {
-            message = message || "The requested record was not found. It may have been deleted.";
+            message = message || "The requested record was not found.";
         } else if (res.status === 403) {
             message = message || "You don't have permission to perform this action.";
         } else if (res.status === 405) {
@@ -193,7 +194,6 @@ document.addEventListener("DOMContentLoaded", function () {
     // ══════════════════════════════════════════════
     // GENERIC SUBMIT HANDLER
     // ══════════════════════════════════════════════
-    // Wraps any submit action with loading state, error display, and reload
     async function handleSubmit(btnSelector, url, method, body, onSuccess) {
         const btn = typeof btnSelector === "string"
             ? document.querySelector(btnSelector)
@@ -215,7 +215,6 @@ document.addEventListener("DOMContentLoaded", function () {
                 setTimeout(() => window.location.reload(), 600);
             }
         } else {
-            // Show inline validation errors if present
             if (data.errors && Object.keys(data.errors).length > 0) {
                 showFieldErrors(data.errors);
             }
@@ -226,7 +225,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     // ══════════════════════════════════════════════
-    // TABS  (persists active tab across reloads)
+    // TABS  (persists active tab, scrolls into view)
     // ══════════════════════════════════════════════
     function activateTab(tabName) {
         document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
@@ -236,6 +235,12 @@ document.addEventListener("DOMContentLoaded", function () {
         if (btn && panel) {
             btn.classList.add("active");
             panel.classList.add("active");
+            // Scroll tab into view on mobile
+            btn.scrollIntoView({
+                behavior: "smooth",
+                block: "nearest",
+                inline: "center",
+            });
         }
     }
 
@@ -365,7 +370,7 @@ document.addEventListener("DOMContentLoaded", function () {
     };
 
     window.deleteOffice = async function (id) {
-        if (!confirm("Delete this office? Consider setting it Inactive instead if it may have historical records.")) return;
+        if (!confirm("Delete this office? Consider setting it Inactive instead.")) return;
         const data = await apiCall(`${BASE}/offices/${id}`, "DELETE");
         if (data.success) {
             showToast(data.message, "success");

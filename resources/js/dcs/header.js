@@ -1,4 +1,4 @@
-// header.js
+/* header.js */
 document.addEventListener("DOMContentLoaded", function () {
     const notifBtn = document.getElementById("notifBtn");
     const notifDropdown = document.getElementById("notifDropdown");
@@ -6,6 +6,9 @@ document.addEventListener("DOMContentLoaded", function () {
     const notifEmpty = document.getElementById("notifEmpty");
     const notifDot = document.getElementById("notifDot");
     const notifClear = document.getElementById("notifClear");
+
+    const BREAKPOINT = 900;
+    const isMobile = () => window.innerWidth <= BREAKPOINT;
 
     // ── Sample notifications (replace with real data) ──
     let notifications = [
@@ -15,7 +18,7 @@ document.addEventListener("DOMContentLoaded", function () {
             icon: "fa-solid fa-file-circle-plus",
             text: "<strong>New document</strong> submitted for review",
             time: "2 minutes ago",
-            unread: true
+            unread: true,
         },
         {
             id: 2,
@@ -23,8 +26,8 @@ document.addEventListener("DOMContentLoaded", function () {
             icon: "fa-solid fa-circle-check",
             text: "<strong>Document #2048</strong> has been approved",
             time: "1 hour ago",
-            unread: true
-        }
+            unread: true,
+        },
     ];
 
     function renderNotifications() {
@@ -68,6 +71,7 @@ document.addEventListener("DOMContentLoaded", function () {
             notifList.appendChild(item);
         });
 
+        // Dismiss individual
         notifList.querySelectorAll(".notif-dismiss").forEach((btn) => {
             btn.addEventListener("click", function (e) {
                 e.stopPropagation();
@@ -77,6 +81,7 @@ document.addEventListener("DOMContentLoaded", function () {
             });
         });
 
+        // Mark as read
         notifList.querySelectorAll(".notif-item").forEach((item, index) => {
             item.addEventListener("click", function () {
                 if (notifications[index]) {
@@ -93,16 +98,8 @@ document.addEventListener("DOMContentLoaded", function () {
     notifBtn.addEventListener("click", function (e) {
         e.stopPropagation();
 
-        // Close actions dropdown
-        const dropdown = document.getElementById("dropdown");
-        const icon = document.getElementById("dropdown-icon");
-        if (dropdown) {
-            dropdown.classList.remove("show");
-            if (icon) {
-                icon.classList.remove("rotate");
-                icon.classList.add("revert");
-            }
-        }
+        // Close actions dropdown (both old and new)
+        closeActionsDropdown();
 
         notifDropdown.classList.toggle("show");
     });
@@ -113,8 +110,32 @@ document.addEventListener("DOMContentLoaded", function () {
         renderNotifications();
     });
 
-    // ── Close notifications when actions opens ──
-    const actionsBtn = document.getElementById("actionsBtn") || document.querySelector(".action_button");
+    // ── Close actions when notifications open ──
+    function closeActionsDropdown() {
+        const dropdown = document.getElementById("dropdown");
+        const icon = document.getElementById("dropdown-icon");
+        if (dropdown) {
+            dropdown.classList.remove("show");
+            if (icon) {
+                icon.classList.remove("rotate");
+                icon.classList.add("revert");
+            }
+        }
+
+        const actionsContainer = document.querySelector(".actions-container");
+        if (actionsContainer) {
+            actionsContainer.classList.remove("open");
+            const content = actionsContainer.querySelector(".dropdown-content");
+            if (content) content.classList.remove("show");
+        }
+    }
+
+    // Actions button closes notifs
+    const actionsBtn =
+        document.getElementById("actionsBtn") ||
+        document.querySelector(".action_button") ||
+        document.querySelector(".actions-btn");
+
     if (actionsBtn) {
         actionsBtn.addEventListener("click", function () {
             notifDropdown.classList.remove("show");
@@ -123,7 +144,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // ── Close on outside click ──
     document.addEventListener("click", function (e) {
-        if (!notifDropdown.contains(e.target) && !notifBtn.contains(e.target)) {
+        if (
+            !notifDropdown.contains(e.target) &&
+            !notifBtn.contains(e.target)
+        ) {
             notifDropdown.classList.remove("show");
         }
     });
@@ -132,6 +156,17 @@ document.addEventListener("DOMContentLoaded", function () {
     document.addEventListener("keydown", function (e) {
         if (e.key === "Escape") {
             notifDropdown.classList.remove("show");
+            closeActionsDropdown();
         }
+    });
+
+    // ── Close dropdowns on viewport resize ──
+    let resizeTimer;
+    window.addEventListener("resize", function () {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(function () {
+            notifDropdown.classList.remove("show");
+            closeActionsDropdown();
+        }, 150);
     });
 });

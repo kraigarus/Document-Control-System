@@ -2,6 +2,11 @@
 @vite(['resources/css/dcs/header.css', 'resources/js/dcs/header.js'])
 <header class="top-nav">
     <div class="header-left">
+        <button class="mobile-nav-toggle" id="mobileNavToggle"
+                aria-label="Open navigation" aria-expanded="false">
+            <i class="fa-solid fa-bars"></i>
+        </button>
+
         <div class="logo-container">
             <img src="/images/logo.png" alt="CSPC Logo" class="logo">
         </div>
