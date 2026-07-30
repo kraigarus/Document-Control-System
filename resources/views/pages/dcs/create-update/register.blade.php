@@ -183,7 +183,7 @@
                                     <td><input type="file" name="scannedCopy[]"></td>
                                     <td><input type="text" name="revisionPurpose[]" placeholder="Enter Purpose"></td>
                                     <td>
-                                        <button type="button" class="reg-row-del" onclick="this.closest('tr').remove()">
+                                        <button type="button" class="reg-row-del" onclick="removeRevisionRow(this)">
                                             <i class="fa-solid fa-trash-can"></i>
                                         </button>
                                     </td>

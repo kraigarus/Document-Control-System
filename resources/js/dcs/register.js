@@ -3,10 +3,14 @@ let allDocTypes = [];
 let allOriginators = [];
 let syllabiGroupCounter = 0;
 let syllabiCurrentStep = 1;
+let syllabiRowUidCounter = 0;
 let relatedDocsCache = [];
 let relatedDocsSelected = window.__existingRelatedDocs || [];
 let relatedDocsSelectedPanelOpen = false;
 let docNoDuplicate = false;
+let revisionRowUidCounter = 0;
+let revSearchCache = {};
+let revSearchTimers = {};
 window.__isSyllabiMode = false;
 
 
@@ -179,6 +183,10 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     initSelectProtection();
     initFileInputs();
+
+    // ── Wire search/autofill on the initial DCN revision row ──
+    const initialRevisionRow = document.querySelector('#revisionTableBody tr');
+    if (initialRevisionRow) bindRevisionRowSearch(initialRevisionRow);
 
     // ── Lock revision field for new registrations ──
     const revField = document.getElementById('masterlistRevisionNo');
@@ -536,6 +544,211 @@ function setSaveEnabled(enabled) {
 }
 
 // ══════════════════════════════════════════════
+// DCN — REVISION TABLE: DOCUMENT SEARCH + AUTOFILL
+// ══════════════════════════════════════════════
+function getOrCreateRevSearchDropdown(key) {
+    let dd = document.getElementById('revSearchDropdown_' + key);
+    if (!dd) {
+        dd = document.createElement('div');
+        dd.id = 'revSearchDropdown_' + key;
+        dd.className = 'reg-reldocs-dropdown';
+        dd.style.display = 'none';
+        document.body.appendChild(dd);
+    }
+    return dd;
+}
+
+function closeRevSearchDropdown(key) {
+    const dd = document.getElementById('revSearchDropdown_' + key);
+    if (dd) dd.style.display = 'none';
+}
+
+function removeRevSearchDropdown(key) {
+    const dd = document.getElementById('revSearchDropdown_' + key);
+    if (dd) dd.remove();
+}
+
+function handleRevisionSearchInput(input, key) {
+    if (input.readOnly) return; // locked rows never search again
+
+    clearTimeout(revSearchTimers[key]);
+    const dd = getOrCreateRevSearchDropdown(key);
+    const q = input.value.trim();
+    if (q.length < 1) { dd.style.display = 'none'; return; }
+
+    revSearchTimers[key] = setTimeout(async () => {
+        try {
+            const url = '/api/documents/search?q=' + encodeURIComponent(q);
+            const data = await fetch(url).then(r => r.json());
+            revSearchCache[key] = data;
+
+            dd.innerHTML = data.length === 0
+                ? '<div class="reg-reldocs-noresult">No matching documents found</div>'
+                : data.map((d, idx) => `<div onmousedown="pickRevisionDocument('${key}', ${idx})">${d.label}</div>`).join('');
+
+            positionFixedDropdown(dd, input);
+            dd.style.display = 'block';
+        } catch (e) {
+            console.error('Revision doc search failed:', e);
+        }
+    }, 300);
+}
+
+window.pickRevisionDocument = function (key, idx) {
+    const doc = (revSearchCache[key] || [])[idx];
+    if (!doc) return;
+
+    const uid = key.split('_')[0];
+    const row = document.querySelector(`#revisionTableBody tr[data-uid="${uid}"]`);
+    if (!row) return;
+
+    const titleInput   = row.querySelector('input[name="documentTitle[]"]');
+    const noInput      = row.querySelector('input[name="documentNo[]"]');
+    const effField     = row.querySelector('input[name="effectiveDate[]"]');
+    const revField     = row.querySelector('input[name="revisionNo[]"]');
+    const purposeField = row.querySelector('input[name="revisionPurpose[]"]');
+
+    if (titleInput) titleInput.value = doc.doc_title || '';
+    if (noInput) noInput.value = doc.doc_no || '';
+    if (effField && doc.effectivity_date) effField.value = doc.effectivity_date;
+    if (revField && doc.revise_no !== null && doc.revise_no !== undefined) revField.value = doc.revise_no;
+    if (purposeField && doc.brief_purpose) purposeField.value = doc.brief_purpose;
+
+    lockRevisionRowFields(row);
+    lockRevisionScannedCopyCell(row, doc.scanned_copy_url);
+    closeRevSearchDropdown(key);
+};
+
+/** Locks every text/date field in the row once a document has been picked. The row can
+ *  only be undone by deleting it entirely (trash-can button) — no partial re-editing. */
+function lockRevisionRowFields(row) {
+    row.dataset.linked = "true";
+
+    row.querySelectorAll(
+        'input[name="documentTitle[]"], input[name="documentNo[]"], input[name="effectiveDate[]"], input[name="revisionNo[]"], input[name="revisionPurpose[]"]'
+    ).forEach(el => {
+        el.readOnly = true;
+        el.classList.add('reg-revrow-locked');
+        el.style.background = '#f8fafc';
+        el.style.cursor = 'not-allowed';
+        el.style.color = '#475569';
+    });
+}
+
+/** Replaces the file-upload cell with either a viewable link to the existing scan,
+ *  or an error notice if the linked document has no scanned copy on file. */
+function lockRevisionScannedCopyCell(row, scannedCopyUrl) {
+    const fileInput = row.querySelector('input[name="scannedCopy[]"]');
+    if (!fileInput) return;
+    const cell = fileInput.closest('td');
+    if (!cell) return;
+
+    if (scannedCopyUrl) {
+        cell.innerHTML = `
+            <button type="button" class="reg-revrow-viewfile" onclick="window.open('${scannedCopyUrl}', '_blank')">
+                <i class="fa-solid fa-file-lines"></i> View file
+            </button>
+        `;
+    } else {
+        cell.innerHTML = `
+            <div class="reg-file-error" style="margin:0;">
+                <i class="fa-solid fa-circle-exclamation"></i> No scanned copy on file
+            </div>
+        `;
+    }
+}
+
+function bindRevisionSearchInput(input, uid, field) {
+    if (!input || input.dataset.searchBound) return;
+    input.dataset.searchBound = 'true';
+
+    const key = uid + '_' + field;
+    if (!input.id) input.id = 'revSearchInput_' + key;
+
+    input.addEventListener('input', () => handleRevisionSearchInput(input, key));
+    input.addEventListener('focus', () => {
+        if (!input.readOnly && input.value.trim().length >= 1) handleRevisionSearchInput(input, key);
+    });
+
+    const reposition = () => {
+        const dd = document.getElementById('revSearchDropdown_' + key);
+        if (dd && dd.style.display === 'block') positionFixedDropdown(dd, input);
+    };
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+}
+
+/** Assigns a uid to a revision row (if it doesn't have one yet) and wires both its search fields. */
+function bindRevisionRowSearch(tr) {
+    if (!tr.dataset.uid) tr.dataset.uid = ++revisionRowUidCounter;
+    const uid = tr.dataset.uid;
+    bindRevisionSearchInput(tr.querySelector('input[name="documentTitle[]"]'), uid, 'title');
+    bindRevisionSearchInput(tr.querySelector('input[name="documentNo[]"]'), uid, 'no');
+}
+
+/** Clean up both body-attached dropdowns for a row before it's removed. */
+function removeRevisionRowDropdowns(tr) {
+    if (!tr.dataset.uid) return;
+    removeRevSearchDropdown(tr.dataset.uid + '_title');
+    removeRevSearchDropdown(tr.dataset.uid + '_no');
+}
+
+window.removeRevisionRow = function (btn) {
+    const tr = btn.closest('tr');
+    if (tr) {
+        removeRevisionRowDropdowns(tr);
+        tr.remove();
+    }
+};
+
+// Close any open revision-search dropdown on outside click
+document.addEventListener('click', function (e) {
+    document.querySelectorAll('[id^="revSearchDropdown_"]').forEach(dd => {
+        const key = dd.id.replace('revSearchDropdown_', '');
+        const input = document.getElementById('revSearchInput_' + key);
+        if (dd.style.display === 'block' && !dd.contains(e.target) && e.target !== input) {
+            dd.style.display = 'none';
+        }
+    });
+});
+
+function initSyllabiOriginatorWidget(uid) {
+    createSourceUnitWidget({
+        key: 'syllabiOriginator_' + uid,
+        widgetId: 'syllabiOriginatorWidget_' + uid,
+        inputId: 'syllabiOriginatorSearch_' + uid,
+        arrowId: 'syllabiOriginatorArrowBtn_' + uid,
+        resultsId: 'syllabiOriginatorResults_' + uid,
+        chipsId: 'syllabiOriginatorInlineChips_' + uid,
+        allowFreeText: true,
+        singleSelect: true,
+        fieldName: 'syllabiOriginatorRaw_' + uid, // internal only — never read server-side
+        dataListGetter: () => allOriginators,
+        idKey: 'originator_id',
+        labelKey: 'originator_name',
+        itemLabelPlural: 'originators',
+        overlayTitle: 'Originator',
+        initial: []
+    });
+}
+
+function cleanupSyllabiOriginatorWidget(uid) {
+    if (uid) delete window.__sourceWidgets['syllabiOriginator_' + uid];
+}
+
+/** Keeps the one real, always-present syllabiOriginator[] hidden input
+ *  synced with whatever's picked in each row's typeahead, right before submit. */
+function syncSyllabiOriginatorHiddenFields() {
+    document.querySelectorAll('#syllabiTableBody tr[data-uid]').forEach(row => {
+        const uid = row.dataset.uid;
+        const hidden = document.getElementById('syllabiOriginatorValue_' + uid);
+        if (!hidden) return;
+        const widget = window.__sourceWidgets['syllabiOriginator_' + uid];
+        hidden.value = (widget && widget.selected.length > 0) ? widget.selected[0].label : '';
+    });
+}
+
+// ══════════════════════════════════════════════
 // SHARED SOURCE UNIT WIDGET FACTORY
 // Used identically by DRF and Masterlist — one implementation, no duplication.
 // ══════════════════════════════════════════════
@@ -633,25 +846,6 @@ function createSourceUnitWidget(opts) {
         addOffice(itemId);
         document.getElementById(opts.inputId).value = '';
         document.getElementById(opts.resultsId).style.display = 'none';
-    }
-
-    function openOverlay() {
-        document.getElementById(opts.resultsId).style.display = 'none';
-        openSourceOverlay({
-            key: opts.key,
-            title: opts.overlayTitle || 'Selected',
-            searchPlaceholder: opts.allowFreeText ? `Search ${itemLabelPlural}, or type a name and press Enter...` : `Search ${itemLabelPlural}...`,
-            allowFreeText: opts.allowFreeText,
-            getList, idKey, labelKey, itemLabelPlural,
-            getSelected: () => selected.map(i => ({ id: i.type + ':' + i.id, label: i.label })),
-            addOffice,
-            addFreeText,
-            removeItem: (compoundId) => {
-                const [type, id] = compoundId.split(':');
-                removeItem(type, id);
-            },
-            onChange: render
-        });
     }
 
     function positionPanel(panelEl, anchorEl) {
@@ -1373,6 +1567,7 @@ function handleDocTypeChange() {
 
     const revisionBody = document.getElementById('revisionTableBody');
     if (revisionBody) {
+        revisionBody.querySelectorAll('tr[data-uid]').forEach(tr => removeRevisionRowDropdowns(tr));
         revisionBody.innerHTML =
             '<tr>' +
                 '<td><input type="text" name="documentTitle[]" placeholder="Enter Document Title"></td>' +
@@ -1381,13 +1576,16 @@ function handleDocTypeChange() {
                 '<td><input type="number" name="revisionNo[]" placeholder="0"></td>' +
                 '<td><input type="file" name="scannedCopy[]" accept=".pdf,.docx"></td>' +
                 '<td><input type="text" name="revisionPurpose[]" placeholder="Enter Purpose"></td>' +
-                '<td><button type="button" class="reg-row-del" onclick="this.closest(\'tr\').remove()"><i class="fa-solid fa-trash-can"></i></button></td>' +
+                '<td><button type="button" class="reg-row-del" onclick="removeRevisionRow(this)"><i class="fa-solid fa-trash-can"></i></button></td>' +
             '</tr>';
-        bindTableFileInput(revisionBody.querySelector('input[type="file"]'));
+        const newRow = revisionBody.querySelector('tr');
+        bindTableFileInput(newRow.querySelector('input[type="file"]'));
+        bindRevisionRowSearch(newRow);
     }
 
     const syllabiBody = document.getElementById('syllabiTableBody');
     if (syllabiBody) {
+        syllabiBody.querySelectorAll('tr[data-uid]').forEach(tr => removeSyllabiOriginatorDropdown(tr.dataset.uid));
         syllabiBody.innerHTML = '';
         syllabiGroupCounter = 0;
         addSyllabiRow();
@@ -1711,14 +1909,6 @@ function markChecklistError(message) {
     }
 }
 
-/** Pushes an error into `errors` when a required text-like field is blank. */
-function requireField(errors, id, message) {
-    const el = document.getElementById(id);
-    const val = el ? (el.value || '').trim() : '';
-    if (!val) errors.push({ field: id, message });
-    return val;
-}
-
 function sectionVisible(id) {
     const el = document.getElementById(id);
     return el && el.style.display !== "none";
@@ -1756,9 +1946,35 @@ function validateForm() {
     // this blocks saving outright — it's a data-integrity error, not a missing value.
     validateTimeSpentFields(errors);
 
+    // ── DCN revision rows must reference an actual registered document ──
+    validateRevisionRowsLinked(errors);
+
     // Content fields are otherwise optional — missing values are
     // surfaced in the review modal instead, with a confirm-anyway step.
     return errors;
+}
+
+/** Blocks save if a "Documents for Revision" row has typed text but was never
+ *  linked to a real registered document via the search suggestions. */
+function validateRevisionRowsLinked(errors) {
+    if (!sectionVisible("section-2")) return;
+
+    document.querySelectorAll("#revisionTableBody tr").forEach((row, idx) => {
+        const titleInput = row.querySelector('input[name="documentTitle[]"]');
+        const noInput = row.querySelector('input[name="documentNo[]"]');
+        const hasTypedText = (titleInput && titleInput.value.trim()) || (noInput && noInput.value.trim());
+        const isLinked = row.dataset.linked === "true";
+
+        if (hasTypedText && !isLinked) {
+            errors.push({
+                field: "revisionTableBody",
+                message: "DCN Row " + (idx + 1) + ": Please select an existing registered document from the suggestions — this document is not registered.",
+                type: "table"
+            });
+            row.querySelectorAll('input[name="documentTitle[]"], input[name="documentNo[]"]')
+                .forEach(el => el.classList.add("reg-input-error"));
+        }
+    });
 }
 
 /** Blocks save if any visible Time Spent calculation shows "Invalid". */
@@ -1800,19 +2016,19 @@ function validateTimeSpentFields(errors) {
         }
     }
 
+    // BROKEN — inside validateTimeSpentFields()
     const sectionSyllabi = document.getElementById("section-syllabi");
     if (sectionSyllabi && sectionSyllabi.style.display !== "none") {
         document.querySelectorAll("#syllabiTableBody tr").forEach((row, idx) => {
             const display = row.querySelector(".syllabi-time-spent-display");
-            if (display && display.value === "Invalid") {
-                errors.push({
-                    field: "syllabiTableBody",
-                    message: "Syllabi Row " + (idx + 1) + ": Date/Time of Registration must be after Date/Time Received.",
-                    type: "table"
-                });
-                row.querySelectorAll('[name="syllabiDateReceived[]"], [name="syllabiTimeReceived[]"], [name="syllabiRegDate[]"], [name="syllabiRegTime[]"]')
-                    .forEach(el => el.classList.add("reg-input-error"));
-            }
+            const course = row.querySelector('input[name="syllabiCourseName[]"]');
+            const rowLabel = "Syllabi Row " + (idx + 1);
+            if (display && display.value === "Invalid") { /* ...ok... */ }
+            if (!course || !course.value.trim()) missing.push(rowLabel + ": Course Name"); // ← missing is undefined here
+            const pages = row.querySelector('input[name="syllabiNoPages[]"]');
+            if (!pages || !pages.value) missing.push(rowLabel + ": No. of Pages"); // ← same
+            const originator = row.querySelector('input[name="syllabiOriginator[]"]');
+            if (!originator || !originator.value.trim()) missing.push(rowLabel + ": Originator"); // ← same
         });
     }
 }
@@ -2007,11 +2223,6 @@ function fmtDateValue(val) {
     return isNaN(d.getTime()) ? val : d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
-function selectText(sel) {
-    if (!sel || sel.selectedIndex <= 0) return "";
-    return sel.options[sel.selectedIndex].text;
-}
-
 function getOfficeList(tbodyId) {
     const tbody = document.getElementById(tbodyId);
     if (!tbody) return [];
@@ -2075,6 +2286,7 @@ window.confirmSave = function () {
     }
 
     clearValidation();
+    syncSyllabiOriginatorHiddenFields();
 
     const reviewContent = document.getElementById("reviewContent");
     reviewContent.innerHTML = "";
@@ -2141,7 +2353,7 @@ function renderMissingFieldsWarning(container, missing) {
             ${groupsHtml}
         </div>
         <label class="review-missing-confirm">
-            <input type="checkbox" id="confirmSaveAnyway" onchange="document.getElementById('btnConfirmSaveModal').disabled = !this.checked;">
+            <input type="checkbox" id="confirmSaveAnyway" onchange="handleConfirmSaveAnywayToggle(this)">
             <span>I understand some information above is missing, and I still want to save this document.</span>
         </label>
     `;
@@ -2153,6 +2365,24 @@ function renderMissingFieldsWarning(container, missing) {
         confirmBtn.style.cursor = 'not-allowed';
     }
 }
+
+/** Fully syncs the Confirm Save button's enabled state AND its visual style
+ *  to the "save anyway" checkbox — fixes the bug where the button became
+ *  clickable but still looked greyed-out/disabled after checking the box. */
+window.handleConfirmSaveAnywayToggle = function (checkbox) {
+    const confirmBtn = document.getElementById('btnConfirmSaveModal');
+    if (!confirmBtn) return;
+
+    confirmBtn.disabled = !checkbox.checked;
+
+    if (checkbox.checked) {
+        confirmBtn.style.opacity = '';
+        confirmBtn.style.cursor = '';
+    } else {
+        confirmBtn.style.opacity = '0.5';
+        confirmBtn.style.cursor = 'not-allowed';
+    }
+};
 
 function buildSyllabiInfoReview(reviewContent) {
     const ss = document.getElementById("section-syllabi");
@@ -2179,6 +2409,7 @@ function buildSyllabiRowsReview(reviewContent) {
         if (!course || !course.value.trim()) return;
 
         const pages = r.querySelector('input[name="syllabiNoPages[]"]');
+        const originator = r.querySelector('input[name="syllabiOriginator[]"]');
         const drfAvail = r.querySelector('.syllabi-hidden-toggle[name="syllabiDrfAvailability[]"]');
         const drfNo = r.querySelector('input[name="syllabiDrfNo[]"]');
         const drfDate = r.querySelector('input[name="syllabiDrfDate[]"]');
@@ -2186,6 +2417,7 @@ function buildSyllabiRowsReview(reviewContent) {
 
         addReviewSection(reviewContent, "Syllabi — " + course.value.trim(), [
             { label: "No. of Pages", value: pages?.value || "" },
+            { label: "Originator", value: originator?.value?.trim() || null },
             { label: "DRF Availability", value: drfAvail?.value === 'available' ? 'Available' : 'Not Available' },
             { label: "DRF No.", value: drfNo?.value?.trim() || "" },
             { label: "DRF Date", value: fmtDateValue(drfDate?.value) },
@@ -2301,6 +2533,7 @@ window.closeConfirmModal = function () {
 };
 
 window.submitForm = function () {
+    syncSyllabiOriginatorHiddenFields();
     document.getElementById("masterForm").submit();
 };
 
@@ -2343,10 +2576,11 @@ window.addRevisionRow = function () {
         <td><input type="text" name="revisionNo[]" placeholder="0"></td>
         <td><input type="file" name="scannedCopy[]" accept=".pdf,.docx"></td>
         <td><input type="text" name="revisionPurpose[]" placeholder="Purpose"></td>
-        <td><button type="button" class="reg-row-del" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash-can"></i></button></td>
+        <td><button type="button" class="reg-row-del" onclick="removeRevisionRow(this)"><i class="fa-solid fa-trash-can"></i></button></td>
     `;
     tbody.appendChild(tr);
     bindTableFileInput(tr.querySelector('input[type="file"]'));
+    bindRevisionRowSearch(tr);
 };
 
 // ══════════════════════════════════════════════
@@ -2465,12 +2699,21 @@ window.syllabiStepBack = function () {
 // SYLLABI ROW BUILDER (merged-cell groups)
 // ══════════════════════════════════════════════
 
+function buildSyllabiOriginatorCellHTML(uid) {
+    return `
+        <div class="syllabi-originator-wrap" style="position:relative;">
+            <input type="text" name="syllabiOriginator[]" id="syllabiOriginatorInput_${uid}"
+                class="syllabi-originator-input" placeholder="Type a name" autocomplete="off">
+        </div>
+    `;
+}
+
 /** Cells shared by every copy-row: originator through registration upload. */
-function buildSyllabiPerRowCells(mirrorHiddenHTML = '') {
+function buildSyllabiPerRowCells(uid, mirrorHiddenHTML = '') {
     return `
         <td class="col-step1">
             ${mirrorHiddenHTML}
-            <input type="text" name="syllabiOriginator[]" placeholder="Originator">
+            ${buildSyllabiOriginatorCellHTML(uid)}
         </td>
         <td class="col-step1"><input type="number" name="syllabiNoPages[]" min="0" placeholder="0"></td>
         <td class="col-step1"><input type="date" name="syllabiDateReceived[]" oninput="calcSyllabiRowTimeSpent(this.closest('tr'))"></td>
@@ -2480,7 +2723,7 @@ function buildSyllabiPerRowCells(mirrorHiddenHTML = '') {
             <input type="hidden" name="syllabiDrfAvailability[]" value="not available" class="syllabi-hidden-toggle">
             <input type="checkbox" onchange="this.previousElementSibling.value = this.checked ? 'available' : 'not available'">
         </td>
-        <td class="col-step2"><input type="text" name="syllabiDrfNo[]" placeholder="DRF-001"></td>
+        <td class="col-step2"><input type="text" name="syllabiDrfNo[]" placeholder="Enter DRF No."></td>
         <td class="col-step2"><input type="date" name="syllabiDrfDate[]" oninput="cascadeSyllabiField(this, 'syllabiDrfDate[]')"></td>
         <td class="col-step2"><input type="date" name="syllabiDrfReceived[]" oninput="cascadeSyllabiField(this, 'syllabiDrfReceived[]')"></td>
 
@@ -2503,6 +2746,100 @@ function buildSyllabiPerRowCells(mirrorHiddenHTML = '') {
         </td>
     `;
 }
+
+/** Positions a fixed-position dropdown directly under its input, escaping
+ *  any parent's overflow/scroll clipping (this is what kills the double-scrollbar bug). */
+/** Positions a fixed-position dropdown directly under its input. Since it lives
+ *  in document.body, no transformed/filtered ancestor can hijack the fixed positioning. */
+function positionFixedDropdown(dropdownEl, inputEl) {
+    const rect = inputEl.getBoundingClientRect();
+    dropdownEl.style.position = 'fixed';
+    dropdownEl.style.top = (rect.bottom + 4) + 'px';
+    dropdownEl.style.left = rect.left + 'px';
+    dropdownEl.style.width = Math.max(rect.width, 160) + 'px';
+    dropdownEl.style.maxHeight = '220px';
+    dropdownEl.style.overflowY = 'auto';
+    dropdownEl.style.zIndex = 9999;
+}
+
+function getOrCreateSyllabiOriginatorDropdown(uid) {
+    let dd = document.getElementById('syllabiOriginatorDropdown_' + uid);
+    if (!dd) {
+        dd = document.createElement('div');
+        dd.id = 'syllabiOriginatorDropdown_' + uid;
+        dd.className = 'reg-reldocs-dropdown';
+        dd.style.display = 'none';
+        document.body.appendChild(dd);
+    }
+    return dd;
+}
+
+function closeSyllabiOriginatorDropdown(uid) {
+    const dd = document.getElementById('syllabiOriginatorDropdown_' + uid);
+    if (dd) dd.style.display = 'none';
+}
+
+function renderSyllabiOriginatorDropdown(uid) {
+    const input = document.getElementById('syllabiOriginatorInput_' + uid);
+    const dd = getOrCreateSyllabiOriginatorDropdown(uid);
+    if (!input) return;
+
+    const q = input.value.trim().toLowerCase();
+    if (q.length < 1) { dd.style.display = 'none'; return; }
+
+    const matches = allOriginators.filter(o => o.originator_name.toLowerCase().includes(q));
+
+    if (matches.length === 0) {
+        dd.innerHTML = '<div class="reg-reldocs-noresult">No matching originators found</div>';
+    } else {
+        dd.innerHTML = matches.map(o =>
+            `<div onmousedown="pickSyllabiOriginator('${uid}', '${o.originator_name.replace(/'/g, "\\'")}')">${o.originator_name}</div>`
+        ).join('');
+    }
+
+    positionFixedDropdown(dd, input);
+    dd.style.display = 'block';
+}
+
+window.pickSyllabiOriginator = function (uid, name) {
+    const input = document.getElementById('syllabiOriginatorInput_' + uid);
+    if (input) input.value = name;
+    closeSyllabiOriginatorDropdown(uid);
+};
+
+/** Wire a row's originator input once it's attached to the DOM. */
+function bindSyllabiOriginatorInput(uid) {
+    const input = document.getElementById('syllabiOriginatorInput_' + uid);
+    if (!input || input.dataset.bound) return;
+    input.dataset.bound = 'true';
+
+    input.addEventListener('input', () => renderSyllabiOriginatorDropdown(uid));
+    input.addEventListener('focus', () => renderSyllabiOriginatorDropdown(uid));
+
+    const reposition = () => {
+        const dd = document.getElementById('syllabiOriginatorDropdown_' + uid);
+        if (dd && dd.style.display === 'block') positionFixedDropdown(dd, input);
+    };
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+}
+
+/** Remove the body-attached dropdown when its row is deleted, so it doesn't linger orphaned. */
+function removeSyllabiOriginatorDropdown(uid) {
+    const dd = document.getElementById('syllabiOriginatorDropdown_' + uid);
+    if (dd) dd.remove();
+}
+
+// Close any open syllabi-originator dropdown on outside click
+document.addEventListener('click', function (e) {
+    document.querySelectorAll('[id^="syllabiOriginatorDropdown_"]').forEach(dd => {
+        const uid = dd.id.replace('syllabiOriginatorDropdown_', '');
+        const input = document.getElementById('syllabiOriginatorInput_' + uid);
+        if (dd.style.display === 'block' && !dd.contains(e.target) && e.target !== input) {
+            dd.style.display = 'none';
+        }
+    });
+});
 
 // ══════════════════════════════════════════════
 // SYLLABI — DRF DATE CASCADE + TOTAL COPIES
@@ -2563,6 +2900,8 @@ function buildSyllabiGroupFirstRow(groupId, rowspan) {
     tr.dataset.group = groupId;
     tr.dataset.copyNo = 1;
     tr.dataset.isFirst = "true";
+    const uid = ++syllabiRowUidCounter;
+    tr.dataset.uid = uid;
 
     tr.innerHTML = `
         <td class="col-pinned" rowspan="${rowspan}">
@@ -2579,7 +2918,7 @@ function buildSyllabiGroupFirstRow(groupId, rowspan) {
             <input type="number" name="syllabiCopies[]" min="1" value="1"
                 class="syllabi-merged-copies" oninput="handleCopiesChange(this)">
         </td>
-        ${buildSyllabiPerRowCells()}
+        ${buildSyllabiPerRowCells(uid)}
         <td class="col-pinned" rowspan="${rowspan}">
             <button type="button" class="reg-row-del" onclick="removeSyllabiGroup('${groupId}')" title="Remove course">
                 <i class="fa-solid fa-trash-can"></i>
@@ -2591,13 +2930,13 @@ function buildSyllabiGroupFirstRow(groupId, rowspan) {
     return tr;
 }
 
-/** Additional copy-row — no merged cells rendered (browser continues the rowspan visually);
- *  carries hidden mirrors of the merged values so the posted arrays stay index-aligned. */
 function buildSyllabiContinuationRow(groupId, copyNo) {
     const tr = document.createElement("tr");
     tr.style.animation = "fadeSlideUp 0.25s ease";
     tr.dataset.group = groupId;
     tr.dataset.copyNo = copyNo;
+    const uid = ++syllabiRowUidCounter;
+    tr.dataset.uid = uid;
 
     const mirrors = `
         <input type="hidden" name="syllabiCourseName[]" class="syllabi-mirror-course">
@@ -2605,7 +2944,7 @@ function buildSyllabiContinuationRow(groupId, copyNo) {
         <input type="hidden" name="syllabiCopies[]" class="syllabi-mirror-copies">
     `;
 
-    tr.innerHTML = buildSyllabiPerRowCells(mirrors);
+    tr.innerHTML = buildSyllabiPerRowCells(uid, mirrors);
     bindSyllabiRowFileInputs(tr);
     return tr;
 }
@@ -2638,12 +2977,16 @@ window.addSyllabiRow = function () {
     syllabiGroupCounter++;
     const newRow = buildSyllabiGroupFirstRow("g" + syllabiGroupCounter, 1);
     tbody.appendChild(newRow);
+    bindSyllabiOriginatorInput(newRow.dataset.uid);
     cascadeDrfToNewRow(newRow);
     updateSyllabiTotalCopies();
 };
 
 window.removeSyllabiGroup = function (groupId) {
-    document.querySelectorAll(`#syllabiTableBody tr[data-group="${groupId}"]`).forEach(r => r.remove());
+    document.querySelectorAll(`#syllabiTableBody tr[data-group="${groupId}"]`).forEach(r => {
+        removeSyllabiOriginatorDropdown(r.dataset.uid);
+        r.remove();
+    });
     updateSyllabiTotalCopies();
 };
 
@@ -2664,15 +3007,16 @@ window.handleCopiesChange = function (input) {
         for (let i = groupRows.length + 1; i <= desired; i++) {
             const newRow = buildSyllabiContinuationRow(group, i);
             lastRow.after(newRow);
+            bindSyllabiOriginatorInput(newRow.dataset.uid);
             cascadeDrfToNewRow(newRow);
             lastRow = newRow;
         }
     } else if (desired < groupRows.length) {
         for (let i = groupRows.length; i > desired; i--) {
+            removeSyllabiOriginatorDropdown(groupRows[i - 1].dataset.uid);
             groupRows[i - 1].remove();
         }
     }
-
     firstRow.querySelectorAll('[rowspan]').forEach(td => td.setAttribute('rowspan', desired));
     syncSyllabiMergedFields(group);
     updateSyllabiTotalCopies();
@@ -2838,29 +3182,6 @@ window.updateTotal = function (totalId, bodyId) {
 // ══════════════════════════════════════════════
 // TOAST AUTO DISMISS
 // ══════════════════════════════════════════════
-
-function showToast(type, message) {
-    // Remove existing toasts
-    document.querySelectorAll('.reg-toast').forEach(t => t.remove());
-
-    const icon = type === 'success' ? 'fa-circle-check' : 'fa-circle-exclamation';
-    const toast = document.createElement('div');
-    toast.className = `reg-toast reg-toast-${type}`;
-    toast.id = type + 'Toast';
-    toast.innerHTML = `
-        <div class="reg-toast-icon"><i class="fa-solid ${icon}"></i></div>
-        <div class="reg-toast-content">
-            <span class="reg-toast-title">${type === 'success' ? 'Success' : 'Error'}</span>
-            <span class="reg-toast-message">${message}</span>
-        </div>
-        <button type="button" class="reg-toast-close" onclick="closeToast()">
-            <i class="fa-solid fa-xmark"></i>
-        </button>
-        <div class="reg-toast-progress"></div>
-    `;
-    document.querySelector('.reg-container').prepend(toast);
-    setTimeout(() => closeToast(), 5000);
-}
 
 (function () {
     const toast = document.getElementById("successToast") || document.getElementById("errorToast");

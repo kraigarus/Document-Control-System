@@ -129,20 +129,27 @@ class RegisterController extends Controller
 
         $results = MasterlistRegistration::whereIn('request_id', $visibleIds)
             ->whereNotNull('doc_no')
-            ->where('doc_title', 'like', "%{$q}%")
+            ->where(function ($qr) use ($q) {
+                $qr->where('doc_title', 'like', "%{$q}%")
+                ->orWhere('doc_no', 'like', "%{$q}%");
+            })
             ->when($request->filled('exclude_request_id'), function ($qr) use ($request) {
                 $qr->where('request_id', '!=', $request->exclude_request_id);
             })
             ->orderBy('doc_title')
             ->limit(15)
-            ->get(['masterlist_id', 'request_id', 'doc_no', 'doc_title', 'revise_no']);
+            ->get(['masterlist_id', 'request_id', 'doc_no', 'doc_title', 'revise_no', 'effectivity_date', 'brief_purpose', 'scanned_masterlist']);
 
         return response()->json($results->map(fn ($m) => [
-            'masterlist_id' => $m->masterlist_id,
-            'request_id'    => $m->request_id,
-            'doc_no'        => $m->doc_no,
-            'doc_title'     => $m->doc_title,
-            'label'         => $m->doc_title . ($m->doc_no ? ' (' . $m->doc_no . ')' : ''),
+            'masterlist_id'     => $m->masterlist_id,
+            'request_id'        => $m->request_id,
+            'doc_no'            => $m->doc_no,
+            'doc_title'         => $m->doc_title,
+            'revise_no'         => $m->revise_no,
+            'effectivity_date'  => $m->effectivity_date ? \Carbon\Carbon::parse($m->effectivity_date)->format('Y-m-d') : null,
+            'brief_purpose'     => $m->brief_purpose,
+            'scanned_copy_url'  => $m->scanned_masterlist ? \Storage::disk('public')->url($m->scanned_masterlist) : null,
+            'label'             => $m->doc_title . ($m->doc_no ? ' (' . $m->doc_no . ')' : ''),
         ]));
     }
 

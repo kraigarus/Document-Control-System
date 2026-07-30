@@ -1306,6 +1306,12 @@ body {
     font-size: 0.7rem;
 }
 
+.reg-revrow-locked {
+    background: #f8fafc !important;
+    cursor: not-allowed !important;
+    color: #475569;
+}
+
 /* ═══ SYLLABI WIZARD ═══ */
 .reg-wizard-steps {
     display: flex;
