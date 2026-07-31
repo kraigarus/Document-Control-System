@@ -113,7 +113,7 @@ class StampingController extends Controller
             'doc_title'    => 'nullable|string|max:500',
             'rev'          => 'nullable|string|max:20',
             'stamp_type'   => 'required|string|in:' . implode(',', array_keys(self::STAMPS)),
-            'position'     => 'required|string|in:top-left,top-right,bottom-left,bottom-right,center',
+            'position'     => 'required|string|in:top-left,top-right,bottom-left,bottom-right,center,auto',
             'all_pages'    => 'required|boolean',
             'certified_by' => 'nullable|string|max:255',
             'designation'  => 'nullable|string|max:255',
@@ -136,6 +136,139 @@ class StampingController extends Controller
         $validated['file_path'] = $path;
 
         return $validated;
+    }
+
+    /**
+     * Find the emptiest spot on a page for the stamp using pixel-density analysis.
+     * Requires ext-imagick + Ghostscript. Falls back to bottom-right if unavailable
+     * or if the page is too dense to find a clean spot.
+     */
+    private function findEmptyArea(string $pdfPath, int $pageNum, float $pageWmm, float $pageHmm, float $stampWmm, float $stampHmm): array
+    {
+        $fallback = ['x' => $pageWmm - $stampWmm - 15, 'y' => $pageHmm - $stampHmm - 15];
+
+        if (!class_exists(\Imagick::class)) {
+            Log::warning('Stamp: Imagick unavailable, using fallback for auto-placement');
+            return $fallback;
+        }
+
+        try {
+            $dpi = 100;
+            $img = new \Imagick();
+            $img->setResolution($dpi, $dpi);
+            $img->readImage($pdfPath . '[' . ($pageNum - 1) . ']');
+            $img->setImageColorspace(\Imagick::COLORSPACE_GRAY);
+
+            $imgW = $img->getImageWidth();
+            $imgH = $img->getImageHeight();
+            $pxPerMm = $dpi / 25.4;
+
+            $pixels = $img->exportImagePixels(0, 0, $imgW, $imgH, 'I', \Imagick::PIXEL_CHAR);
+            $img->clear();
+
+            // ── Two integral images: one for sum (mean/variance), one for "non-white" count ──
+            // CHANGED: threshold raised from 200 -> 250. Catches faint gray watermarks,
+            // not just solid black text.
+            $NONWHITE_THRESHOLD = 250;
+
+            $sumTable    = array_fill(0, $imgH + 1, null);
+            $sumSqTable  = array_fill(0, $imgH + 1, null); // NEW: for variance
+            $inkTable    = array_fill(0, $imgH + 1, null);
+            $sumTable[0]   = array_fill(0, $imgW + 1, 0);
+            $sumSqTable[0] = array_fill(0, $imgW + 1, 0);
+            $inkTable[0]   = array_fill(0, $imgW + 1, 0);
+
+            for ($y = 0; $y < $imgH; $y++) {
+                $sumTable[$y + 1]   = [0];
+                $sumSqTable[$y + 1] = [0];
+                $inkTable[$y + 1]   = [0];
+                for ($x = 0; $x < $imgW; $x++) {
+                    $v = $pixels[$y * $imgW + $x];
+                    $ink = ($v < $NONWHITE_THRESHOLD) ? 1 : 0;
+                    $sumTable[$y + 1][$x + 1]   = $v       + $sumTable[$y][$x + 1]   + $sumTable[$y + 1][$x]   - $sumTable[$y][$x];
+                    $sumSqTable[$y + 1][$x + 1] = ($v * $v) + $sumSqTable[$y][$x + 1] + $sumSqTable[$y + 1][$x] - $sumSqTable[$y][$x];
+                    $inkTable[$y + 1][$x + 1]   = $ink      + $inkTable[$y][$x + 1]   + $inkTable[$y + 1][$x]   - $inkTable[$y][$x];
+                }
+            }
+
+            $regionSum = function (array $table, int $x, int $y, int $w, int $h) {
+                return $table[$y + $h][$x + $w] - $table[$y][$x + $w] - $table[$y + $h][$x] + $table[$y][$x];
+            };
+
+            $stampWpx = (int) round($stampWmm * $pxPerMm);
+            $stampHpx = (int) round($stampHmm * $pxPerMm);
+            $marginPx = (int) round(12 * $pxPerMm);
+            $step     = max(4, (int) round(3 * $pxPerMm));
+            $totalPx  = $stampWpx * $stampHpx;
+
+            // NEW: a region is only "clean" if BOTH conditions hold:
+            //  1. near-zero non-white pixels (catches solid text/lines)
+            //  2. low variance (catches faint/light watermark text that doesn't
+            //     individually cross the brightness threshold but still isn't flat white)
+            $isClean = function (int $x, int $y) use ($regionSum, $sumTable, $sumSqTable, $inkTable, $stampWpx, $stampHpx, $totalPx) {
+                $inkCount = $regionSum($inkTable, $x, $y, $stampWpx, $stampHpx);
+                if ($inkCount > $totalPx * 0.003) return [false, $inkCount, null];
+
+                $sum   = $regionSum($sumTable, $x, $y, $stampWpx, $stampHpx);
+                $sumSq = $regionSum($sumSqTable, $x, $y, $stampWpx, $stampHpx);
+                $mean  = $sum / $totalPx;
+                $variance = max(0, ($sumSq / $totalPx) - ($mean * $mean));
+
+                // Flat white paper has variance near 0. Faint diagonal watermark text
+                // pushes this well above ~15-20 even when no pixel is individually "dark".
+                $clean = $variance < 12 && $mean > 245;
+                return [$clean, $inkCount, $variance];
+            };
+
+            $preferredOrder = ['bottom-right', 'bottom-left', 'top-right', 'top-left', 'bottom-center', 'top-center'];
+            $anchorPoints = [
+                'bottom-right'  => [$imgW - $stampWpx - $marginPx, $imgH - $stampHpx - $marginPx],
+                'bottom-left'   => [$marginPx, $imgH - $stampHpx - $marginPx],
+                'top-right'     => [$imgW - $stampWpx - $marginPx, $marginPx],
+                'top-left'      => [$marginPx, $marginPx],
+                'bottom-center' => [(int) (($imgW - $stampWpx) / 2), $imgH - $stampHpx - $marginPx],
+                'top-center'    => [(int) (($imgW - $stampWpx) / 2), $marginPx],
+            ];
+
+            $best = null;
+            $found = false;
+
+            foreach ($preferredOrder as $key) {
+                [$x, $y] = $anchorPoints[$key];
+                if ($x < 0 || $y < 0 || $x + $stampWpx > $imgW || $y + $stampHpx > $imgH) continue;
+
+                [$clean] = $isClean($x, $y);
+                if ($clean) {
+                    $best = ['x' => $x / $pxPerMm, 'y' => $y / $pxPerMm];
+                    $found = true;
+                    break;
+                }
+            }
+
+            if (!$found) {
+                for ($y = $marginPx; $y + $stampHpx <= $imgH - $marginPx && !$found; $y += $step) {
+                    for ($x = $marginPx; $x + $stampWpx <= $imgW - $marginPx; $x += $step) {
+                        [$clean] = $isClean($x, $y);
+                        if ($clean) {
+                            $best = ['x' => $x / $pxPerMm, 'y' => $y / $pxPerMm];
+                            $found = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!$found) {
+                Log::info('Stamp: no clean empty area found, using fallback', ['page' => $pageNum]);
+                return $this->clampToPage($fallback, $pageWmm, $pageHmm, $stampWmm, $stampHmm);
+            }
+
+            return $best;
+
+        } catch (\Throwable $e) {
+            Log::warning('Stamp: auto-placement detection failed', ['error' => $e->getMessage(), 'page' => $pageNum]);
+            return $fallback;
+        }
     }
 
     // ──────────────────────────────────────────
@@ -508,6 +641,15 @@ class StampingController extends Controller
         ]);
 
         $pdf = new Fpdi();
+
+        // CRITICAL: prevent FPDI from silently inserting new blank pages when a
+        // Cell() call would cross the default bottom margin. We manage pages
+        // manually via importPage()/useTemplate(), so auto page-break must be off —
+        // otherwise a stamp placed near the page edge causes its trailing lines
+        // (date/subtitle) to spill onto an auto-created extra page.
+        $pdf->SetAutoPageBreak(false);
+        $pdf->SetMargins(0, 0, 0);
+
         $pageCount = $pdf->setSourceFile($inputPath);
 
         if ($pageCount < 1) {
@@ -526,7 +668,7 @@ class StampingController extends Controller
             $pdf->useTemplate($tplId, 0, 0, $size['width'], $size['height']);
 
             if ($stampAll || $page === 1) {
-                $this->renderStamp($pdf, $stampType, $position, $size['width'], $size['height'], $options);
+                $this->renderStamp($pdf, $stampType, $position, $size['width'], $size['height'], $options, $inputPath, $page);
             }
         }
 
@@ -545,10 +687,13 @@ class StampingController extends Controller
         return $outputPath;
     }
 
-    private function renderStamp($pdf, string $type, string $position, float $pageW, float $pageH, array $options): void
+    private function renderStamp($pdf, string $type, string $position, float $pageW, float $pageH, array $options, string $pdfPath, int $pageNum): void
     {
         $config = self::STAMPS[$type];
-        $pos    = $this->calcPosition($position, $pageW, $pageH, $config['width'], $config['height']);
+
+        $pos = $position === 'auto'
+            ? $this->findEmptyArea($pdfPath, $pageNum, $pageW, $pageH, $config['width'], $config['height'])
+            : $this->calcPosition($position, $pageW, $pageH, $config['width'], $config['height']);
 
         if ($type === 'certified_true_copy') {
             $this->drawCertified($pdf, $pos['x'], $pos['y'], $config, $options);
@@ -561,13 +706,25 @@ class StampingController extends Controller
     {
         $m = 15;
 
-        return match ($position) {
+        $pos = match ($position) {
             'top-left'     => ['x' => $m, 'y' => $m],
             'top-right'    => ['x' => $pageW - $stampW - $m, 'y' => $m],
             'bottom-left'  => ['x' => $m, 'y' => $pageH - $stampH - $m],
             'bottom-right' => ['x' => $pageW - $stampW - $m, 'y' => $pageH - $stampH - $m],
             'center'       => ['x' => ($pageW - $stampW) / 2, 'y' => ($pageH - $stampH) / 2],
         };
+
+        return $this->clampToPage($pos, $pageW, $pageH, $stampW, $stampH);
+    }
+
+    // NEW: hard safety clamp — guarantees the stamp box (and everything drawn
+    // inside it, including trailing text lines) always stays fully within the
+    // physical page bounds, regardless of which placement strategy picked the spot.
+    private function clampToPage(array $pos, float $pageW, float $pageH, float $stampW, float $stampH): array
+    {
+        $pos['x'] = max(0, min($pos['x'], $pageW - $stampW));
+        $pos['y'] = max(0, min($pos['y'], $pageH - $stampH));
+        return $pos;
     }
 
     private function drawStandard($pdf, float $x, float $y, array $cfg): void

@@ -366,15 +366,23 @@
 
                     <div class="st-section">
                         <label class="st-label">Position</label>
-                        <div class="st-pos-wrap">
-                            <div class="st-pos-map" id="positionMap">
-                                <div class="st-pos-dot" data-pos="top-left">TL</div>
-                                <div class="st-pos-dot" data-pos="top-right">TR</div>
-                                <div class="st-pos-dot" data-pos="center">C</div>
-                                <div class="st-pos-dot" data-pos="bottom-left">BL</div>
-                                <div class="st-pos-dot active" data-pos="bottom-right">BR</div>
+                        <label class="st-checkbox-wrap" style="margin-bottom:10px;">
+                            <input type="checkbox" id="autoPlace" checked>
+                            <span class="st-checkbox-custom"></span>
+                            <span>Auto-place in empty area <small style="color:var(--st-text-subtle);font-weight:400;">(recommended)</small></span>
+                        </label>
+
+                        <div id="manualPosWrap" style="display:none;">
+                            <div class="st-pos-wrap">
+                                <div class="st-pos-map" id="positionMap">
+                                    <div class="st-pos-dot" data-pos="top-left">TL</div>
+                                    <div class="st-pos-dot" data-pos="top-right">TR</div>
+                                    <div class="st-pos-dot" data-pos="center">C</div>
+                                    <div class="st-pos-dot" data-pos="bottom-left">BL</div>
+                                    <div class="st-pos-dot active" data-pos="bottom-right">BR</div>
+                                </div>
+                                <span class="st-pos-label" id="positionLabel">Bottom Right</span>
                             </div>
-                            <span class="st-pos-label" id="positionLabel">Bottom Right</span>
                         </div>
                     </div>
 

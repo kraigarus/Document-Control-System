@@ -54,6 +54,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const stampBox        = document.getElementById('stampBox');
 
+    const autoPlace   = document.getElementById('autoPlace');
+    const manualWrap  = document.getElementById('manualPosWrap');
+
     // ═══════════════════════════════════════════
     // STATE
     // ═══════════════════════════════════════════
@@ -65,11 +68,22 @@ document.addEventListener('DOMContentLoaded', function () {
         docNo: '',
         rev: '',
         stampType: null,
-        position: 'bottom-right',
+        position: 'auto', 
         allPages: true,
         certBy: '',
         desig: '',
     };
+
+    autoPlace.addEventListener('change', function () {
+        if (this.checked) {
+            state.position = 'auto';
+            manualWrap.style.display = 'none';
+        } else {
+            state.position = document.querySelector('.st-pos-dot.active')?.dataset.pos || 'bottom-right';
+            manualWrap.style.display = 'block';
+        }
+        updateOverlay();
+    });
 
     // ═══════════════════════════════════════════
     // SEARCH & FILTER
@@ -263,6 +277,9 @@ document.addEventListener('DOMContentLoaded', function () {
         certifiedFields.style.display = 'none';
         certifiedByInp.value = '';
         designationInp.value = '';
+        autoPlace.checked = true;
+        manualWrap.style.display = 'none';
+        state.position = 'auto';
 
         document.querySelectorAll('.st-pos-dot').forEach(d => d.classList.remove('active'));
         document.querySelector('.st-pos-dot[data-pos="bottom-right"]').classList.add('active');
@@ -385,8 +402,17 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
+        if (state.position === 'auto') {
+            // Show a floating badge instead of a fixed-position box —
+            // real placement is decided server-side when applied
+            stampOverlay.style.display = 'none';
+            overlayPages.textContent = 'Placed automatically';
+            // (you can render a small "Auto" pill near the toolbar here instead)
+            return;
+        }
+
         stampOverlay.style.display = 'block';
-        stampOverlay.className     = 'st-stamp-overlay pos-' + state.position;
+        stampOverlay.className = 'st-stamp-overlay pos-' + state.position;
 
         var cfg = STAMP_STYLES[state.stampType] || STAMP_STYLES.controlled;
 
