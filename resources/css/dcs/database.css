@@ -47,6 +47,7 @@ body {
 .db-page {
     position: fixed;
     top: 70px;
+    left: 272px;
     right: 0;
     bottom: 0;
     padding: 28px 32px;
@@ -695,15 +696,18 @@ td.sticky-col-4::after {
     opacity: 0.5;
 }
 
-/* ═══════ RESPONSIVE ═══════ */
-/* ═══════ RESPONSIVE ═══════ */
-
 /* ── Tablets ── */
 @media (max-width: 1024px) {
     .db-page { padding: 20px; }
     .db-header h1 { font-size: clamp(1.3rem, 1.1rem + 1vw, 1.6rem); }
     .db-controls { flex-direction: column; align-items: stretch; }
     .db-controls-right { justify-content: flex-end; flex-wrap: wrap; }
+}
+
+@media (max-width: 900px) {
+    .db-page {
+        left: 0 !important;
+    }
 }
 
 /* ── Small tablets / large phones ── */

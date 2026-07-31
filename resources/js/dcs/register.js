@@ -3195,3 +3195,4 @@ window.closeToast = function () {
     toast.style.animation = "toastSlideOut 0.3s ease forwards";
     setTimeout(() => { toast.remove(); }, 300);
 };
+

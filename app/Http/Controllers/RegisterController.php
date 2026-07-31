@@ -1773,4 +1773,44 @@ class RegisterController extends Controller
             'drfTitle' => $get('Document Title'),
         ];
     }
+
+    public function extractScan(Request $request)
+    {
+        $request->validate([
+            'scan' => 'required|file|mimes:pdf|max:10240',
+            'section' => 'required|string|in:drf',
+        ]);
+
+        $file = $request->file('scan');
+        $tempPath = $file->store('temp/scans', 'local');
+        $fullPath = Storage::disk('local')->path($tempPath);
+        $imagePath = Storage::disk('local')->path('temp/scans/' . uniqid() . '.jpg');
+
+        try {
+            (new Pdf($fullPath))
+                ->selectPage(1)
+                ->save($imagePath);
+
+            $rawText = (new TesseractOCR($imagePath))
+                ->lang('eng')
+                ->run();
+
+            $fields = $this->parseDrfFields($rawText);
+
+            return response()->json([
+                'extracted' => true,
+                'fields' => $fields,
+                'raw_text_preview' => \Str::limit($rawText, 500),
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::warning('OCR extraction failed: ' . $e->getMessage());
+            return response()->json(['extracted' => false, 'reason' => 'ocr_failed']);
+        } finally {
+            Storage::disk('local')->delete($tempPath);
+            if (file_exists($imagePath)) {
+                @unlink($imagePath);
+            }
+        }
+    }
 }
