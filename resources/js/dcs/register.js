@@ -644,12 +644,20 @@ function lockRevisionScannedCopyCell(row, scannedCopyUrl) {
     if (!cell) return;
 
     if (scannedCopyUrl) {
+        const ext = scannedCopyUrl.split('.').pop().toLowerCase();
+        const isPdf = ext === 'pdf';
+        const iconClass = isPdf ? 'fa-solid fa-file-pdf' : 'fa-solid fa-file-word';
+        const linkClass = isPdf ? 'reg-revrow-viewfile reg-revrow-viewfile-pdf' : 'reg-revrow-viewfile reg-revrow-viewfile-doc';
+        const label = isPdf ? 'View PDF' : 'View Word document';
+
+        cell.style.textAlign = 'center';
         cell.innerHTML = `
-            <button type="button" class="reg-revrow-viewfile" onclick="window.open('${scannedCopyUrl}', '_blank')">
-                <i class="fa-solid fa-file-lines"></i> View file
+            <button type="button" class="${linkClass}" onclick="window.open('${scannedCopyUrl}', '_blank')" title="${label}">
+                <i class="${iconClass}"></i>
             </button>
         `;
     } else {
+        cell.style.textAlign = 'center';
         cell.innerHTML = `
             <div class="reg-file-error" style="margin:0;">
                 <i class="fa-solid fa-circle-exclamation"></i> No scanned copy on file
@@ -711,42 +719,6 @@ document.addEventListener('click', function (e) {
         }
     });
 });
-
-function initSyllabiOriginatorWidget(uid) {
-    createSourceUnitWidget({
-        key: 'syllabiOriginator_' + uid,
-        widgetId: 'syllabiOriginatorWidget_' + uid,
-        inputId: 'syllabiOriginatorSearch_' + uid,
-        arrowId: 'syllabiOriginatorArrowBtn_' + uid,
-        resultsId: 'syllabiOriginatorResults_' + uid,
-        chipsId: 'syllabiOriginatorInlineChips_' + uid,
-        allowFreeText: true,
-        singleSelect: true,
-        fieldName: 'syllabiOriginatorRaw_' + uid, // internal only — never read server-side
-        dataListGetter: () => allOriginators,
-        idKey: 'originator_id',
-        labelKey: 'originator_name',
-        itemLabelPlural: 'originators',
-        overlayTitle: 'Originator',
-        initial: []
-    });
-}
-
-function cleanupSyllabiOriginatorWidget(uid) {
-    if (uid) delete window.__sourceWidgets['syllabiOriginator_' + uid];
-}
-
-/** Keeps the one real, always-present syllabiOriginator[] hidden input
- *  synced with whatever's picked in each row's typeahead, right before submit. */
-function syncSyllabiOriginatorHiddenFields() {
-    document.querySelectorAll('#syllabiTableBody tr[data-uid]').forEach(row => {
-        const uid = row.dataset.uid;
-        const hidden = document.getElementById('syllabiOriginatorValue_' + uid);
-        if (!hidden) return;
-        const widget = window.__sourceWidgets['syllabiOriginator_' + uid];
-        hidden.value = (widget && widget.selected.length > 0) ? widget.selected[0].label : '';
-    });
-}
 
 // ══════════════════════════════════════════════
 // SHARED SOURCE UNIT WIDGET FACTORY
@@ -1552,9 +1524,16 @@ function handleDocTypeChange() {
         if (el) el.value = '';
     });
 
-    if (window.__sourceWidgets.drf) window.__sourceWidgets.drf.reset();
-    const drfSearchInput = document.getElementById('drfSourceUnitSearch');
-    if (drfSearchInput) drfSearchInput.value = '';
+    ['drf', 'masterlist', 'masterlistOriginator'].forEach(key => {
+        if (window.__sourceWidgets[key]) window.__sourceWidgets[key].reset();
+    });
+    ['drfSourceUnitSearch', 'masterlistSourceSearch', 'masterlistOriginatorSearch'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+
+    relatedDocsSelected = [];
+    renderRelatedDocsChips();
 
     ['retrievalBody', 'distBody'].forEach(tbodyId => {
         const tbody = document.getElementById(tbodyId);
@@ -1954,29 +1933,6 @@ function validateForm() {
     return errors;
 }
 
-/** Blocks save if a "Documents for Revision" row has typed text but was never
- *  linked to a real registered document via the search suggestions. */
-function validateRevisionRowsLinked(errors) {
-    if (!sectionVisible("section-2")) return;
-
-    document.querySelectorAll("#revisionTableBody tr").forEach((row, idx) => {
-        const titleInput = row.querySelector('input[name="documentTitle[]"]');
-        const noInput = row.querySelector('input[name="documentNo[]"]');
-        const hasTypedText = (titleInput && titleInput.value.trim()) || (noInput && noInput.value.trim());
-        const isLinked = row.dataset.linked === "true";
-
-        if (hasTypedText && !isLinked) {
-            errors.push({
-                field: "revisionTableBody",
-                message: "DCN Row " + (idx + 1) + ": Please select an existing registered document from the suggestions — this document is not registered.",
-                type: "table"
-            });
-            row.querySelectorAll('input[name="documentTitle[]"], input[name="documentNo[]"]')
-                .forEach(el => el.classList.add("reg-input-error"));
-        }
-    });
-}
-
 /** Blocks save if any visible Time Spent calculation shows "Invalid". */
 function validateTimeSpentFields(errors) {
     if (sectionVisible("section-3")) {
@@ -1986,7 +1942,6 @@ function validateTimeSpentFields(errors) {
                 field: "masterlistRegisteredDate",
                 message: "Masterlist: Document Registered must be after Document Receipt."
             });
-            // highlight both ends of the bad range, not just the field key used for scrolling
             ["masterlistReceiptDate", "masterlistReceiptTime", "masterlistRegisteredDate", "masterlistRegisteredTime"]
                 .forEach(id => document.getElementById(id)?.classList.add("reg-input-error"));
         }
@@ -2015,22 +1970,29 @@ function validateTimeSpentFields(errors) {
                 .forEach(id => document.getElementById(id)?.classList.add("reg-input-error"));
         }
     }
+}
 
-    // BROKEN — inside validateTimeSpentFields()
-    const sectionSyllabi = document.getElementById("section-syllabi");
-    if (sectionSyllabi && sectionSyllabi.style.display !== "none") {
-        document.querySelectorAll("#syllabiTableBody tr").forEach((row, idx) => {
-            const display = row.querySelector(".syllabi-time-spent-display");
-            const course = row.querySelector('input[name="syllabiCourseName[]"]');
-            const rowLabel = "Syllabi Row " + (idx + 1);
-            if (display && display.value === "Invalid") { /* ...ok... */ }
-            if (!course || !course.value.trim()) missing.push(rowLabel + ": Course Name"); // ← missing is undefined here
-            const pages = row.querySelector('input[name="syllabiNoPages[]"]');
-            if (!pages || !pages.value) missing.push(rowLabel + ": No. of Pages"); // ← same
-            const originator = row.querySelector('input[name="syllabiOriginator[]"]');
-            if (!originator || !originator.value.trim()) missing.push(rowLabel + ": Originator"); // ← same
-        });
-    }
+/** Blocks save if a "Documents for Revision" row has typed text but was never
+ *  linked to a real registered document via the search suggestions. */
+function validateRevisionRowsLinked(errors) {
+    if (!sectionVisible("section-2")) return;
+
+    document.querySelectorAll("#revisionTableBody tr").forEach((row, idx) => {
+        const titleInput = row.querySelector('input[name="documentTitle[]"]');
+        const noInput = row.querySelector('input[name="documentNo[]"]');
+        const hasTypedText = (titleInput && titleInput.value.trim()) || (noInput && noInput.value.trim());
+        const isLinked = row.dataset.linked === "true";
+
+        if (hasTypedText && !isLinked) {
+            errors.push({
+                field: "revisionTableBody",
+                message: "DCN Row " + (idx + 1) + ": Please select an existing registered document from the suggestions — this document is not registered.",
+                type: "table"
+            });
+            row.querySelectorAll('input[name="documentTitle[]"], input[name="documentNo[]"]')
+                .forEach(el => el.classList.add("reg-input-error"));
+        }
+    });
 }
 
 /** Collects a human-readable list of fields left blank, per visible section.
@@ -2286,7 +2248,6 @@ window.confirmSave = function () {
     }
 
     clearValidation();
-    syncSyllabiOriginatorHiddenFields();
 
     const reviewContent = document.getElementById("reviewContent");
     reviewContent.innerHTML = "";
@@ -2533,7 +2494,6 @@ window.closeConfirmModal = function () {
 };
 
 window.submitForm = function () {
-    syncSyllabiOriginatorHiddenFields();
     document.getElementById("masterForm").submit();
 };
 

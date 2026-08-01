@@ -92,7 +92,7 @@ class RegisterController extends Controller
             $matchingIds = $matching->pluck('request_id');
             $latest = MasterlistRegistration::whereIn('request_id', $matchingIds)
                 ->where('doc_no', $docNo)
-                ->orderByDesc('revise_no')
+                ->orderByRaw('CAST(revise_no AS UNSIGNED) DESC')
                 ->first();
 
             return [
@@ -370,7 +370,7 @@ class RegisterController extends Controller
                     $uploadedFiles[] = $drfFile;
                 }
 
-                $drfOfficeIds = array_filter($request->input('drfSourceUnit', []));
+                $drfOfficeIds = array_values(array_filter($request->input('drfSourceUnit', [])));
 
                 $drf = DocumentRequestForm::create([
                     'checklist_id'     => 1,
@@ -1000,7 +1000,7 @@ class RegisterController extends Controller
         $masterlistSourceUnit = '';
         if ($masterlist) {
             $sourceOffices = MasterlistSourceOffice::where('masterlist_id', $masterlist->masterlist_id)->with('office')->get();
-            $masterlistSourceUnit = $sourceOffices->map(fn ($o) => $o->office->office_name ?? null)
+            $masterlistSourceUnit = $sourceOffices->map(fn ($o) => $o->office->office_name ?? $o->source_name ?? null)
                 ->filter()
                 ->implode(', ');
                     }
@@ -1259,7 +1259,7 @@ class RegisterController extends Controller
                     $uploadedFiles[] = $drfFile;
                 }
 
-                $drfOfficeIds = array_filter($request->input('drfSourceUnit', []));
+                $drfOfficeIds = array_values(array_filter($request->input('drfSourceUnit', [])));
 
                 $drfData = [
                     'checklist_id'     => 1,
