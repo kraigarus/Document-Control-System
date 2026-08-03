@@ -3,19 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="icon" href="/images/logo.png" type="image/png">
-    <title>CSPC - Document Control System</title>
+    <title>CSPC - DCS - General Report</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    {{-- was resources/js/dcs/opcr.js — now reuses the shared generic script.
-         NOTE: if opcr.js had extra logic for editable rating (Q/E/T/A) cells
-         and calling saveOpcrRatings, that behavior is not in reports.js —
-         see the note at the bottom of this file. --}}
-    @vite(['resources/css/dcs/reports.css',
-    'resources/css/dcs/sidebar.css',
-    'resources/js/dcs/sidebar.js',
+    @vite(['resources/css/dcs/reports.css', 
+    'resources/css/dcs/sidebar.css', 
+    'resources/js/dcs/sidebar.js', 
     'resources/js/dcs/reports.js'])
 </head>
 <body>
@@ -25,28 +20,17 @@
 @include('partials.inactivity-modal')
 
 @include('partials.filter-panel')
+
 <main class="rpt-page" id="rptPage">
 
     <header class="rpt-hdr">
         <div>
-            <div class="rpt-crumb">Document Control System / Generate Report / <span>OPCR Targets</span></div>
-            <h1>OPCR Targets</h1>
+            <div class="rpt-crumb">Document Control System / Generate Report /<span> General Report</span></div>
+            <h1>General Report</h1>
         </div>
     </header>
 
-    {{-- Sub-tabs — ID renamed opcrSubTabs -> subTabs --}}
-    <nav class="rpt-subs visible" id="subTabs">
-        <button class="rpt-sub active" data-sub="update_masterlist" type="button">Updating of Masterlist</button>
-        <button class="rpt-sub" data-sub="issuance_internal" type="button">Issuance of Internal</button>
-        <button class="rpt-sub" data-sub="issuance_external" type="button">Issuance of External</button>
-        <button class="rpt-sub" data-sub="control_forms" type="button">Controlling of Forms</button>
-        <button class="rpt-sub" data-sub="control_logbooks" type="button">Controlling of Logbooks</button>
-        <button class="rpt-sub" data-sub="control_internal_forms" type="button">Controlling of Internal Forms</button>
-    </nav>
-
-    {{-- Results — IDs renamed: opcrResults -> resultsPanel, opcrTitle -> resultsTitle,
-         opcrCount -> resultsCount, opcrTable -> reportTable, opcrHead -> reportHead,
-         opcrBody -> reportBody --}}
+    {{-- Results --}}
     <section class="rpt-results visible" id="resultsPanel">
         <div class="rpt-results-head">
             <div class="rpt-results-meta">
@@ -63,10 +47,16 @@
                         <i class="fa-solid fa-chevron-down rpt-chevron"></i>
                     </button>
                     <div class="rpt-export-menu" id="exportMenu">
-                        <button type="button" data-format="pdf"><i class="fa-solid fa-file-pdf"></i> Download as PDF</button>
-                        <button type="button" data-format="xlsx"><i class="fa-solid fa-file-excel"></i> Download as Excel (.csv)</button>
+                        <button type="button" data-format="pdf">
+                            <i class="fa-solid fa-file-pdf"></i> Download as PDF
+                        </button>
+                        <button type="button" data-format="xlsx">
+                            <i class="fa-solid fa-file-excel"></i> Download as Excel (.csv)
+                        </button>
                         <div class="rpt-export-sep"></div>
-                        <button type="button" data-format="print"><i class="fa-solid fa-print"></i> Print Report</button>
+                        <button type="button" data-format="print">
+                            <i class="fa-solid fa-print"></i> Print Report
+                        </button>
                     </div>
                 </div>
             </div>
@@ -85,10 +75,8 @@
     </section>
 
 </main>
-
 <script>
-    window.REPORT_CATEGORY = 'opcr';
+    window.REPORT_CATEGORY = 'others';
 </script>
-
 </body>
 </html>

@@ -26,7 +26,6 @@ class ReportExport implements FromArray, WithHeadings, WithStyles, ShouldAutoSiz
         return array_map(function ($row) use ($colKeys) {
             return array_map(function ($key) use ($row) {
                 $val = $row[$key] ?? '';
-                // Strip HTML from pdf_path links
                 if ($key === 'pdf_path' && $val) {
                     return 'View File';
                 }
@@ -42,9 +41,22 @@ class ReportExport implements FromArray, WithHeadings, WithStyles, ShouldAutoSiz
 
     public function styles(Worksheet $sheet): array
     {
+        // Apply Arial 11 to ALL cells in the sheet
+        $sheet->getStyle('A1:ZZ1000')->applyFromArray([
+            'font' => [
+                'name' => 'Arial',
+                'size' => 11,
+            ],
+        ]);
+
+        // Header row: bold + fill
         return [
             1 => [
-                'font' => ['bold' => true, 'size' => 11],
+                'font' => [
+                    'name'  => 'Arial',
+                    'bold'  => true,
+                    'size'  => 11,
+                ],
                 'fill' => [
                     'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
                     'color' => ['argb' => 'FFE2E8F0'],

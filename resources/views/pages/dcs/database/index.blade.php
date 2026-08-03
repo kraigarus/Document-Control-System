@@ -17,7 +17,7 @@
 <div class="db-filter-overlay" id="filterOverlay"></div>
 <aside class="db-filter-panel" id="filterPanel">
     <div class="db-filter-head">
-        <h3>Advanced Filters</h3>
+        <h3>Filters</h3>
         <button class="db-close-btn" id="closeFilterBtn">&times;</button>
     </div>
     <div class="db-filter-body">

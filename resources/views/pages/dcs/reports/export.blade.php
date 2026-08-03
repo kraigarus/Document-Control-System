@@ -8,7 +8,7 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: Arial, Helvetica, sans-serif;
-            font-size: 12px;
+            font-size: 11px;
             color: #1e293b;
             background: #fff;
             -webkit-print-color-adjust: exact;
@@ -18,7 +18,7 @@
         /* ── Toolbar ── */
         .print-toolbar { display: none; background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 10px 24px; justify-content: center; gap: 10px; position: sticky; top: 0; z-index: 100; }
         .print-toolbar.visible { display: flex; }
-        .print-toolbar button { padding: 8px 20px; border: 1.5px solid #e2e8f0; border-radius: 8px; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+        .print-toolbar button { padding: 8px 20px; border: 1.5px solid #e2e8f0; border-radius: 8px; font-family: Arial, Helvetica, sans-serif; font-size: 11px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
         .print-toolbar .btn-pdf { background: #0d2a7a; color: #fff; border-color: #0d2a7a; }
         .print-toolbar .btn-pdf:hover { background: #0b2368; }
         .print-toolbar .btn-print { background: #fff; color: #0d2a7a; border-color: #0d2a7a; }
@@ -35,15 +35,15 @@
         .hdr-table td { padding: 0; vertical-align: middle; text-align: left; }
         .hdr-logo { width: 100px; height: 100px; object-fit: contain; }
         .hdr-republic { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
-        .hdr-name { font-size: 16px; font-weight: 700; color: #0d2a7a; text-transform: uppercase; letter-spacing: 0.3px; margin: 2px 0; }
+        .hdr-name { font-size: 11px; font-weight: 700; color: #0d2a7a; text-transform: uppercase; letter-spacing: 0.3px; margin: 2px 0; }
         .hdr-location { font-size: 11px; color: #64748b; }
 
         .hdr-line { position: relative; margin: 10px 0 16px; border-top: 2px solid #0d2a7a; height: 1px; }
-        .hdr-line span { position: absolute; top: -12px; right: 0; background: #fff; padding: 0 0 0 10px; font-size: 12px; font-weight: 700; color: #0d2a7a; }
+        .hdr-line span { position: absolute; top: -12px; right: 0; background: #fff; padding: 0 0 0 10px; font-size: 11px; font-weight: 700; color: #0d2a7a; }
 
         /* ── Title ── */
         .rpt-title { text-align: center; margin-bottom: 12px; }
-        .rpt-title h2 { font-size: 15px; font-weight: 700; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px; }
+        .rpt-title h2 { font-size: 11px; font-weight: 700; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px; }
 
         /* ── Checkboxes ── */
         .rpt-filters { text-align: center; margin-bottom: 16px; }
@@ -63,9 +63,30 @@
         }
 
         /* ── Table ── */
-        .data-table { width: 100%; border-collapse: collapse; font-size: 10px; }
-        .data-table th { background: #4C94D8; -webkit-print-color-adjust: exact; print-color-adjust: exact; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; font-size: 9px; color: #1e293b; padding: 8px 6px; border: 1px solid #000; text-align: center; }
-        .data-table td { padding: 7px 6px; border: 1px solid #000; vertical-align: middle; color: #1e293b; font-size: 10px; text-align: center; }
+        .data-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        .data-table th {
+            background: #4C94D8;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            color: #1e293b;
+            padding: 8px 6px;
+            border: 1px solid #000;
+            text-align: center;
+        }
+        .data-table td {
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 11px;
+            padding: 7px 6px;
+            border: 1px solid #000;
+            vertical-align: middle;
+            color: #1e293b;
+            text-align: center;
+        }
         .data-table tr:nth-child(even) td { background: #f8fafc; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         .rpt-na { color: #94a3b8; }
         .empty-msg { text-align: center; padding: 24px; color: #94a3b8; font-style: italic; font-size: 11px; }
@@ -83,7 +104,7 @@
         .rpt-footer-inner { padding: 4px 36px; }
         .ft-table { width: 100%; border-collapse: collapse; }
         .ft-table, .ft-table tr, .ft-table td { border: none !important; background: none !important; }
-        .ft-table td { padding: 0; font-size: 9px; vertical-align: top; }
+        .ft-table td { padding: 0; font-size: 11px; font-family: Arial, Helvetica, sans-serif; vertical-align: top; }
         .ft-l { text-align: left; }
         .ft-c { text-align: center; }
         .ft-r { text-align: right; }
@@ -97,9 +118,9 @@
             .print-toolbar { display: none !important; }
             body { padding: 0; }
             .print-container { padding: 0 0 10px 0; max-width: 100%; }
-            .data-table { font-size: 9px; }
-            .data-table th { font-size: 8px; padding: 6px 5px; }
-            .data-table td { font-size: 9px; padding: 5px; }
+            .data-table { font-size: 11px; }
+            .data-table th { font-size: 11px; padding: 6px 5px; }
+            .data-table td { font-size: 11px; padding: 5px; }
             .rpt-footer { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; }
         }
     </style>
@@ -179,7 +200,7 @@
 
     </div>
 
-    {{-- FOOTER (fixed at bottom, Dompdf ignores in PDF) --}}
+    {{-- FOOTER --}}
     @if(empty($isPdf))
     <div class="rpt-footer" id="rptFooter">
         <div class="rpt-footer-line"></div>

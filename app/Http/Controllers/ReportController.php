@@ -100,7 +100,7 @@ class ReportController extends Controller
        $originators = $this->getOriginatorOptions();
         $offices     = $this->getSourceOfficeOptions();
         $activeCategory = 'masterlist';
-        return view('pages.dcs.reports.type', compact('categories', 'docTypes', 'originators', 'offices', 'activeCategory'));
+        return view('pages.dcs.reports.masterlist', compact('categories', 'docTypes', 'originators', 'offices', 'activeCategory'));
     }
 
     public function monitoring()
@@ -118,7 +118,7 @@ class ReportController extends Controller
         $originators = $this->getOriginatorOptions();
         $offices     = $this->getSourceOfficeOptions();
         $activeCategory = 'others';
-        return view('pages.dcs.reports.type', compact('categories', 'docTypes', 'originators', 'offices', 'activeCategory'));
+        return view('pages.dcs.reports.others', compact('categories', 'docTypes', 'originators', 'offices', 'activeCategory'));
     }
 
     // ════════════════════════════════════════════
@@ -172,10 +172,8 @@ class ReportController extends Controller
     {
         if (!empty($filters['originator'])) {
             $originator = $filters['originator'];
-            $query->whereHas("$mlRelation.sourceOffices", function ($q) use ($originator) {
-                $q->whereHas('office', function ($q2) use ($originator) {
-                    $q2->where('office_name', $originator);
-                });
+            $query->whereHas($mlRelation, function ($q) use ($originator) {
+                $q->where('originator_name', $originator);
             });
         }
 
@@ -242,10 +240,7 @@ class ReportController extends Controller
             $ml = $doc->masterlistRegistration;
             if (!$ml) return null;
 
-        $originator = $ml->sourceOffices->count() > 0
-            ? $ml->sourceOffices->map(fn($o) => $o->office ? $o->office->office_name : $o->source_name)
-                ->filter()->implode(', ')
-            : null;
+        $originator = $ml->originator_name;
 
             return [
                 'item_no'          => $index + 1,

@@ -34,8 +34,6 @@ export default defineConfig({
 
                 'resources/css/dcs/reports.css',
                 'resources/js/dcs/reports.js',
-                'resources/js/dcs/opcr.js',
-                'resources/js/dcs/monitoring.js',
                 'resources/js/dcs/report-filter.js',
 
 
