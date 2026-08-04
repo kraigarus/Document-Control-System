@@ -234,14 +234,10 @@
                 </div>
 
                 <!-- ═══ DOCUMENT INFO ═══ -->
-                <div class="reg-grid-4">
+                <div class="reg-grid-3">
                     <div class="reg-field">
                         <label>Document No.</label>
                         <input type="text" id="syllabiDocNo" name="syllabiDocNo" placeholder="Enter Document No.">
-                    </div>
-                    <div class="reg-field">
-                        <label>Document Title</label>
-                        <input type="text" id="syllabiDocTitle" name="syllabiDocTitle" placeholder="Enter Document Title">
                     </div>
                     <div class="reg-field">
                         <label>Effectivity Date</label>
@@ -251,6 +247,10 @@
                         <label>Deadline of Submission</label>
                         <input type="date" id="syllabiDeadline" name="syllabiDeadline">
                     </div>
+                </div>
+                <div class="reg-field" style="margin-bottom: 16px;">
+                    <label>Document Title</label>
+                    <input type="text" id="syllabiDocTitle" name="syllabiDocTitle" placeholder="Enter Document Title">
                 </div>
 
                 <!-- ═══ WIZARD STEP INDICATOR ═══ -->

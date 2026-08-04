@@ -51,6 +51,9 @@
         <button class="tab-btn" data-tab="schoolyears">
             <i class="fa-solid fa-calendar-days"></i> School Years
         </button>
+        <button class="tab-btn" data-tab="coursenames">
+            <i class="fa-solid fa-list-check"></i> Course Names
+        </button>
     </div>
 
     <!-- ══════════════ VERSION TYPES ══════════════ -->
@@ -303,13 +306,14 @@
                     <tr>
                         <th>College</th>
                         <th>Program Name</th>
+                        <th style="width:100px;">Code</th>
                         <th style="width:140px;">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="programsTableBody">
                     @forelse($colleges as $college)
                         <tr class="college-group-header">
-                            <td colspan="3">
+                            <td colspan="4">
                                 <i class="fa-solid fa-graduation-cap"></i>
                                 {{ $college->college_name }}
                                 <span class="program-count">({{ $college->programs->count() }} {{ Str::plural('program', $college->programs->count()) }})</span>
@@ -319,12 +323,14 @@
                             <tr data-id="{{ $prog->program_id }}">
                                 <td data-label="College">{{ $college->college_name }}</td>
                                 <td data-label="Program">{{ $prog->program_name }}</td>
+                                <td data-label="Code">{{ $prog->program_code ?? '—' }}</td>
                                 <td>
                                     <div class="row-actions">
                                         <button class="icon-btn" title="Edit"
                                                 onclick="openProgramModal({{ $prog->program_id }})"
                                                 data-college="{{ $prog->college_id }}"
-                                                data-name="{{ $prog->program_name }}">
+                                                data-name="{{ $prog->program_name }}"
+                                                data-code="{{ $prog->program_code }}">
                                             <i class="fa-solid fa-pen"></i>
                                         </button>
                                         <button class="icon-btn icon-btn-danger" title="Delete"
@@ -336,11 +342,11 @@
                             </tr>
                         @empty
                             <tr class="college-group-empty">
-                                <td colspan="3" class="empty-cell">No programs under this college yet.</td>
+                                <td colspan="4" class="empty-cell">No programs under this college yet.</td>
                             </tr>
                         @endforelse
                     @empty
-                        <tr><td colspan="3" class="empty-cell">No colleges or programs yet.</td></tr>
+                        <tr><td colspan="4" class="empty-cell">No colleges or programs yet.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -421,6 +427,56 @@
                         </tr>
                     @empty
                         <tr><td colspan="2" class="empty-cell">No school years yet.</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- ══════════════ COURSE NAMES ══════════════ -->
+    <section class="tab-panel" id="panel-coursenames">
+        <div class="panel-toolbar">
+            <span class="panel-subtitle">Curriculum course list per program and semester — used to auto-fill Syllabi/TOS-Rubrics registration</span>
+            <button class="btn-primary" onclick="openProgramCourseModal()">
+                <i class="fa-solid fa-plus"></i> Add Course
+            </button>
+        </div>
+
+        <div class="table-wrap">
+            <table class="settings-table">
+                <thead>
+                    <tr>
+                        <th>College</th>
+                        <th>Program</th>
+                        <th>Semester</th>
+                        <th>Course Name</th>
+                        <th style="width:140px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="programCoursesTableBody">
+                    @forelse($programCourses as $course)
+                        <tr data-id="{{ $course->course_id }}">
+                            <td data-label="College">{{ $course->program->college->college_name ?? '—' }}</td>
+                            <td data-label="Program">{{ $course->program->program_name ?? '—' }}</td>
+                            <td data-label="Semester">{{ $course->semester->semester_name ?? '—' }}</td>
+                            <td data-label="Course Name">{{ $course->course_name }}</td>
+                            <td>
+                                <div class="row-actions">
+                                    <button class="icon-btn" title="Edit"
+                                            onclick="openProgramCourseModal({{ $course->course_id }})"
+                                            data-program="{{ $course->program_id }}"
+                                            data-semester="{{ $course->semester_id }}"
+                                            data-name="{{ $course->course_name }}">
+                                        <i class="fa-solid fa-pen"></i>
+                                    </button>
+                                    <button class="icon-btn icon-btn-danger" title="Delete" onclick="deleteProgramCourse({{ $course->course_id }})">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="5" class="empty-cell">No courses yet.</td></tr>
                     @endforelse
                 </tbody>
             </table>

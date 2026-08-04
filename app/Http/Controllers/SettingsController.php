@@ -13,6 +13,7 @@ use App\Models\RetrievalOffice;
 use App\Models\DistributionOffice;
 use App\Models\Originator;
 use App\Models\{College, Program, Semester, SchoolYear};
+use App\Models\ProgramCourse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -47,10 +48,15 @@ class SettingsController extends Controller
         $programs    = Program::with('college')->orderBy('program_name')->get();
         $semesters   = Semester::orderBy('semester_id')->get();
         $schoolYears = SchoolYear::orderBy('school_year')->get();
+        $programCourses = ProgramCourse::with(['program.college', 'semester'])
+            ->orderBy('program_id')
+            ->orderBy('semester_id')
+            ->orderBy('course_name')
+            ->get();
 
         return view('pages.dcs.settings.index', compact(
             'docTypes', 'offices', 'versionTypes', 'originators',
-            'colleges', 'programs', 'semesters', 'schoolYears'
+            'colleges', 'programs', 'semesters', 'schoolYears', 'programCourses'
         ));
     }
 
@@ -383,8 +389,9 @@ class SettingsController extends Controller
         $request->validate([
             'college_id'   => 'required|exists:colleges,college_id',
             'program_name' => 'required|string|max:255',
+            'program_code' => 'nullable|string|max:20',
         ]);
-        Program::create($request->only('college_id', 'program_name'));
+        Program::create($request->only('college_id', 'program_name', 'program_code'));
         return response()->json(['success' => true, 'message' => 'Program added.']);
     }
 
@@ -393,8 +400,9 @@ class SettingsController extends Controller
         $request->validate([
             'college_id'   => 'required|exists:colleges,college_id',
             'program_name' => 'required|string|max:255',
+            'program_code' => 'nullable|string|max:20',
         ]);
-        Program::findOrFail($id)->update($request->only('college_id', 'program_name'));
+        Program::findOrFail($id)->update($request->only('college_id', 'program_name', 'program_code'));
         return response()->json(['success' => true, 'message' => 'Program updated.']);
     }
 
@@ -444,6 +452,67 @@ class SettingsController extends Controller
     {
         SchoolYear::findOrFail($id)->delete();
         return response()->json(['success' => true, 'message' => 'School year deleted.']);
+    }
+
+    // ── Program Courses (curriculum) ──
+    public function storeProgramCourse(Request $request)
+    {
+        $request->validate([
+            'program_id'  => 'required|integer|exists:programs,program_id',
+            'semester_id' => 'required|integer|exists:semesters,semester_id',
+            'course_name' => 'required|string|max:255',
+        ]);
+
+        $exists = ProgramCourse::where('program_id', $request->program_id)
+            ->where('semester_id', $request->semester_id)
+            ->where('course_name', $request->course_name)
+            ->exists();
+
+        if ($exists) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This course is already listed for the selected program and semester.',
+            ], 422);
+        }
+
+        ProgramCourse::create($request->only('program_id', 'semester_id', 'course_name'));
+
+        return response()->json(['success' => true, 'message' => 'Course added.']);
+    }
+
+    public function updateProgramCourse(Request $request, $id)
+    {
+        $course = ProgramCourse::findOrFail($id);
+
+        $request->validate([
+            'program_id'  => 'required|integer|exists:programs,program_id',
+            'semester_id' => 'required|integer|exists:semesters,semester_id',
+            'course_name' => 'required|string|max:255',
+        ]);
+
+        $exists = ProgramCourse::where('program_id', $request->program_id)
+            ->where('semester_id', $request->semester_id)
+            ->where('course_name', $request->course_name)
+            ->where('course_id', '!=', $id)
+            ->exists();
+
+        if ($exists) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This course is already listed for the selected program and semester.',
+            ], 422);
+        }
+
+        $course->update($request->only('program_id', 'semester_id', 'course_name'));
+
+        return response()->json(['success' => true, 'message' => 'Course updated.']);
+    }
+
+    public function destroyProgramCourse($id)
+    {
+        ProgramCourse::findOrFail($id)->delete();
+
+        return response()->json(['success' => true, 'message' => 'Course deleted.']);
     }
 
 }

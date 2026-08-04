@@ -577,11 +577,12 @@ function confirmDelete({ title = "Delete", message = "This action cannot be undo
     // ══════════════════════════════════════════════
     window.openProgramModal = function (id = null) {
         const isEdit = !!id;
-        let currentCollegeId = "", currentName = "";
+        let currentCollegeId = "", currentName = "", currentCode = "";
         if (isEdit) {
             const row = document.querySelector(`#programsTableBody tr[data-id="${id}"] .icon-btn[data-name]`);
             currentCollegeId = row ? row.getAttribute("data-college") : "";
             currentName = row ? row.getAttribute("data-name") : "";
+            currentCode = row ? row.getAttribute("data-code") : "";
         }
 
         const collegeRows = document.querySelectorAll("#collegesTableBody tr[data-id]");
@@ -606,7 +607,11 @@ function confirmDelete({ title = "Delete", message = "This action cannot be undo
                 </div>
                 <div class="st-field">
                     <label class="st-label">Program Name</label>
-                    <input type="text" id="program_nameInput" class="st-input" placeholder="e.g. Bachelor of Science in IT" value="${escapeHtml(currentName)}">
+                    <input type="text" id="program_nameInput" class="st-input" placeholder="e.g. Bachelor of Library and Information Science" value="${escapeHtml(currentName)}">
+                </div>
+                <div class="st-field">
+                    <label class="st-label">Program Code</label>
+                    <input type="text" id="program_codeInput" class="st-input" placeholder="e.g. BLIS" value="${escapeHtml(currentCode)}" style="text-transform:uppercase;">
                 </div>
                 <div class="st-actions-row">
                     <button class="st-btn st-btn-ghost" onclick="closeSettingsModal()">Cancel</button>
@@ -622,13 +627,18 @@ function confirmDelete({ title = "Delete", message = "This action cannot be undo
     window.submitProgram = async function (id) {
         const collegeId = document.getElementById("college_idInput").value;
         const name = document.getElementById("program_nameInput").value.trim();
-        if (!collegeId || !name) { showToast("All fields are required.", "error"); return; }
+        const code = document.getElementById("program_codeInput").value.trim().toUpperCase();
+        if (!collegeId || !name) { showToast("College and Program name are required.", "error"); return; }
 
         const isEdit = id !== null;
         const url = isEdit ? `${BASE}/programs/${id}` : `${BASE}/programs`;
         const method = isEdit ? "PUT" : "POST";
 
-        await handleSubmit("#programSubmitBtn", url, method, { college_id: collegeId, program_name: name });
+        await handleSubmit("#programSubmitBtn", url, method, {
+            college_id: collegeId,
+            program_name: name,
+            program_code: code || null,
+        });
     };
 
     window.deleteProgram = function (id) {
@@ -740,6 +750,96 @@ function confirmDelete({ title = "Delete", message = "This action cannot be undo
             title: "Delete School Year",
             message: "This school year will be permanently removed.",
             url: `${BASE}/school-years/${id}`,
+        });
+    };
+
+    // ══════════════════════════════════════════════
+    // PROGRAM COURSES (curriculum)
+    // ══════════════════════════════════════════════
+    window.openProgramCourseModal = function (id = null) {
+        const isEdit = !!id;
+        let currentProgramId = "", currentSemesterId = "", currentName = "";
+        if (isEdit) {
+            const row = document.querySelector(`#programCoursesTableBody tr[data-id="${id}"] .icon-btn[data-name]`);
+            currentProgramId = row ? row.getAttribute("data-program") : "";
+            currentSemesterId = row ? row.getAttribute("data-semester") : "";
+            currentName = row ? row.getAttribute("data-name") : "";
+        }
+
+        // Programs — same DOM-scraping approach as openProgramModal() uses for Colleges.
+        // #programsTableBody rows are: College (td 1), Program (td 2), Actions (td 3).
+        const programRows = document.querySelectorAll("#programsTableBody tr[data-id]");
+        let programOptions = '<option value="">Select Program</option>';
+        programRows.forEach(r => {
+            const pid = r.dataset.id;
+            const cells = r.querySelectorAll("td");
+            const collegeName = cells[0]?.textContent?.trim() || "";
+            const programName = cells[1]?.textContent?.trim() || "";
+            const selected = pid === currentProgramId ? "selected" : "";
+            programOptions += `<option value="${pid}" ${selected}>${escapeHtml(collegeName)} — ${escapeHtml(programName)}</option>`;
+        });
+
+        const semesterRows = document.querySelectorAll("#semestersTableBody tr[data-id]");
+        let semesterOptions = '<option value="">Select Semester</option>';
+        semesterRows.forEach(r => {
+            const sid = r.dataset.id;
+            const semName = r.querySelector("td:first-child")?.textContent?.trim() || "";
+            const selected = sid === currentSemesterId ? "selected" : "";
+            semesterOptions += `<option value="${sid}" ${selected}>${escapeHtml(semName)}</option>`;
+        });
+
+        openModal(`
+            <div class="st-modal">
+                <div class="st-modal-top">
+                    <div class="st-modal-icon"><i class="fa-solid fa-list-check"></i></div>
+                    <button class="st-modal-close" onclick="closeSettingsModal()"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="st-modal-title">${isEdit ? "Edit Course" : "Add Course"}</div>
+                <div class="st-field">
+                    <label class="st-label">Program</label>
+                    <select id="course_program_idInput" class="st-input">${programOptions}</select>
+                </div>
+                <div class="st-field">
+                    <label class="st-label">Semester</label>
+                    <select id="course_semester_idInput" class="st-input">${semesterOptions}</select>
+                </div>
+                <div class="st-field">
+                    <label class="st-label">Course Name</label>
+                    <input type="text" id="course_nameInput" class="st-input" placeholder="e.g. Data Structures and Algorithms" value="${escapeHtml(currentName)}">
+                </div>
+                <div class="st-actions-row">
+                    <button class="st-btn st-btn-ghost" onclick="closeSettingsModal()">Cancel</button>
+                    <button class="st-btn st-btn-primary" id="programCourseSubmitBtn" onclick="submitProgramCourse(${id ?? "null"})">
+                        <i class="fa-solid fa-check"></i> Save
+                    </button>
+                </div>
+            </div>
+        `);
+        setTimeout(() => document.getElementById("course_program_idInput")?.focus(), 50);
+    };
+
+    window.submitProgramCourse = async function (id) {
+        const programId = document.getElementById("course_program_idInput").value;
+        const semesterId = document.getElementById("course_semester_idInput").value;
+        const name = document.getElementById("course_nameInput").value.trim();
+        if (!programId || !semesterId || !name) { showToast("All fields are required.", "error"); return; }
+
+        const isEdit = id !== null;
+        const url = isEdit ? `${BASE}/program-courses/${id}` : `${BASE}/program-courses`;
+        const method = isEdit ? "PUT" : "POST";
+
+        await handleSubmit("#programCourseSubmitBtn", url, method, {
+            program_id: programId,
+            semester_id: semesterId,
+            course_name: name,
+        });
+    };
+
+    window.deleteProgramCourse = function (id) {
+        confirmDelete({
+            title: "Delete Course",
+            message: "This course will be permanently removed from the curriculum list.",
+            url: `${BASE}/program-courses/${id}`,
         });
     };
 

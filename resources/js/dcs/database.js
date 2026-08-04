@@ -360,16 +360,32 @@ document.addEventListener('DOMContentLoaded', () => {
                 : '<td>' + itemNo + '</td>';
 
             html += '<tr class="db-parent-row" data-category-row="' + catSlug + '"' + rowDisplay + '>' + firstCell + rowCells(parent) + '</tr>';
+            html += coursesRowHTML(parent, catSlug, rowDisplay);
 
             children.forEach((child, ci) => {
                 html += '<tr class="db-child-row" data-group="' + groupId + '" data-category-row="' + catSlug + '" style="display:none">' +
                     '<td class="db-child-ind"><span class="db-child-dot"></span>' + itemNo + '.' + (ci + 1) + '</td>' +
                     rowCells(child) +
                 '</tr>';
+                html += coursesRowHTML(child, catSlug, ' data-group="' + groupId + '" style="display:none"', true);
             });
         });
 
         tableBody.innerHTML = html;
+
+        document.querySelectorAll('.db-courses-toggle').forEach(el => {
+            el.addEventListener('click', function (e) {
+                e.stopPropagation();
+                const list = document.getElementById(this.dataset.target);
+                if (!list) return;
+
+                const isOpen = list.style.display !== 'none';
+                list.style.display = isOpen ? 'none' : '';
+
+                this.classList.toggle('expanded', !isOpen);
+                this.querySelector('.db-courses-chevron').textContent = isOpen ? '\u25B6' : '\u25BC';
+            });
+        });
 
         document.querySelectorAll('.db-expand-btn').forEach(btn => {
             btn.addEventListener('click', function (e) {
@@ -391,13 +407,37 @@ document.addEventListener('DOMContentLoaded', () => {
                 el.classList.toggle('expanded', expanded);
                 el.querySelector('.db-category-chevron').textContent = expanded ? '\u25B2' : '\u25BC';
                 document.querySelectorAll('tr[data-category-row="' + slug + '"]').forEach(row => {
-                    if (row.classList.contains('db-child-row')) return;
+                    // CHANGED — also skip child-course rows; those are governed by the expand button
+                    if (row.classList.contains('db-child-row') || row.classList.contains('db-child-courses-row')) return;
                     row.style.display = expanded ? '' : 'none';
                 });
             });
         });
 
         requestAnimationFrame(updateHeaderHeights);
+    }
+
+    function coursesRowHTML(r, catSlug, displayAttr, isChild) {
+        if (!r.syllabi_courses || r.syllabi_courses.length === 0) return '';
+
+        const rowId = 'courses-' + r.request_id;
+        const count = r.syllabi_courses.length;
+        const chips = r.syllabi_courses.map(c =>
+            '<span class="db-course-chip">' + esc(c) + '</span>'
+        ).join('');
+        const extraClass = isChild ? ' db-child-courses-row' : '';
+
+        return '<tr class="db-courses-row' + extraClass + '" data-category-row="' + catSlug + '"' +
+            (displayAttr || '') + '>' +
+            '<td colspan="60">' +
+                '<div class="db-courses-toggle" data-target="' + rowId + '">' +
+                    '<span class="db-courses-chevron">\u25B6</span>' +
+                    '<span class="db-courses-label"><i class="fa-solid fa-graduation-cap"></i> Courses (' + count + ')</span>' +
+                '</div>' +
+                '<div class="db-courses-list" id="' + rowId + '" style="display:none">' +
+                    chips +
+                '</div>' +
+            '</td></tr>';
     }
 
     // Build cells for a single row (all columns except the first item-no cell)

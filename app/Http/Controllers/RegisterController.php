@@ -214,6 +214,15 @@ class RegisterController extends Controller
         }
     }
 
+    /** IDs from the doc_types seeder: 11 = Syllabi, 12 = TOS/Rubrics — both share the same wizard/table. */
+    private const SYLLABI_LIKE_SUBTYPE_IDS = [11, 12];
+
+    private function isSyllabiLikeSubType(?\App\Models\DocType $subType): bool
+    {
+        if (!$subType) return false;
+        return in_array((int) $subType->doc_type_id, self::SYLLABI_LIKE_SUBTYPE_IDS, true);
+    }
+
     // ──────────────────────────────────────────────────────────
     // REGISTER — Create
     // ──────────────────────────────────────────────────────────
@@ -308,7 +317,7 @@ class RegisterController extends Controller
         ]);
 
         $subType   = \App\Models\DocType::find($request->sub_type_id);
-        $isSyllabi = $subType && strtolower($subType->doc_type_name) === 'syllabi';
+        $isSyllabi = $this->isSyllabiLikeSubType($subType);
 
         if ($isSyllabi && $request->has('syllabiCourseName')) {
             foreach ($request->syllabiCourseName as $i => $courseName) {
@@ -509,7 +518,7 @@ class RegisterController extends Controller
                     'doc_title'        => $request->syllabiDocTitle,
                     'effectivity_date' => $request->syllabiEffectivityDate,
                     'deadline'         => $request->syllabiDeadline,
-                    'revise_no'        => 0,
+                    'revise_no'        => $request->masterlistRevisionNo ?? 0,
                     'created_by'       => auth()->id(),
                 ]);
 
@@ -647,7 +656,8 @@ class RegisterController extends Controller
     {
         return response()->json(
             \App\Models\Program::where('college_id', $collegeId)
-                ->orderBy('program_name')->get()
+                ->orderBy('program_name')
+                ->get(['program_id', 'program_name', 'program_code'])
         );
     }
 
@@ -667,6 +677,16 @@ class RegisterController extends Controller
     {
         return response()->json(
             \App\Models\Originator::orderBy('originator_name')->get()
+        );
+    }
+
+    public function apiProgramCourses($programId, $semesterId)
+    {
+        return response()->json(
+            \App\Models\ProgramCourse::where('program_id', $programId)
+                ->where('semester_id', $semesterId)
+                ->orderBy('course_name')
+                ->get(['course_id', 'course_name'])
         );
     }
     // ──────────────────────────────────────────────────────────
@@ -1413,7 +1433,7 @@ class RegisterController extends Controller
 
             // ── Syllabi ──
             $subType   = \App\Models\DocType::find($request->sub_type_id);
-            $isSyllabi = $subType && strtolower($subType->doc_type_name) === 'syllabi';
+            $isSyllabi = $this->isSyllabiLikeSubType($subType);
 
             // ── Clean up Syllabi if sub_type changed away from Syllabi ──
             if (!$isSyllabi) {
@@ -1436,6 +1456,7 @@ class RegisterController extends Controller
                     'doc_title'        => $request->syllabiDocTitle,
                     'effectivity_date' => $request->syllabiEffectivityDate,
                     'deadline'         => $request->syllabiDeadline,
+                    'revise_no'        => $request->masterlistRevisionNo ?? 0,
                 ];
 
                 if ($masterlist) {
@@ -1443,7 +1464,6 @@ class RegisterController extends Controller
                 } else {
                     MasterlistRegistration::create(array_merge($masterlistData, [
                         'request_id' => $requestId,
-                        'revise_no'  => 0,
                         'created_by' => auth()->id(),
                     ]));
                 }

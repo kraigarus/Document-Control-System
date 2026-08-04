@@ -97,6 +97,8 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::get('/api/school-years', [RegisterController::class, 'apiSchoolYears']);
     Route::get('/api/documents/search', [RegisterController::class, 'apiSearchDocuments']);
     Route::get('/api/originators', [RegisterController::class, 'apiOriginators']);
+    Route::get('/api/originators', [RegisterController::class, 'apiOriginators']);
+    Route::get('/api/program-courses/{programId}/{semesterId}', [RegisterController::class, 'apiProgramCourses']);
 
     // Register — Update
     Route::get('/register/update', [RegisterController::class, 'updateList'])->name('register.update');
@@ -172,6 +174,12 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('/school-years',       [SettingsController::class, 'storeSchoolYear'])->name('schoolyears.store');
         Route::put('/school-years/{id}',   [SettingsController::class, 'updateSchoolYear'])->name('schoolyears.update');
         Route::delete('/school-years/{id}',[SettingsController::class, 'destroySchoolYear'])->name('schoolyears.destroy');
+
+        // Program Courses (curriculum)
+        Route::get('/program-courses', [SettingsController::class, 'index']); // not needed separately — index() already handles this via /settings
+        Route::post('/program-courses', [SettingsController::class, 'storeProgramCourse'])->name('programcourses.store');
+        Route::put('/program-courses/{id}', [SettingsController::class, 'updateProgramCourse'])->name('programcourses.update');
+        Route::delete('/program-courses/{id}', [SettingsController::class, 'destroyProgramCourse'])->name('programcourses.destroy');
     });
 
     Route::middleware('auth')->prefix('profile')->name('profile.')->group(function () {

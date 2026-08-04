@@ -12,6 +12,12 @@ let revisionRowUidCounter = 0;
 let revSearchCache = {};
 let revSearchTimers = {};
 window.__isSyllabiMode = false;
+window.__syllabiModeLabel = 'Syllabi';
+
+const SYLLABI_LIKE_SUBTYPE_IDS = [11, 12];
+function isSyllabiLikeSubType(subTypeId) {
+    return SYLLABI_LIKE_SUBTYPE_IDS.includes(parseInt(subTypeId));
+}
 
 
 const ALLOWED_EXTENSIONS = ['pdf', 'docx'];
@@ -1484,6 +1490,9 @@ function resetFileWidgetsIn(el) {
 
 function handleDocTypeChange() {
     window.__isSyllabiMode = false;
+    window.__syllabiModeLabel = 'Syllabi';
+    window.__lastSubTypeId = null;
+    syllabiTitleManuallyEdited = false;
     docNoDuplicate = false;
     setSaveEnabled(true);
     const docTypeSelect = document.getElementById("docType");
@@ -1562,28 +1571,8 @@ function handleDocTypeChange() {
         bindRevisionRowSearch(newRow);
     }
 
-    const syllabiBody = document.getElementById('syllabiTableBody');
-    if (syllabiBody) {
-        syllabiBody.querySelectorAll('tr[data-uid]').forEach(tr => removeSyllabiOriginatorDropdown(tr.dataset.uid));
-        syllabiBody.innerHTML = '';
-        syllabiGroupCounter = 0;
-        addSyllabiRow();
-        setSyllabiStep(1);
-    }
-
-    ['syllabiDocNo', 'syllabiDocTitle', 'syllabiEffectivityDate', 'syllabiDeadline'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.value = '';
-    });
-
-    const collegeSel = document.getElementById('syllabiCollege');
-    const programSel = document.getElementById('syllabiProgram');
-    const semSel = document.getElementById('syllabiSemester');
-    const sySel = document.getElementById('syllabiSchoolYear');
-    if (collegeSel) collegeSel.selectedIndex = 0;
-    if (programSel) { programSel.innerHTML = '<option value="" selected disabled>Select program</option>'; programSel.disabled = true; }
-    if (semSel) { semSel.selectedIndex = 0; semSel.disabled = true; }
-    if (sySel) { sySel.selectedIndex = 0; sySel.disabled = true; }
+    resetSyllabiSection();
+    setSyllabiStep(1);
 
     disableApproval();
     clearValidation();
@@ -1610,6 +1599,34 @@ function bindTableFileInput(fileInput) {
     fileInput.addEventListener('change', function () { validateTableFile(this); });
 }
 
+/** Clears every Syllabi/TOS-Rubrics field and table row. Shared by handleDocTypeChange()
+ *  (doc type switch) and validateChecklistState() (sub-type switch, e.g. Syllabi → TOS/Rubrics),
+ *  since either change can leave stale input behind otherwise. */
+function resetSyllabiSection() {
+    const syllabiBody = document.getElementById('syllabiTableBody');
+    if (syllabiBody) {
+        syllabiBody.querySelectorAll('tr[data-uid]').forEach(tr => removeSyllabiOriginatorDropdown(tr.dataset.uid));
+        syllabiBody.innerHTML = '';
+        syllabiGroupCounter = 0;
+    }
+
+    ['syllabiDocNo', 'syllabiDocTitle', 'syllabiEffectivityDate', 'syllabiDeadline'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+
+    syllabiTitleManuallyEdited = false;
+
+    const collegeSel = document.getElementById('syllabiCollege');
+    const programSel = document.getElementById('syllabiProgram');
+    const semSel = document.getElementById('syllabiSemester');
+    const sySel = document.getElementById('syllabiSchoolYear');
+    if (collegeSel) collegeSel.selectedIndex = 0;
+    if (programSel) { programSel.innerHTML = '<option value="" selected disabled>Select program</option>'; programSel.disabled = true; }
+    if (semSel) { semSel.selectedIndex = 0; semSel.disabled = true; }
+    if (sySel) { sySel.selectedIndex = 0; sySel.disabled = true; }
+}
+
 // ══════════════════════════════════════════════
 // SUB-TYPE CHANGE
 // ══════════════════════════════════════════════
@@ -1623,22 +1640,30 @@ function validateChecklistState() {
 
     if (!subTypeId) {
         window.__isSyllabiMode = false;
+        window.__syllabiModeLabel = 'Syllabi';
         lockChecklist();
         return;
     }
 
-    const isSyllabi = subTypeData && subTypeData.doc_type_name.toLowerCase() === "syllabi";
-    window.__isSyllabiMode = isSyllabi;
+    const isSyllabiLike = isSyllabiLikeSubType(subTypeId);
+
+    // Whenever the sub-type actually changes (e.g. Syllabi -> TOS/Rubrics, or either -> a
+    // non-syllabi sub-type), clear stale syllabi inputs so they don't carry over.
+    if (subTypeId !== window.__lastSubTypeId) {
+        resetSyllabiSection();
+    }
+    window.__lastSubTypeId = subTypeId;
+
+    window.__isSyllabiMode = isSyllabiLike;
+    window.__syllabiModeLabel = subTypeData ? subTypeData.doc_type_name : 'Syllabi';
 
     unlockChecklist();
 
-    if (!isSyllabi) return;
-
-    // DRF section already suppressed by toggleSection via __isSyllabiMode flag
-    // Masterlist (section-3) stays visible — unlockChecklist showed it
+    if (!isSyllabiLike) return;
 
     if (!syllabiSection) return;
 
+    applySyllabiSectionLabel();
     syllabiSection.style.display = "block";
     setSyllabiStep(1);
     loadSyllabiContextDropdowns();
@@ -1657,6 +1682,18 @@ function validateChecklistState() {
             }
         });
     }, 50);
+}
+
+/** Updates the visible "Syllabi" card header/placeholder to reflect whichever
+ *  syllabi-like sub-type (Syllabi or TOS/Rubrics) is currently selected. */
+function applySyllabiSectionLabel() {
+    const label = window.__syllabiModeLabel || 'Syllabi';
+    const header = document.querySelector('#section-syllabi .reg-card-header span');
+    if (header) header.textContent = label;
+
+    document.querySelectorAll('#syllabiTableBody input[name="syllabiCourseName[]"]').forEach(inp => {
+        inp.placeholder = /tos/i.test(label) ? 'Enter course/exam name' : 'Enter course name';
+    });
 }
 
 // ══════════════════════════════════════════════
@@ -2544,6 +2581,33 @@ window.addRevisionRow = function () {
 };
 
 // ══════════════════════════════════════════════
+// SYLLABI — AUTO-GENERATED DOCUMENT TITLE
+// ══════════════════════════════════════════════
+let syllabiTitleManuallyEdited = false;
+
+function formatSchoolYearText(text) {
+    if (!text) return '';
+    const m = text.match(/^(\d{4})\s*-\s*(\d{4})$/);
+    if (m) return 'S/Y ' + m[1] + ' – ' + m[2];
+    return /^s\/y/i.test(text) ? text : 'S/Y ' + text;
+}
+
+function updateSyllabiTitle() {
+    const titleInput = document.getElementById('syllabiDocTitle');
+    if (!titleInput || syllabiTitleManuallyEdited) return;
+
+    const college  = getSelectText('syllabiCollege');
+    const program  = getSelectTextWithCode('syllabiProgram');
+    const semester = getSelectText('syllabiSemester');
+    const schoolYr = getSelectText('syllabiSchoolYear');
+    const label    = window.__syllabiModeLabel || 'Syllabi';
+
+    if (!college || !program || !semester || !schoolYr) return;
+
+    titleInput.value = college + ' ' + label + ' for ' + program + ', ' + semester + ', ' + formatSchoolYearText(schoolYr);
+}
+
+// ══════════════════════════════════════════════
 // SYLLABI CONTEXT DROPDOWNS
 // ══════════════════════════════════════════════
 async function loadSyllabiContextDropdowns() {
@@ -2572,11 +2636,81 @@ async function loadSyllabiContextDropdowns() {
     }
 }
 
+function syllabiContextComplete() {
+    return document.getElementById('syllabiCollege')?.value
+        && document.getElementById('syllabiProgram')?.value
+        && document.getElementById('syllabiSemester')?.value
+        && document.getElementById('syllabiSchoolYear')?.value;
+}
+
+async function autoPopulateSyllabiCourses() {
+    if (!syllabiContextComplete()) return;
+
+    const programId  = document.getElementById('syllabiProgram').value;
+    const semesterId = document.getElementById('syllabiSemester').value;
+
+    try {
+        const courses = await fetch(`/api/program-courses/${programId}/${semesterId}`).then(r => r.json());
+        if (!courses || courses.length === 0) return; // nothing on file — leave manual entry alone
+
+        const tbody = document.getElementById('syllabiTableBody');
+
+        // Don't clobber rows the user already typed into by hand
+        const hasManualData = [...tbody.querySelectorAll('.syllabi-merged-course')]
+            .some(inp => inp.value.trim() !== '' && inp.dataset.autoFilled !== 'true');
+        if (hasManualData) return;
+
+        tbody.querySelectorAll('tr[data-uid]').forEach(tr => removeSyllabiOriginatorDropdown(tr.dataset.uid));
+        tbody.innerHTML = '';
+        syllabiGroupCounter = 0;
+
+        courses.forEach(c => {
+            syllabiGroupCounter++;
+            const groupId = 'g' + syllabiGroupCounter;
+            const newRow = buildSyllabiGroupFirstRow(groupId, 1);
+            tbody.appendChild(newRow);
+
+            const courseInput = newRow.querySelector('.syllabi-merged-course');
+            if (courseInput) {
+                courseInput.value = c.course_name;
+                courseInput.dataset.autoFilled = 'true';
+                courseInput.title = 'Loaded from Settings → Course Names';
+                // if the user edits it, treat it as manual from then on
+                courseInput.addEventListener('input', () => { courseInput.dataset.autoFilled = 'false'; });
+            }
+
+            bindSyllabiOriginatorInput(newRow.dataset.uid);
+            cascadeDrfToNewRow(newRow);
+            syncSyllabiMergedFields(groupId);
+        });
+
+        updateSyllabiTotalCopies();
+        applySyllabiSectionLabel();
+    } catch (err) {
+        console.error('Failed to auto-populate syllabi courses:', err);
+    }
+}
+
+function clearSyllabiCourseRows() {
+    const tbody = document.getElementById('syllabiTableBody');
+    if (!tbody) return;
+    tbody.querySelectorAll('tr[data-uid]').forEach(tr => removeSyllabiOriginatorDropdown(tr.dataset.uid));
+    tbody.innerHTML = '';
+    syllabiGroupCounter = 0;
+    updateSyllabiTotalCopies();
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     const collegeSel = document.getElementById("syllabiCollege");
     const programSel = document.getElementById("syllabiProgram");
     const semSel = document.getElementById("syllabiSemester");
     const sySel = document.getElementById("syllabiSchoolYear");
+    const titleInput = document.getElementById("syllabiDocTitle");
+
+    // Stop auto-updating the title the moment the user types into it themselves
+    if (titleInput) {
+        titleInput.addEventListener("input", () => { syllabiTitleManuallyEdited = true; });
+    }
 
     if (collegeSel) {
         collegeSel.addEventListener("change", async function () {
@@ -2586,12 +2720,18 @@ document.addEventListener("DOMContentLoaded", () => {
             semSel.disabled = true;
             sySel.value = "";
             sySel.disabled = true;
+            updateSyllabiTitle();
+            clearSyllabiCourseRows(); 
 
             if (!this.value) return;
 
             try {
                 const programs = await fetch("/api/programs/" + this.value).then(r => r.json());
-                programs.forEach(p => programSel.add(new Option(p.program_name, p.program_id)));
+                programs.forEach(p => {
+                    const opt = new Option(p.program_name, p.program_id);
+                    opt.dataset.code = p.program_code || "";
+                    programSel.add(opt);
+                });
                 programSel.disabled = false;
             } catch (err) {
                 console.error("Failed to load programs:", err);
@@ -2605,6 +2745,8 @@ document.addEventListener("DOMContentLoaded", () => {
             semSel.disabled = !this.value;
             sySel.value = "";
             sySel.disabled = true;
+            updateSyllabiTitle();
+            clearSyllabiCourseRows(); 
         });
     }
 
@@ -2612,9 +2754,27 @@ document.addEventListener("DOMContentLoaded", () => {
         semSel.addEventListener("change", function () {
             sySel.value = "";
             sySel.disabled = !this.value;
+            updateSyllabiTitle();
+            clearSyllabiCourseRows(); 
+        });
+    }
+
+    if (sySel) {
+        sySel.addEventListener("change", function () {
+            updateSyllabiTitle();
+            autoPopulateSyllabiCourses();
         });
     }
 });
+
+function getSelectTextWithCode(id) {
+    const el = document.getElementById(id);
+    if (!el || el.selectedIndex < 0) return "";
+    const opt = el.options[el.selectedIndex];
+    const text = opt.text || "";
+    const code = opt.dataset ? opt.dataset.code : "";
+    return code ? `${text} (${code})` : text;
+}
 
 // ══════════════════════════════════════════════
 // SYLLABI WIZARD — STEP NAVIGATION
@@ -2940,6 +3100,7 @@ window.addSyllabiRow = function () {
     bindSyllabiOriginatorInput(newRow.dataset.uid);
     cascadeDrfToNewRow(newRow);
     updateSyllabiTotalCopies();
+    applySyllabiSectionLabel();
 };
 
 window.removeSyllabiGroup = function (groupId) {

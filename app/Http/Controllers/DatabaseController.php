@@ -107,7 +107,12 @@ class DatabaseController extends Controller
             $syllabiDrfIds = Syllabi::whereIn('request_id', $allDocs->pluck('request_id'))
                 ->pluck('drf_id')->filter()->unique()->values();
 
-            $allRows = $allDocs->map(function ($doc) use ($syllabiDrfIds) {
+            $syllabiCoursesByRequest = Syllabi::whereIn('request_id', $allDocs->pluck('request_id'))
+                ->orderBy('syllabi_id')
+                ->get(['request_id', 'course_name'])
+                ->groupBy('request_id');
+
+            $allRows = $allDocs->map(function ($doc) use ($syllabiDrfIds, $syllabiCoursesByRequest) {
                 $drf = null;
                 if ($doc->documentRequestForm) {
                     $isSyllabiDrf = $syllabiDrfIds->contains($doc->documentRequestForm->drf_id);
@@ -178,6 +183,8 @@ class DatabaseController extends Controller
                                             'doc_no' => $r->doc_no,
                                             'title'  => $r->doc_title,
                                         ])->values() : [],
+                    'syllabi_courses'  => ($syllabiCoursesByRequest->get($doc->request_id) ?? collect())
+                                        ->pluck('course_name')->filter()->values(),
                     'approval_no'      => $appr ? $appr->approval_no : null,
                     'approval_date'    => ($appr && $appr->approval_date) ? \Carbon\Carbon::parse($appr->approval_date)->format('M d, Y') : null,
                     'deadline_date'    => ($ml && $ml->deadline) ? \Carbon\Carbon::parse($ml->deadline)->format('M d, Y') : null,
