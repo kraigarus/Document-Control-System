@@ -1,5 +1,3 @@
-
-
 <div class="rpt-filter-overlay" id="filterOverlay"></div>
 
 <aside class="rpt-filter-panel" id="filterPanel" aria-hidden="true">
@@ -13,12 +11,9 @@
     <form id="filterForm" class="rpt-filter-form">
 
         <div class="rpt-filter-group">
-            <label>Date Range</label>
-            <div class="rpt-filter-row">
-                <input type="date" name="date_from" id="filterDateFrom">
-                <span class="rpt-filter-sep">to</span>
-                <input type="date" name="date_to" id="filterDateTo">
-            </div>
+            <label for="filterAsOf">As of</label>
+            <input type="date" name="as_of" id="filterAsOf">
+            <small class="rpt-filter-hint">Report covers the 6 months up to this date</small>
         </div>
 
         @if(isset($originators))
@@ -47,12 +42,10 @@
 
         <div class="rpt-filter-group">
             <label for="filterStatus">Status</label>
-            <select name="status" id="filterStatus">
-                <option value="">All Statuses</option>
-                <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
-                <option value="released">Released</option>
-                <option value="rejected">Rejected</option>
+            <select name="revision_status" id="filterStatus">
+                <option value="all">All</option>
+                <option value="latest">Latest</option>
+                <option value="obsolete">Obsolete</option>
             </select>
         </div>
 
@@ -75,16 +68,6 @@
                 @foreach($subTypes as $sub)
                     <option value="{{ $sub->doc_type_id }}">{{ $sub->doc_type_name }}</option>
                 @endforeach
-            </select>
-        </div>
-        @endif
-
-        @if(isset($showRevisionScope) && $showRevisionScope)
-        <div class="rpt-filter-group">
-            <label for="filterRevisionScope">Revision Scope</label>
-            <select name="revision_scope" id="filterRevisionScope">
-                <option value="">All Documents</option>
-                <option value="obsolete">Has Obsolete Revisions</option>
             </select>
         </div>
         @endif

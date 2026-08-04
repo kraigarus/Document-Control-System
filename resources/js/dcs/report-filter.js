@@ -1,6 +1,7 @@
 // resources/js/dcs/report-filter.js
 
-const BASE_FILTER_KEYS = ['date_from', 'date_to', 'originator', 'source_unit', 'status', 'rev_no'];
+const BASE_FILTER_KEYS = ['as_of', 'originator', 'source_unit', 'revision_status', 'rev_no'];
+
 
 export function initFilterPanel({ onApply, onClear, extraKeys = [] } = {}) {
     const FILTER_KEYS = [...BASE_FILTER_KEYS, ...extraKeys];
@@ -38,6 +39,7 @@ export function initFilterPanel({ onApply, onClear, extraKeys = [] } = {}) {
     }
 
     function close() {
+        openBtn?.focus();  
         panel.classList.remove('open');
         panel.setAttribute('aria-hidden', 'true');
         overlay?.classList.remove('visible');
@@ -57,7 +59,11 @@ export function initFilterPanel({ onApply, onClear, extraKeys = [] } = {}) {
 
     function updateBadge() {
         if (!badge) return;
-        const count = Object.values(state).filter(v => v !== '').length;
+        const count = Object.entries(state).filter(([k, v]) => {
+            if (v === '') return false;
+            if (k === 'revision_status' && v === 'all') return false;  // ← updated key
+            return true;
+        }).length;
         if (count > 0) {
             badge.textContent = String(count);
             badge.classList.add('visible');

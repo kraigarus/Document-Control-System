@@ -163,6 +163,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('filterRevNo').value = '';
         if (document.getElementById('filterSubType')) document.getElementById('filterSubType').value = 'all';
         if (document.getElementById('filterRevisionScope')) document.getElementById('filterRevisionScope').value = 'all';
+        if (document.getElementById('filterRevisionStatus')) document.getElementById('filterRevisionStatus').value = 'all';
     });
 
     document.getElementById('applyFilterBtn').addEventListener('click', () => {
@@ -188,6 +189,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const revNo = document.getElementById('filterRevNo').value.trim();
         const subType = document.getElementById('filterSubType')?.value;
         const revisionScope = document.getElementById('filterRevisionScope')?.value;
+        const revisionStatus = document.getElementById('filterRevisionStatus')?.value;
         if (originator) p.originator = originator;
         if (sourceUnit) p.source_unit = sourceUnit;
         if (status) p.status = status;
@@ -196,6 +198,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (revNo) p.rev_no = revNo;
         if (subType && subType !== 'all') p.sub_type_id = subType;
         if (revisionScope && revisionScope !== 'all') p.revision_scope = revisionScope;
+        if (revisionStatus && revisionStatus !== 'all') p.revision_status = revisionStatus;
+        
         return p;
     }
 

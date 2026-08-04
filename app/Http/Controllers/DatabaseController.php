@@ -251,6 +251,15 @@ class DatabaseController extends Controller
                 $groups = $groups->filter(fn ($g) => $wantObsoleteOnly ? $g['has_revisions'] : true)->values();
             }
 
+            if ($request->filled('revision_status') && $request->input('revision_status') !== 'all') {
+                $wantLatest = $request->input('revision_status') === 'latest';
+                if ($wantLatest) {
+                    $groups = $groups->map(fn ($g) => [...$g, 'children' => collect()])->values();
+                } else {
+                    $groups = $groups->filter(fn ($g) => $g['has_revisions'])->values();
+                }
+            }
+
             $categoryOrder = [
                 'internal'         => 0,
                 'internal forms'   => 1,

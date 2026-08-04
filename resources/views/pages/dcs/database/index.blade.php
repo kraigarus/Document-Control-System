@@ -64,6 +64,14 @@
         </select>
     </div>
     <div class="db-filter-group">
+        <label>Revision Status</label>
+        <select id="filterRevisionStatus">
+            <option value="all">All</option>
+            <option value="latest">Latest Only</option>
+            <option value="obsolete">Obsolete Only</option>
+        </select>
+    </div>
+    <div class="db-filter-group">
         <label>Effectivity Date From</label>
         <input type="date" id="filterDateFrom">
     </div>

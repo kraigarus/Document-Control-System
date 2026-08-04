@@ -134,10 +134,11 @@ class ReportController extends Controller
             $dateTo   = $request->input('date_to');
 
             $filters = [
-                'originator'  => $request->input('originator'),
-                'source_unit' => $request->input('source_unit'),
-                'status'      => $request->input('status'),
-                'rev_no'      => $request->input('rev_no'),
+                'originator'       => $request->input('originator'),
+                'source_unit'      => $request->input('source_unit'),
+                'status'           => $request->input('status'),
+                'rev_no'           => $request->input('rev_no'),
+                'revision_status'  => $request->input('revision_status'),  // ← ADD
             ];
 
             if (!$category) {
@@ -256,6 +257,30 @@ class ReportController extends Controller
                     ? '/storage/' . $ml->scanned_masterlist : null,
             ];
         })->filter()->values();
+
+        $revisionStatus = $filters['revision_status'] ?? null;
+        if ($revisionStatus && $revisionStatus !== 'all') {
+            $grouped = $rows->groupBy('doc_no');
+
+            if ($revisionStatus === 'latest') {
+                // Keep only the highest rev_no per doc_no
+                $rows = $grouped->map(function ($group) {
+                    return $group->sortByDesc('rev_no')->first();
+                })->values();
+            } else {
+                // Obsolete: keep everything EXCEPT the latest per doc_no
+                $rows = $grouped->flatMap(function ($group) {
+                    if ($group->count() <= 1) return collect();
+                    return $group->sortByDesc('rev_no')->slice(1);
+                })->values();
+            }
+
+            // Re-number items
+            $rows = $rows->map(function ($row, $i) {
+                $row['item_no'] = $i + 1;
+                return $row;
+            })->values();
+        }
 
         $columns = [
             'item_no'          => 'ITEM NO.',
@@ -1021,10 +1046,11 @@ class ReportController extends Controller
         $format   = $request->get('format', 'html');
 
         $filters = [
-            'originator'  => $request->get('originator'),
-            'source_unit' => $request->get('source_unit'),
-            'status'      => $request->get('status'),
-            'rev_no'      => $request->get('rev_no'),
+            'originator'       => $request->get('originator'),
+            'source_unit'      => $request->get('source_unit'),
+            'status'           => $request->get('status'),
+            'rev_no'           => $request->get('rev_no'),
+            'revision_status'  => $request->get('revision_status'),  // ← ADD
         ];
         
         if (!$category) {

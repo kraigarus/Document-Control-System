@@ -699,19 +699,6 @@ td.sticky-col-4::after {
 /* ═══════════════════════════════════
    SYLLABI / TOS-RUBRICS — COURSES SUB-ROW (collapsible)
    ═══════════════════════════════════ */
-.db-courses-row td {
-    padding: 6px 16px 6px 40px;
-    background: var(--db-bg) !important;
-    border-bottom: 1px solid var(--db-border);
-    border-right: none;
-    white-space: normal;
-}
-
-.db-child-courses-row td {
-    padding-left: 54px;
-    background: #f5f6f8 !important;
-}
-
 .db-courses-toggle {
     display: inline-flex;
     align-items: center;
@@ -773,8 +760,36 @@ td.sticky-col-4::after {
     font-weight: 500;
     white-space: normal;
 }
-.db-table tbody tr.db-courses-row:hover td {
-    background: #eef1f5 !important;
+
+.db-courses-list {
+    margin-top: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.db-course-chip {
+    display: block;
+    background: transparent;
+    color: var(--db-text);
+    border: none;
+    padding: 2px 0;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: normal;
+}
+
+.db-courses-row td {
+    padding: 6px 16px 6px 270px;   /* was 40px — now aligns under Document Title */
+    background: var(--db-bg) !important;
+    border-bottom: 1px solid var(--db-border);
+    border-right: none;
+    white-space: normal;
+}
+
+.db-child-courses-row td {
+    padding-left: 270px;   /* keep aligned; drop the extra +14 offset */
+    background: #f5f6f8 !important;
 }
 
 /* ── Tablets ── */
@@ -869,10 +884,6 @@ td.sticky-col-4::after {
     .db-table { font-size: 11px; }
     .db-table th, .db-table td { padding: 6px 8px; }
 
-    .db-courses-row td,
-    .db-child-courses-row td {
-        padding-left: 20px;
-    }
     .db-course-chip {
         font-size: 10px;
         padding: 1px 8px;
