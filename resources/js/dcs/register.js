@@ -4,6 +4,7 @@ let allOriginators = [];
 let syllabiGroupCounter = 0;
 let syllabiCurrentStep = 1;
 let syllabiRowUidCounter = 0;
+let allFaculties = [];
 let relatedDocsCache = [];
 let relatedDocsSelected = window.__existingRelatedDocs || [];
 let relatedDocsSelectedPanelOpen = false;
@@ -13,6 +14,7 @@ let revSearchCache = {};
 let revSearchTimers = {};
 window.__isSyllabiMode = false;
 window.__syllabiModeLabel = 'Syllabi';
+window.__syllabiFaculty = window.__syllabiFaculty || {};
 
 const SYLLABI_LIKE_SUBTYPE_IDS = [11, 12];
 function isSyllabiLikeSubType(subTypeId) {
@@ -155,17 +157,19 @@ function tableIsEmpty(tbodyId) {
 document.addEventListener("DOMContentLoaded", async function () {
     // ── Fetch dropdown data ──
     try {
-        const [offices, docTypes, versionTypes, approvalBodies, originators] = await Promise.all([
+        const [offices, docTypes, versionTypes, approvalBodies, originators, faculties] = await Promise.all([
             fetch("/api/offices").then(r => r.json()),
             fetch("/api/doc-types").then(r => r.json()),
             fetch("/api/version-types").then(r => r.json()),
             fetch("/api/approval-bodies").then(r => r.json()),
             fetch("/api/originators").then(r => r.json()),
+            fetch("/api/faculties").then(r => r.json()),
         ]);
 
         allOffices = offices;
         allDocTypes = docTypes;
         allOriginators = originators;
+        allFaculties = faculties;
 
         const versionSelect = document.getElementById("versionType");
         versionTypes.forEach(v => versionSelect.add(new Option(v.version_name, v.version_id)));
@@ -1605,7 +1609,7 @@ function bindTableFileInput(fileInput) {
 function resetSyllabiSection() {
     const syllabiBody = document.getElementById('syllabiTableBody');
     if (syllabiBody) {
-        syllabiBody.querySelectorAll('tr[data-uid]').forEach(tr => removeSyllabiOriginatorDropdown(tr.dataset.uid));
+        syllabiBody.querySelectorAll('tr[data-uid]').forEach(tr => removeSyllabiFacultyPicker(tr.dataset.uid));
         syllabiBody.innerHTML = '';
         syllabiGroupCounter = 0;
     }
@@ -1772,6 +1776,9 @@ function unlockChecklist() {
     showFormActions();
     enableApproval();
     setTimeout(initFileInputs, 100);
+
+    const saveBtn = document.getElementById("btnSaveDocument");
+    if (saveBtn) saveBtn.style.display = ""; 
 }
 
 // ══════════════════════════════════════════════
@@ -2043,6 +2050,63 @@ function collectMissingFields() {
         if (!el.value || !el.value.trim()) missing.push(sectionLabel + ": " + label);
     };
 
+    const sectionSyllabi = document.getElementById("section-syllabi");
+    if (sectionSyllabi && sectionSyllabi.style.display !== "none") {
+        checkText("Syllabi", "syllabiCollege", "College");
+        checkText("Syllabi", "syllabiProgram", "Program");
+        checkText("Syllabi", "syllabiSemester", "Semester");
+        checkText("Syllabi", "syllabiSchoolYear", "School Year");
+        checkText("Syllabi", "syllabiDocNo", "Document No.");
+        checkText("Syllabi", "syllabiDocTitle", "Document Title");
+        checkText("Syllabi", "syllabiEffectivityDate", "Effectivity Date");
+        checkText("Syllabi", "syllabiDeadline", "Deadline");
+
+        // ── Group-level fields (shared across a course's copies — checked once per group) ──
+        document.querySelectorAll("#syllabiTableBody tr[data-is-first='true']").forEach((row) => {
+            const courseInput = row.querySelector('.syllabi-merged-course');
+            const courseVal = courseInput ? courseInput.value.trim() : '';
+            const groupLabel = courseVal || ("Syllabi — Course " + (row.dataset.group || ''));
+
+            if (!courseVal) missing.push("Syllabi: Course Name (" + (row.dataset.group || 'unnamed') + ")");
+
+            const pages = row.querySelector('.syllabi-merged-pages');
+            if (!pages || !pages.value) missing.push(groupLabel + ": No. of Pages");
+
+            const availability = row.querySelector('.syllabi-merged-availability-hidden');
+            if (!availability || availability.value !== 'available') missing.push(groupLabel + ": Syllabi Availability");
+        });
+
+        // ── Per-row (per-copy) fields — every row in the table, first row or continuation ──
+        document.querySelectorAll("#syllabiTableBody tr[data-uid]").forEach((row) => {
+            const group = row.dataset.group;
+            const copyNo = row.dataset.copyNo || "1";
+            const courseInput = document.querySelector(`#syllabiTableBody tr[data-group="${group}"][data-is-first="true"] .syllabi-merged-course`);
+            const courseVal = courseInput && courseInput.value.trim() ? courseInput.value.trim() : ("Course " + group);
+            const rowLabel = courseVal + " (Copy " + copyNo + ")";
+
+            const dateReceived = row.querySelector('input[name="syllabiDateReceived[]"]');
+            if (!dateReceived || !dateReceived.value) missing.push(rowLabel + ": Date Received");
+
+            const timeReceived = row.querySelector('input[name="syllabiTimeReceived[]"]');
+            if (!timeReceived || !timeReceived.value) missing.push(rowLabel + ": Time Received");
+
+            const facultyHidden = document.getElementById('syllabiFacultyHidden_' + row.dataset.uid);
+            if (!facultyHidden || !facultyHidden.value.trim()) missing.push(rowLabel + ": Faculty");
+
+            const drfNo = row.querySelector('input[name="syllabiDrfNo[]"]');
+            if (!drfNo || !drfNo.value.trim()) missing.push(rowLabel + ": DRF No.");
+
+            const drfDate = row.querySelector('input[name="syllabiDrfDate[]"]');
+            if (!drfDate || !drfDate.value) missing.push(rowLabel + ": DRF Date");
+
+            const drfReceived = row.querySelector('input[name="syllabiDrfReceived[]"]');
+            if (!drfReceived || !drfReceived.value) missing.push(rowLabel + ": DRF Received Date");
+
+            const scannedDrf = row.querySelector('input[name="syllabiScannedDrf[]"]');
+            if (!scannedDrf || !scannedDrf.files || scannedDrf.files.length === 0) missing.push(rowLabel + ": Scanned DRF");
+        });
+    }
+
     if (sectionVisible("section-1")) {
         checkText("DRF", "drfNo", "DRF No.");
         checkText("DRF", "drfDate", "DRF Date");
@@ -2106,32 +2170,6 @@ function collectMissingFields() {
         if (document.querySelectorAll("#distBody input[type='hidden']").length === 0) {
             missing.push("Distribution: At least one office");
         }
-    }
-
-    const sectionSyllabi = document.getElementById("section-syllabi");
-    if (sectionSyllabi && sectionSyllabi.style.display !== "none") {
-        checkText("Syllabi", "syllabiCollege", "College");
-        checkText("Syllabi", "syllabiProgram", "Program");
-        checkText("Syllabi", "syllabiSemester", "Semester");
-        checkText("Syllabi", "syllabiSchoolYear", "School Year");
-        checkText("Syllabi", "syllabiDocNo", "Document No.");
-        checkText("Syllabi", "syllabiDocTitle", "Document Title");
-        checkText("Syllabi", "syllabiEffectivityDate", "Effectivity Date");
-        checkText("Syllabi", "syllabiDeadline", "Deadline");
-
-        document.querySelectorAll("#syllabiTableBody tr").forEach((row, idx) => {
-            const course = row.querySelector('input[name="syllabiCourseName[]"]');
-            const rowLabel = "Syllabi Row " + (idx + 1);
-            if (!course || !course.value.trim()) missing.push(rowLabel + ": Course Name");
-            const pages = row.querySelector('input[name="syllabiNoPages[]"]');
-            if (!pages || !pages.value) missing.push(rowLabel + ": No. of Pages");
-            const drfNo = row.querySelector('input[name="syllabiDrfNo[]"]');
-            if (!drfNo || !drfNo.value.trim()) missing.push(rowLabel + ": DRF No.");
-            const drfDate = row.querySelector('input[name="syllabiDrfDate[]"]');
-            if (!drfDate || !drfDate.value) missing.push(rowLabel + ": DRF Date");
-            const drfReceived = row.querySelector('input[name="syllabiDrfReceived[]"]');
-            if (!drfReceived || !drfReceived.value) missing.push(rowLabel + ": DRF Received Date");
-        });
     }
 
     return missing;
@@ -2402,20 +2440,25 @@ function buildSyllabiRowsReview(reviewContent) {
     const ss = document.getElementById("section-syllabi");
     if (!ss || ss.style.display === "none") return;
 
-    document.querySelectorAll("#syllabiTableBody tr").forEach((r) => {
+    document.querySelectorAll("#syllabiTableBody tr[data-is-first='true']").forEach((r) => {
         const course = r.querySelector('input[name="syllabiCourseName[]"]');
         if (!course || !course.value.trim()) return;
 
-        const pages = r.querySelector('input[name="syllabiNoPages[]"]');
-        const originator = r.querySelector('input[name="syllabiOriginator[]"]');
+        const pages = r.querySelector('.syllabi-merged-pages');
         const drfAvail = r.querySelector('.syllabi-hidden-toggle[name="syllabiDrfAvailability[]"]');
         const drfNo = r.querySelector('input[name="syllabiDrfNo[]"]');
         const drfDate = r.querySelector('input[name="syllabiDrfDate[]"]');
         const drfReceived = r.querySelector('input[name="syllabiDrfReceived[]"]');
 
+        const group = r.dataset.group;
+        const facultyNames = [...document.querySelectorAll(`#syllabiTableBody tr[data-group="${group}"]`)]
+            .map(row => document.getElementById('syllabiFacultyHidden_' + row.dataset.uid)?.value)
+            .filter(Boolean)
+            .join('; ');
+
         addReviewSection(reviewContent, "Syllabi — " + course.value.trim(), [
             { label: "No. of Pages", value: pages?.value || "" },
-            { label: "Originator", value: originator?.value?.trim() || null },
+            { label: "Faculty", value: facultyNames || null },
             { label: "DRF Availability", value: drfAvail?.value === 'available' ? 'Available' : 'Not Available' },
             { label: "DRF No.", value: drfNo?.value?.trim() || "" },
             { label: "DRF Date", value: fmtDateValue(drfDate?.value) },
@@ -2605,6 +2648,10 @@ function updateSyllabiTitle() {
     if (!college || !program || !semester || !schoolYr) return;
 
     titleInput.value = college + ' ' + label + ' for ' + program + ', ' + semester + ', ' + formatSchoolYearText(schoolYr);
+
+    // Keep Masterlist Doc Title mirrored — programmatic value changes don't fire 'input'
+    const mlTitle = document.getElementById('masterlistDocTitle');
+    if (mlTitle) mlTitle.value = titleInput.value;
 }
 
 // ══════════════════════════════════════════════
@@ -2660,7 +2707,7 @@ async function autoPopulateSyllabiCourses() {
             .some(inp => inp.value.trim() !== '' && inp.dataset.autoFilled !== 'true');
         if (hasManualData) return;
 
-        tbody.querySelectorAll('tr[data-uid]').forEach(tr => removeSyllabiOriginatorDropdown(tr.dataset.uid));
+        tbody.querySelectorAll('tr[data-uid]').forEach(tr => removeSyllabiFacultyPicker(tr.dataset.uid));
         tbody.innerHTML = '';
         syllabiGroupCounter = 0;
 
@@ -2675,16 +2722,16 @@ async function autoPopulateSyllabiCourses() {
                 courseInput.value = c.course_name;
                 courseInput.dataset.autoFilled = 'true';
                 courseInput.title = 'Loaded from Settings → Course Names';
+                autosizeSyllabiCourse(courseInput);
                 // if the user edits it, treat it as manual from then on
                 courseInput.addEventListener('input', () => { courseInput.dataset.autoFilled = 'false'; });
             }
 
-            bindSyllabiOriginatorInput(newRow.dataset.uid);
             cascadeDrfToNewRow(newRow);
             syncSyllabiMergedFields(groupId);
         });
 
-        updateSyllabiTotalCopies();
+        updateSyllabiTotals();
         applySyllabiSectionLabel();
     } catch (err) {
         console.error('Failed to auto-populate syllabi courses:', err);
@@ -2694,10 +2741,10 @@ async function autoPopulateSyllabiCourses() {
 function clearSyllabiCourseRows() {
     const tbody = document.getElementById('syllabiTableBody');
     if (!tbody) return;
-    tbody.querySelectorAll('tr[data-uid]').forEach(tr => removeSyllabiOriginatorDropdown(tr.dataset.uid));
+    tbody.querySelectorAll('tr[data-uid]').forEach(tr => removeSyllabiFacultyPicker(tr.dataset.uid));
     tbody.innerHTML = '';
     syllabiGroupCounter = 0;
-    updateSyllabiTotalCopies();
+    updateSyllabiTotals();
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -2792,19 +2839,21 @@ function setSyllabiStep(step) {
 
     const backBtn = document.getElementById("syllabiBackBtn");
     const nextBtn = document.getElementById("syllabiNextBtn");
+    const addBtn = document.getElementById("btnAddSyllabiRow");
+
     if (backBtn) backBtn.style.display = step === 1 ? "none" : "";
     if (nextBtn) {
-        nextBtn.innerHTML = step === 3
-            ? '<i class="fa-solid fa-check"></i> Review &amp; Confirm'
-            : 'Next <i class="fa-solid fa-arrow-right"></i>';
+        // Step 2 is the last wizard step — no more "save" trigger up here.
+        // Saving now only happens via btnSaveDocument at the bottom of the page.
+        nextBtn.style.display = step === 2 ? "none" : "";
+        nextBtn.innerHTML = 'Next <i class="fa-solid fa-arrow-right"></i>';
     }
+    if (addBtn) addBtn.style.display = step === 1 ? "" : "none";
 }
 
 window.syllabiStepNext = function () {
-    if (syllabiCurrentStep < 3) {
+    if (syllabiCurrentStep < 2) {
         setSyllabiStep(syllabiCurrentStep + 1);
-    } else {
-        confirmSave(); // opens the shared review modal
     }
 };
 
@@ -2813,31 +2862,188 @@ window.syllabiStepBack = function () {
 };
 
 // ══════════════════════════════════════════════
-// SYLLABI ROW BUILDER
+// SYLLABI — FACULTY PICKER (per row, single or multi depending on copies)
 // ══════════════════════════════════════════════
-// ══════════════════════════════════════════════
-// SYLLABI ROW BUILDER (merged-cell groups)
-// ══════════════════════════════════════════════
+window.__syllabiFaculty = window.__syllabiFaculty || {};
 
-function buildSyllabiOriginatorCellHTML(uid) {
+function buildSyllabiFacultyCellHTML(uid) {
     return `
-        <div class="syllabi-originator-wrap" style="position:relative;">
-            <input type="text" name="syllabiOriginator[]" id="syllabiOriginatorInput_${uid}"
-                class="syllabi-originator-input" placeholder="Type a name" autocomplete="off">
+        <div class="syllabi-faculty-wrap" id="syllabiFacultyWrap_${uid}" style="position:relative;">
+            <input type="hidden" name="syllabiFaculty[]" id="syllabiFacultyHidden_${uid}">
+            <input type="text" id="syllabiFacultyInput_${uid}" class="syllabi-faculty-input"
+                placeholder="Type a faculty name" autocomplete="off">
+            <div id="syllabiFacultyChips_${uid}" class="syllabi-faculty-chips"></div>
         </div>
     `;
 }
 
-/** Cells shared by every copy-row: originator through registration upload. */
-function buildSyllabiPerRowCells(uid, mirrorHiddenHTML = '') {
+/** mode: 'single' (copies > 1) or 'multi' (copies === 1, shared syllabi) */
+function initSyllabiFacultyPicker(uid, mode) {
+    window.__syllabiFaculty[uid] = { mode, selected: [] };
+    bindSyllabiFacultyInput(uid);
+    renderSyllabiFacultyChips(uid);
+}
+
+function setSyllabiFacultyMode(uid, mode) {
+    if (!window.__syllabiFaculty[uid]) {
+        initSyllabiFacultyPicker(uid, mode);
+        return;
+    }
+    window.__syllabiFaculty[uid].mode = mode;
+    if (mode === 'single' && window.__syllabiFaculty[uid].selected.length > 1) {
+        window.__syllabiFaculty[uid].selected = window.__syllabiFaculty[uid].selected.slice(0, 1);
+    }
+    renderSyllabiFacultyChips(uid);
+}
+
+function bindSyllabiFacultyInput(uid) {
+    const input = document.getElementById('syllabiFacultyInput_' + uid);
+    if (!input || input.dataset.bound) return;
+    input.dataset.bound = 'true';
+
+    input.addEventListener('input', () => renderSyllabiFacultyDropdown(uid, input));
+    input.addEventListener('focus', () => renderSyllabiFacultyDropdown(uid, input));
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ',') {
+            e.preventDefault();
+            const val = input.value.trim().replace(/,$/, '');
+            if (val) addSyllabiFaculty(uid, val);
+        }
+    });
+
+    const reposition = () => {
+        const dd = document.getElementById('syllabiFacultyDropdown_' + uid);
+        if (dd && dd.style.display === 'block') positionFixedDropdown(dd, input);
+    };
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+}
+
+function getOrCreateSyllabiFacultyDropdown(uid) {
+    let dd = document.getElementById('syllabiFacultyDropdown_' + uid);
+    if (!dd) {
+        dd = document.createElement('div');
+        dd.id = 'syllabiFacultyDropdown_' + uid;
+        dd.className = 'reg-reldocs-dropdown';
+        dd.style.display = 'none';
+        document.body.appendChild(dd);
+    }
+    return dd;
+}
+
+function renderSyllabiFacultyDropdown(uid, input) {
+    const state = window.__syllabiFaculty[uid];
+    if (!state) return;
+    if (state.mode === 'single' && state.selected.length >= 1) {
+        closeSyllabiFacultyDropdown(uid);
+        return; // single mode: no more picks until current one is removed
+    }
+
+    const dd = getOrCreateSyllabiFacultyDropdown(uid);
+    const q = input.value.trim().toLowerCase();
+    if (q.length < 1) { dd.style.display = 'none'; return; }
+
+    const matches = allFaculties.filter(f =>
+        f.faculty_name.toLowerCase().includes(q) &&
+        !state.selected.some(s => s.label.toLowerCase() === f.faculty_name.toLowerCase())
+    );
+
+    dd.innerHTML = matches.length === 0
+        ? '<div class="reg-reldocs-noresult">No matching faculty found — press Enter to add "' + input.value.trim() + '"</div>'
+        : matches.map(f => `<div onmousedown="addSyllabiFaculty('${uid}', '${f.faculty_name.replace(/'/g, "\\'")}')">${f.faculty_name}</div>`).join('');
+
+    positionFixedDropdown(dd, input);
+    dd.style.display = 'block';
+}
+
+function closeSyllabiFacultyDropdown(uid) {
+    const dd = document.getElementById('syllabiFacultyDropdown_' + uid);
+    if (dd) dd.style.display = 'none';
+}
+
+window.addSyllabiFaculty = function (uid, name) {
+    const state = window.__syllabiFaculty[uid];
+    if (!state || !name) return;
+
+    if (state.mode === 'single') {
+        state.selected = [{ label: name }];
+    } else {
+        if (state.selected.length >= 2) return; // ← cap shared syllabi at 2
+        if (!state.selected.some(s => s.label.toLowerCase() === name.toLowerCase())) {
+            state.selected.push({ label: name });
+        }
+    }
+
+    const input = document.getElementById('syllabiFacultyInput_' + uid);
+    if (input) input.value = '';
+    closeSyllabiFacultyDropdown(uid);
+    renderSyllabiFacultyChips(uid);
+};
+
+window.removeSyllabiFaculty = function (uid, idx) {
+    const state = window.__syllabiFaculty[uid];
+    if (!state) return;
+    state.selected.splice(idx, 1);
+    renderSyllabiFacultyChips(uid);
+};
+
+function renderSyllabiFacultyChips(uid) {
+    const state = window.__syllabiFaculty[uid];
+    const chipsEl = document.getElementById('syllabiFacultyChips_' + uid);
+    const hidden = document.getElementById('syllabiFacultyHidden_' + uid);
+    const input = document.getElementById('syllabiFacultyInput_' + uid);
+    if (!state || !chipsEl || !hidden) return;
+
+    hidden.value = state.selected.map(s => s.label).join(', ');
+
+    chipsEl.innerHTML = state.selected.map((s, idx) => `
+        <span class="reg-inline-chip">
+            <span>${s.label}</span>
+            <button type="button" onclick="removeSyllabiFaculty('${uid}', ${idx})"><i class="fa-solid fa-xmark"></i></button>
+        </span>
+    `).join('');
+
+    if (input) {
+        const locked = state.mode === 'single' && state.selected.length >= 1;
+        input.style.display = locked ? 'none' : '';
+        input.placeholder = state.mode === 'multi'
+            ? 'Add faculty (shared copy) — press Enter'
+            : 'Type a faculty name';
+    }
+}
+
+function removeSyllabiFacultyPicker(uid) {
+    delete window.__syllabiFaculty[uid];
+    const dd = document.getElementById('syllabiFacultyDropdown_' + uid);
+    if (dd) dd.remove();
+}
+
+// Close faculty dropdowns on outside click
+document.addEventListener('click', function (e) {
+    document.querySelectorAll('[id^="syllabiFacultyDropdown_"]').forEach(dd => {
+        const uid = dd.id.replace('syllabiFacultyDropdown_', '');
+        const input = document.getElementById('syllabiFacultyInput_' + uid);
+        if (dd.style.display === 'block' && !dd.contains(e.target) && e.target !== input) {
+            dd.style.display = 'none';
+        }
+    });
+});
+
+// Faculty is now its own cell builder, separate from the rest of the per-row cells
+function buildSyllabiFacultyTd(uid, mirrorHiddenHTML = '') {
     return `
-        <td class="col-step1">
+        <td class="col-shared">
             ${mirrorHiddenHTML}
-            ${buildSyllabiOriginatorCellHTML(uid)}
+            ${buildSyllabiFacultyCellHTML(uid)}
         </td>
-        <td class="col-step1"><input type="number" name="syllabiNoPages[]" min="0" placeholder="0"></td>
-        <td class="col-step1"><input type="date" name="syllabiDateReceived[]" oninput="calcSyllabiRowTimeSpent(this.closest('tr'))"></td>
-        <td class="col-step1"><input type="time" name="syllabiTimeReceived[]" oninput="calcSyllabiRowTimeSpent(this.closest('tr'))"></td>
+    `;
+}
+
+// buildSyllabiPerRowCells no longer includes Faculty
+function buildSyllabiPerRowCells(uid) {
+    return `
+        <td class="col-step1"><input type="date" name="syllabiDateReceived[]" ></td>
+        <td class="col-step1"><input type="time" name="syllabiTimeReceived[]" ></td>
 
         <td class="col-step2 syllabi-check-cell">
             <input type="hidden" name="syllabiDrfAvailability[]" value="not available" class="syllabi-hidden-toggle">
@@ -2846,20 +3052,9 @@ function buildSyllabiPerRowCells(uid, mirrorHiddenHTML = '') {
         <td class="col-step2"><input type="text" name="syllabiDrfNo[]" placeholder="Enter DRF No."></td>
         <td class="col-step2"><input type="date" name="syllabiDrfDate[]" oninput="cascadeSyllabiField(this, 'syllabiDrfDate[]')"></td>
         <td class="col-step2"><input type="date" name="syllabiDrfReceived[]" oninput="cascadeSyllabiField(this, 'syllabiDrfReceived[]')"></td>
-
-        <td class="col-step3 syllabi-check-cell">
-            <input type="hidden" name="syllabiIsRegistered[]" value="not registered" class="syllabi-hidden-toggle">
-            <input type="checkbox" onchange="toggleSyllabiRegFields(this)">
-        </td>
-        <td class="col-step3"><input type="date" name="syllabiRegDate[]" disabled oninput="calcSyllabiRowTimeSpent(this.closest('tr'))"></td>
-        <td class="col-step3"><input type="time" name="syllabiRegTime[]" disabled oninput="calcSyllabiRowTimeSpent(this.closest('tr'))"></td>
-        <td class="col-step3">
-            <input type="text" class="syllabi-time-spent-display" readonly placeholder="--" style="background:#f8fafc;text-align:center;">
-            <input type="hidden" name="syllabiTimeSpent[]">
-        </td>
-        <td class="col-step3">
+        <td class="col-step2">
             <label class="reg-upload-cell">
-                <input type="file" name="syllabiScannedRegistration[]" accept=".pdf,.docx">
+                <input type="file" name="syllabiScannedDrf[]" accept=".pdf,.docx">
                 <i class="fa-solid fa-cloud-arrow-up"></i>
                 <span>No file chosen</span>
             </label>
@@ -2867,8 +3062,6 @@ function buildSyllabiPerRowCells(uid, mirrorHiddenHTML = '') {
     `;
 }
 
-/** Positions a fixed-position dropdown directly under its input, escaping
- *  any parent's overflow/scroll clipping (this is what kills the double-scrollbar bug). */
 /** Positions a fixed-position dropdown directly under its input. Since it lives
  *  in document.body, no transformed/filtered ancestor can hijack the fixed positioning. */
 function positionFixedDropdown(dropdownEl, inputEl) {
@@ -2881,85 +3074,6 @@ function positionFixedDropdown(dropdownEl, inputEl) {
     dropdownEl.style.overflowY = 'auto';
     dropdownEl.style.zIndex = 9999;
 }
-
-function getOrCreateSyllabiOriginatorDropdown(uid) {
-    let dd = document.getElementById('syllabiOriginatorDropdown_' + uid);
-    if (!dd) {
-        dd = document.createElement('div');
-        dd.id = 'syllabiOriginatorDropdown_' + uid;
-        dd.className = 'reg-reldocs-dropdown';
-        dd.style.display = 'none';
-        document.body.appendChild(dd);
-    }
-    return dd;
-}
-
-function closeSyllabiOriginatorDropdown(uid) {
-    const dd = document.getElementById('syllabiOriginatorDropdown_' + uid);
-    if (dd) dd.style.display = 'none';
-}
-
-function renderSyllabiOriginatorDropdown(uid) {
-    const input = document.getElementById('syllabiOriginatorInput_' + uid);
-    const dd = getOrCreateSyllabiOriginatorDropdown(uid);
-    if (!input) return;
-
-    const q = input.value.trim().toLowerCase();
-    if (q.length < 1) { dd.style.display = 'none'; return; }
-
-    const matches = allOriginators.filter(o => o.originator_name.toLowerCase().includes(q));
-
-    if (matches.length === 0) {
-        dd.innerHTML = '<div class="reg-reldocs-noresult">No matching originators found</div>';
-    } else {
-        dd.innerHTML = matches.map(o =>
-            `<div onmousedown="pickSyllabiOriginator('${uid}', '${o.originator_name.replace(/'/g, "\\'")}')">${o.originator_name}</div>`
-        ).join('');
-    }
-
-    positionFixedDropdown(dd, input);
-    dd.style.display = 'block';
-}
-
-window.pickSyllabiOriginator = function (uid, name) {
-    const input = document.getElementById('syllabiOriginatorInput_' + uid);
-    if (input) input.value = name;
-    closeSyllabiOriginatorDropdown(uid);
-};
-
-/** Wire a row's originator input once it's attached to the DOM. */
-function bindSyllabiOriginatorInput(uid) {
-    const input = document.getElementById('syllabiOriginatorInput_' + uid);
-    if (!input || input.dataset.bound) return;
-    input.dataset.bound = 'true';
-
-    input.addEventListener('input', () => renderSyllabiOriginatorDropdown(uid));
-    input.addEventListener('focus', () => renderSyllabiOriginatorDropdown(uid));
-
-    const reposition = () => {
-        const dd = document.getElementById('syllabiOriginatorDropdown_' + uid);
-        if (dd && dd.style.display === 'block') positionFixedDropdown(dd, input);
-    };
-    window.addEventListener('scroll', reposition, true);
-    window.addEventListener('resize', reposition);
-}
-
-/** Remove the body-attached dropdown when its row is deleted, so it doesn't linger orphaned. */
-function removeSyllabiOriginatorDropdown(uid) {
-    const dd = document.getElementById('syllabiOriginatorDropdown_' + uid);
-    if (dd) dd.remove();
-}
-
-// Close any open syllabi-originator dropdown on outside click
-document.addEventListener('click', function (e) {
-    document.querySelectorAll('[id^="syllabiOriginatorDropdown_"]').forEach(dd => {
-        const uid = dd.id.replace('syllabiOriginatorDropdown_', '');
-        const input = document.getElementById('syllabiOriginatorInput_' + uid);
-        if (dd.style.display === 'block' && !dd.contains(e.target) && e.target !== input) {
-            dd.style.display = 'none';
-        }
-    });
-});
 
 // ══════════════════════════════════════════════
 // SYLLABI — DRF DATE CASCADE + TOTAL COPIES
@@ -2994,15 +3108,32 @@ function cascadeDrfToNewRow(newRow) {
     });
 }
 
-/** Update the total copies display below the syllabi table. */
-function updateSyllabiTotalCopies() {
-    let total = 0;
-    // Only count the visible copies inputs in the first row of each group
+/** Update the total copies AND total pages display below the syllabi table. */
+function updateSyllabiTotals() {
+    let totalCopies = 0;
     document.querySelectorAll('#syllabiTableBody .syllabi-merged-copies').forEach(inp => {
-        total += parseInt(inp.value) || 0;
+        totalCopies += parseInt(inp.value) || 0;
     });
-    const el = document.getElementById('totalSyllabiCopies');
-    if (el) el.textContent = total;
+    const copiesEl = document.getElementById('totalSyllabiCopies');
+    if (copiesEl) copiesEl.textContent = totalCopies;
+
+    let totalPages = 0;
+    document.querySelectorAll('#syllabiTableBody .syllabi-merged-pages').forEach(inp => {
+        totalPages += parseInt(inp.value) || 0;
+    });
+    const pagesEl = document.getElementById('totalSyllabiPages');
+    if (pagesEl) pagesEl.textContent = totalPages;
+
+    // NEW: feed the total into the Masterlist "No. of Pages" field
+    if (window.__isSyllabiMode) {
+        const mlPages = document.getElementById('masterlistNoOfPages');
+        if (mlPages) {
+            mlPages.value = totalPages;
+            mlPages.readOnly = true;
+            mlPages.style.background = '#f8fafc';
+            mlPages.style.cursor = 'not-allowed';
+        }
+    }
 }
 
 function bindSyllabiRowFileInputs(tr) {
@@ -3025,8 +3156,9 @@ function buildSyllabiGroupFirstRow(groupId, rowspan) {
 
     tr.innerHTML = `
         <td class="col-pinned" rowspan="${rowspan}">
-            <input type="text" name="syllabiCourseName[]" placeholder="Enter course name"
-                class="syllabi-merged-course" oninput="syncSyllabiMergedFields('${groupId}')">
+            <textarea rows="1" name="syllabiCourseName[]" placeholder="Enter course name"
+                class="syllabi-merged-course"
+                oninput="syncSyllabiMergedFields('${groupId}'); autosizeSyllabiCourse(this);"></textarea>
         </td>
         <td class="col-step1" rowspan="${rowspan}">
             <input type="hidden" name="syllabiAvailability[]" value="not available" class="syllabi-merged-availability-hidden">
@@ -3038,6 +3170,11 @@ function buildSyllabiGroupFirstRow(groupId, rowspan) {
             <input type="number" name="syllabiCopies[]" min="1" value="1"
                 class="syllabi-merged-copies" oninput="handleCopiesChange(this)">
         </td>
+        ${buildSyllabiFacultyTd(uid)}
+        <td class="col-step1" rowspan="${rowspan}">
+            <input type="number" name="syllabiNoPages[]" min="0" placeholder="0"
+                class="syllabi-merged-pages" oninput="syncSyllabiMergedFields('${groupId}')">
+        </td>
         ${buildSyllabiPerRowCells(uid)}
         <td class="col-pinned" rowspan="${rowspan}">
             <button type="button" class="reg-row-del" onclick="removeSyllabiGroup('${groupId}')" title="Remove course">
@@ -3047,6 +3184,7 @@ function buildSyllabiGroupFirstRow(groupId, rowspan) {
     `;
 
     bindSyllabiRowFileInputs(tr);
+    initSyllabiFacultyPicker(uid, 'multi');
     return tr;
 }
 
@@ -3062,14 +3200,20 @@ function buildSyllabiContinuationRow(groupId, copyNo) {
         <input type="hidden" name="syllabiCourseName[]" class="syllabi-mirror-course">
         <input type="hidden" name="syllabiAvailability[]" value="0" class="syllabi-mirror-availability">
         <input type="hidden" name="syllabiCopies[]" class="syllabi-mirror-copies">
+        <input type="hidden" name="syllabiNoPages[]" class="syllabi-mirror-pages">
     `;
 
-    tr.innerHTML = buildSyllabiPerRowCells(uid, mirrors);
+    tr.innerHTML = buildSyllabiFacultyTd(uid, mirrors) + buildSyllabiPerRowCells(uid);
     bindSyllabiRowFileInputs(tr);
+    initSyllabiFacultyPicker(uid, 'single');
     return tr;
 }
 
-/** Keeps the hidden mirror inputs in continuation rows synced to the merged (visible) fields. */
+function autosizeSyllabiCourse(el) {
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+}
+
 window.syncSyllabiMergedFields = function (groupId) {
     const firstRow = document.querySelector(`#syllabiTableBody tr[data-group="${groupId}"][data-is-first="true"]`);
     if (!firstRow) return;
@@ -3079,16 +3223,21 @@ window.syncSyllabiMergedFields = function (groupId) {
     const availHidden = firstRow.querySelector('.syllabi-merged-availability-hidden');
     availHidden.value = availCheckbox.checked ? 'available' : 'not available';
     const copiesVal = firstRow.querySelector('.syllabi-merged-copies').value;
+    const pagesVal = firstRow.querySelector('.syllabi-merged-pages').value;
 
     document.querySelectorAll(`#syllabiTableBody tr[data-group="${groupId}"]:not([data-is-first="true"])`)
         .forEach(row => {
             const mc = row.querySelector('.syllabi-mirror-course');
             const ma = row.querySelector('.syllabi-mirror-availability');
             const mp = row.querySelector('.syllabi-mirror-copies');
+            const mpg = row.querySelector('.syllabi-mirror-pages');
             if (mc) mc.value = courseVal;
             if (ma) ma.value = availHidden.value;
             if (mp) mp.value = copiesVal;
+            if (mpg) mpg.value = pagesVal;
         });
+
+    updateSyllabiTotals();   // ← NEW — keeps Total Pages in sync whenever pages/course/availability change
 };
 
 window.addSyllabiRow = function () {
@@ -3097,18 +3246,17 @@ window.addSyllabiRow = function () {
     syllabiGroupCounter++;
     const newRow = buildSyllabiGroupFirstRow("g" + syllabiGroupCounter, 1);
     tbody.appendChild(newRow);
-    bindSyllabiOriginatorInput(newRow.dataset.uid);
     cascadeDrfToNewRow(newRow);
-    updateSyllabiTotalCopies();
+    updateSyllabiTotals();
     applySyllabiSectionLabel();
 };
 
 window.removeSyllabiGroup = function (groupId) {
     document.querySelectorAll(`#syllabiTableBody tr[data-group="${groupId}"]`).forEach(r => {
-        removeSyllabiOriginatorDropdown(r.dataset.uid);
+        removeSyllabiFacultyPicker(r.dataset.uid);
         r.remove();
     });
-    updateSyllabiTotalCopies();
+    updateSyllabiTotals();
 };
 
 // ══════════════════════════════════════════════
@@ -3128,67 +3276,25 @@ window.handleCopiesChange = function (input) {
         for (let i = groupRows.length + 1; i <= desired; i++) {
             const newRow = buildSyllabiContinuationRow(group, i);
             lastRow.after(newRow);
-            bindSyllabiOriginatorInput(newRow.dataset.uid);
             cascadeDrfToNewRow(newRow);
             lastRow = newRow;
         }
     } else if (desired < groupRows.length) {
         for (let i = groupRows.length; i > desired; i--) {
-            removeSyllabiOriginatorDropdown(groupRows[i - 1].dataset.uid);
+            removeSyllabiFacultyPicker(groupRows[i - 1].dataset.uid);
             groupRows[i - 1].remove();
         }
     }
+
     firstRow.querySelectorAll('[rowspan]').forEach(td => td.setAttribute('rowspan', desired));
+
+    // Faculty mode depends on final copy count — reset selections on every affected row
+    groupRows = [...document.querySelectorAll(`#syllabiTableBody tr[data-group="${group}"]`)];
+    const mode = desired === 1 ? 'multi' : 'single';
+    groupRows.forEach(row => setSyllabiFacultyMode(row.dataset.uid, mode));
+
     syncSyllabiMergedFields(group);
-    updateSyllabiTotalCopies();
-};
-
-// ══════════════════════════════════════════════
-// REGISTRATION STEP — checkbox + time spent
-// ══════════════════════════════════════════════
-window.toggleSyllabiRegFields = function (checkbox) {
-    const row = checkbox.closest("tr");
-    const regDate = row.querySelector('[name="syllabiRegDate[]"]');
-    const regTime = row.querySelector('[name="syllabiRegTime[]"]');
-    const hidden = checkbox.previousElementSibling; // syllabiIsRegistered[] hidden mirror
-
-    hidden.value = checkbox.checked ? 'registered' : 'not registered';
-    regDate.disabled = !checkbox.checked;
-    regTime.disabled = !checkbox.checked;
-    if (!checkbox.checked) {
-        regDate.value = "";
-        regTime.value = "";
-        calcSyllabiRowTimeSpent(row);
-    }
-};
-
-window.calcSyllabiRowTimeSpent = function (row) {
-    const dR = row.querySelector('[name="syllabiDateReceived[]"]')?.value;
-    const tR = row.querySelector('[name="syllabiTimeReceived[]"]')?.value;
-    const dG = row.querySelector('[name="syllabiRegDate[]"]')?.value;
-    const tG = row.querySelector('[name="syllabiRegTime[]"]')?.value;
-    const display = row.querySelector('.syllabi-time-spent-display');
-    const hidden = row.querySelector('[name="syllabiTimeSpent[]"]');
-    if (!display || !hidden) return;
-
-    const result = computeDuration(dR, tR, dG, tG);
-
-    if (!result) {
-        display.value = "--";
-        display.style.color = "";
-        hidden.value = "";
-        return;
-    }
-    if (result.invalid) {
-        display.value = "Invalid";
-        display.style.color = "var(--reg-error)";
-        hidden.value = "";
-        return;
-    }
-
-    display.style.color = "";
-    display.value = result.totalMinutes + " min";
-    hidden.value = String(result.totalMinutes);
+    updateSyllabiTotals();
 };
 
 // ══════════════════════════════════════════════

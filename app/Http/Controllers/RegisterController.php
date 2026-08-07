@@ -339,6 +339,14 @@ class RegisterController extends Controller
                     return back()->withInput()->with('error', "Syllabi Row {$rowNum}: DRF Received Date is required.");
                 }
 
+                 $copies = (int) ($request->syllabiCopies[$i] ?? 1);
+                $facultyCount = count(array_filter(array_map('trim', explode(',', $request->syllabiFaculty[$i] ?? ''))));
+
+                if ($copies > 1 && $facultyCount > 1) {
+                    return back()->withInput()->with('error',
+                        "Syllabi Row {$rowNum}: Only one faculty per row is allowed when copies are split across rows.");
+                }
+
                 // File validation — no DB::rollBack() needed (no active transaction yet)
                 if ($request->hasFile('syllabiScannedDrf') && isset($request->file('syllabiScannedDrf')[$i])) {
                     $file = $request->file('syllabiScannedDrf')[$i];
@@ -508,6 +516,13 @@ class RegisterController extends Controller
                     'syllabiDeadline'        => 'required|date',
                 ]);
 
+                $totalPages = 0;
+                if ($request->has('syllabiNoPages')) {
+                    $totalPages = array_sum(
+                        array_filter($request->syllabiNoPages, fn($p) => is_numeric($p) && $p > 0)
+                    );
+                }
+
                 // Create the Masterlist record for this Syllabi document
                 MasterlistRegistration::create([
                     'checklist_id'     => 3,
@@ -519,6 +534,7 @@ class RegisterController extends Controller
                     'effectivity_date' => $request->syllabiEffectivityDate,
                     'deadline'         => $request->syllabiDeadline,
                     'revise_no'        => $request->masterlistRevisionNo ?? 0,
+                    'no_pages'         => $totalPages,
                     'created_by'       => auth()->id(),
                 ]);
 
@@ -677,6 +693,13 @@ class RegisterController extends Controller
     {
         return response()->json(
             \App\Models\Originator::orderBy('originator_name')->get()
+        );
+    }
+
+    public function apiFaculties()
+    {
+        return response()->json(
+            \App\Models\Faculty::orderBy('faculty_name')->get()
         );
     }
 
@@ -1069,7 +1092,7 @@ class RegisterController extends Controller
         foreach ($request->syllabiCourseName as $i => $courseName) {
             $rowNum = $i + 1;
 
-            // Create per-row DRF record
+            // Per-row DRF record
             $syllabiDrf = DocumentRequestForm::create([
                 'checklist_id'     => 1,
                 'version_id'       => $versionId,
@@ -1083,7 +1106,6 @@ class RegisterController extends Controller
                 'created_by'       => auth()->id(),
             ]);
 
-            // Scanned DRF file
             $scannedDrf = $this->storeOptionalFile(
                 $request, 'syllabiScannedDrf', $i, 'scans/syllabi-drf',
                 "Syllabi Row {$rowNum}: Scanned DRF"
@@ -1091,34 +1113,34 @@ class RegisterController extends Controller
             $syllabiDrf->update(['scanned_drf' => $scannedDrf]);
             if ($scannedDrf) $uploadedFiles[] = $scannedDrf;
 
-            // Scanned Registration file
-            $scannedRegistration = $this->storeOptionalFile(
-                $request, 'syllabiScannedRegistration', $i, 'scans/syllabi-registration',
-                "Syllabi Row {$rowNum}: Registration copy"
-            );
-            if ($scannedRegistration) $uploadedFiles[] = $scannedRegistration;
-
-            Syllabi::create([
-                'request_id'            => $requestId,
-                'college_id'            => $request->college_id,
-                'program_id'            => $request->program_id,
-                'semester_id'           => $request->semester_id,
-                'school_year_id'        => $request->school_year_id,
-                'drf_id'                => $syllabiDrf->drf_id,
-                'course_name'           => $courseName,
-                'syllabi_availability'  => $request->syllabiAvailability[$i] ?? 'not available',
-                'no_copies'             => $request->syllabiCopies[$i] ?? null,
-                'originator'            => $request->syllabiOriginator[$i] ?? null,
-                'no_pages'              => $request->syllabiNoPages[$i],
-                'date_received'         => $request->syllabiDateReceived[$i],
-                'time_received'         => $request->syllabiTimeReceived[$i],
-                'drf_availability'      => $request->syllabiDrfAvailability[$i] ?? 'not available',
-                'registered'            => $request->syllabiIsRegistered[$i] ?? 'not registered',
-                'date_of_registration'  => $request->syllabiRegDate[$i] ?? null,
-                'time_of_registration'  => $request->syllabiRegTime[$i] ?? null,
-                'time_spent'            => $request->syllabiTimeSpent[$i] ?? null,
-                'scanned_registration'  => $scannedRegistration,
+            $syllabi = Syllabi::create([
+                'request_id'           => $requestId,
+                'college_id'           => $request->college_id,
+                'program_id'           => $request->program_id,
+                'semester_id'          => $request->semester_id,
+                'school_year_id'       => $request->school_year_id,
+                'drf_id'               => $syllabiDrf->drf_id,
+                'course_name'          => $courseName,
+                'syllabi_availability' => $request->syllabiAvailability[$i] ?? 'not available',
+                'no_copies'            => $request->syllabiCopies[$i] ?? null,
+                'no_pages'             => $request->syllabiNoPages[$i] ?? null,
+                'date_received'        => $request->syllabiDateReceived[$i],
+                'time_received'        => $request->syllabiTimeReceived[$i],
+                'drf_availability'     => $request->syllabiDrfAvailability[$i] ?? 'not available',
             ]);
+
+            // ── Faculty (comma-separated per row; 2+ names only valid when copies == 1) ──
+            $facultyRaw = $request->syllabiFaculty[$i] ?? '';
+            $names = array_filter(array_map('trim', explode(',', $facultyRaw)));
+
+            foreach ($names as $name) {
+                $faculty = \App\Models\Faculty::firstOrCreate(['faculty_name' => $name]);
+                \App\Models\SyllabiFaculty::create([
+                    'syllabi_id'   => $syllabi->syllabi_id,
+                    'faculty_id'   => $faculty->faculty_id,
+                    'faculty_name' => $name,
+                ]);
+            }
         }
     }
 
@@ -1403,7 +1425,7 @@ class RegisterController extends Controller
                     'doc_title'           => $request->masterlistDocTitle,
                     'effectivity_date'    => $request->masterlistEffectivityDate,
                     'revise_no'           => $request->masterlistRevisionNo,
-                    'no_pages'            => $request->masterlistNoOfPages,
+                    'no_pages'            => $request->masterlistNoOfPages, 
                     'originator_name'     => $request->masterlistOriginator,
                     'deadline'            => $request->deadlineOfSubmission,
                     'brief_purpose'       => $request->briefPurpose,

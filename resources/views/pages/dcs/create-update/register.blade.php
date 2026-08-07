@@ -69,7 +69,7 @@
 
     <div class="reg-header">
         <div class="reg-header-text">
-            <p class="reg-breadcrumb">Document Control System / Document Register / <span>Registration</span></p>
+            <p class="reg-breadcrumb">Document Control System / Document Registration / <span>Register</span></p>
             <h1 class="reg-title">Register Document</h1>
         </div>
     </div>
@@ -257,7 +257,6 @@
                 <div class="reg-wizard-steps" id="syllabiStepIndicator">
                     <div class="reg-wizard-step is-active" data-step="1"><span>1</span> Course Info</div>
                     <div class="reg-wizard-step" data-step="2"><span>2</span> DRF</div>
-                    <div class="reg-wizard-step" data-step="3"><span>3</span>Masterlist  Registration</div>
                 </div>
 
                 <div class="reg-field">
@@ -268,7 +267,7 @@
                                     <th class="col-pinned">Course Name</th>
                                     <th class="col-step1">Syllabi Availability</th>
                                     <th class="col-step1">No. Copies</th>
-                                    <th class="col-step1">Originator</th>
+                                    <th class="col-shared">Faculty</th>
                                     <th class="col-step1">No. Pages</th>
                                     <th class="col-step1">Date Received</th>
                                     <th class="col-step1">Time Received</th>
@@ -277,12 +276,7 @@
                                     <th class="col-step2">DRF No.</th>
                                     <th class="col-step2">DRF Date</th>
                                     <th class="col-step2">DRF Received Date</th>
-
-                                    <th class="col-step3">Registered</th>
-                                    <th class="col-step3">Date of Registration</th>
-                                    <th class="col-step3">Time of Registration</th>
-                                    <th class="col-step3">Time Spent</th>
-                                    <th class="col-step3">Scanned DRF</th>
+                                    <th class="col-step2">Scanned DRF</th>
 
                                     <th class="col-pinned"></th>
                                 </tr>
@@ -295,6 +289,8 @@
                     </button>
                     <div class="reg-syllabi-copies-total">
                         Total No. of Copies: <span id="totalSyllabiCopies">0</span>
+                        &nbsp;·&nbsp;
+                        Total No. of Pages: <span id="totalSyllabiPages">0</span>
                     </div>
                 </div>
 
@@ -305,6 +301,9 @@
                     <button type="button" class="reg-btn reg-btn-save" id="syllabiNextBtn" onclick="syllabiStepNext()">
                         Next <i class="fa-solid fa-arrow-right"></i>
                     </button>
+                    <span id="syllabiStep2Hint" style="display:none;color:#64748b;font-size:13px;">
+                        Scroll down and click <strong>Save Document</strong> to submit.
+                    </span>
                 </div>
             </div>
         </section>
@@ -751,12 +750,3 @@
 @push('scripts')
     @vite(['resources/js/dcs/register.js'])
 @endpush
-
-$.ajax({
-    url: '{{ route("register.checkDocNo") }}',
-    data: {
-        doc_no: someValue,
-        doc_type_id: someValue,
-        sub_type_id: someValue
-    },
-});

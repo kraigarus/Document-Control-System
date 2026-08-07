@@ -1,9 +1,12 @@
 <?php
+// app/Models/Syllabi.php
 
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Syllabi extends Model
 {
@@ -20,21 +23,14 @@ class Syllabi extends Model
         'course_name',
         'syllabi_availability',
         'no_copies',
-        'originator',
         'no_pages',
         'date_received',
         'time_received',
-        'drf_availability', 
-        'registered',
-        'date_of_registration',
-        'time_of_registration',
-        'time_spent',
-        'scanned_registration', 
+        'drf_availability',
     ];
 
     protected $casts = [
-        'date_received'        => 'date',
-        'date_of_registration' => 'date',
+        'date_received' => 'date',
     ];
 
     // Relationships
@@ -66,5 +62,18 @@ class Syllabi extends Model
     public function drf(): BelongsTo
     {
         return $this->belongsTo(DocumentRequestForm::class, 'drf_id', 'drf_id');
+    }
+
+    public function rowFaculty(): HasMany
+    {
+        return $this->hasMany(SyllabiFaculty::class, 'syllabi_id', 'syllabi_id');
+    }
+
+    /** Convenience accessor: "Dr. Cruz, Dr. Santos" for display/review purposes. */
+    public function getFacultyNamesAttribute(): string
+    {
+        return $this->relationLoaded('rowFaculty')
+            ? $this->rowFaculty->pluck('faculty_name')->implode(', ')
+            : '';
     }
 }
