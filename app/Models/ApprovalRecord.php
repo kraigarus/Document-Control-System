@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class ApprovalRecord extends Model
 {
-    protected $table = 'approval_records';
+    protected $table = 'dcs_approval_records';
     public $timestamps = false;
 
     protected $fillable = [

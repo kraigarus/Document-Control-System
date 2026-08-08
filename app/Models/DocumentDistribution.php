@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class DocumentDistribution extends Model
 {
-    protected $table = 'document_distribution';
+    protected $table = 'dcs_document_distribution';
 
     protected $fillable = [
         'checklist_id',
@@ -50,7 +50,7 @@ class DocumentDistribution extends Model
 
     public function creator()
     {
-        return $this->belongsTo(Account::class, 'created_by');
+        return $this->belongsTo(User::class, 'created_by');
     }
 
     public function offices()

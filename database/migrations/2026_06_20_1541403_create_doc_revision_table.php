@@ -9,10 +9,10 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('doc_revision', function (Blueprint $table) {
+        Schema::create('dcs_doc_revision', function (Blueprint $table) {
             $table->id();
             $table->foreignId('dcn_id')->nullable()
-                  ->constrained('document_change_notice')
+                  ->constrained('dcs_document_change_notice')
                   ->cascadeOnDelete();
             $table->string('title')->nullable();
             $table->string('document_no', 100)->nullable();
@@ -26,6 +26,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('doc_revision');
+        Schema::dropIfExists('dcs_doc_revision');
     }
 };

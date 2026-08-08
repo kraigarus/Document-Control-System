@@ -10,12 +10,12 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('checklist_types', function (Blueprint $table) {
+        Schema::create('dcs_checklist_types', function (Blueprint $table) {
             $table->id();
             $table->string('checklist_name')->unique();
         });
 
-        DB::table('checklist_types')->insert([
+        DB::table('dcs_checklist_types')->insert([
             ['id' => 1, 'checklist_name' => 'Document Request Form'],
             ['id' => 2, 'checklist_name' => 'Document Change Notice'],
             ['id' => 3, 'checklist_name' => 'Masterlist Registration'],
@@ -26,6 +26,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('checklist_types');
+        Schema::dropIfExists('dcs_checklist_types');
     }
 };

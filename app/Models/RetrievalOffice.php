@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class RetrievalOffice extends Model
 {
-    protected $table = 'retrieval_offices';
+    protected $table = 'dcs_retrieval_offices';
     public $timestamps = false;
 
     protected $fillable = [

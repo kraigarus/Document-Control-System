@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class MasterlistRelatedDoc extends Model
 {
-    protected $table = 'masterlist_related_docs';
+    protected $table = 'dcs_masterlist_related_docs';
     public $timestamps = false;
 
     protected $fillable = [

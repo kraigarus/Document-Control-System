@@ -10,12 +10,12 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('approval_body', function (Blueprint $table) {
+        Schema::create('dcs_approval_body', function (Blueprint $table) {
             $table->id();
             $table->string('approval_name');
         });
 
-        DB::table('approval_body')->insert([
+        DB::table('dcs_approval_body')->insert([
             ['id' => 1, 'approval_name' => 'Board of Trustees'],
             ['id' => 2, 'approval_name' => 'Admin Council'],
             ['id' => 3, 'approval_name' => 'Acad Council'],
@@ -25,6 +25,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('approval_body');
+        Schema::dropIfExists('dcs_approval_body');
     }
 };

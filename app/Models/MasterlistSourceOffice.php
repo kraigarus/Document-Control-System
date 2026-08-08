@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class MasterlistSourceOffice extends Model
 {
-    protected $table = 'masterlist_source_offices';
+    protected $table = 'dcs_masterlist_source_offices';
 
     protected $fillable = [
         'masterlist_id',

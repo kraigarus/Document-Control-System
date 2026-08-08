@@ -20,7 +20,7 @@ class Office extends Model
     {
         return $this->belongsToMany(
             DocumentRequestForm::class,
-            'drf_offices',
+            'dcs_drf_offices',
             'office_id',
             'document_request_form_id'
         );
@@ -35,7 +35,7 @@ class Office extends Model
     {
         return $this->belongsToMany(
             MasterlistRegistration::class,
-            'masterlist_source_offices',
+            'dcs_masterlist_source_offices',
             'office_id',
             'masterlist_id'
         );

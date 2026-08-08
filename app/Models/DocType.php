@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class DocType extends Model
 {
-    protected $table = 'doc_types';
+    protected $table = 'dcs_doc_types';
     public $timestamps = false;
 
     protected $fillable = [

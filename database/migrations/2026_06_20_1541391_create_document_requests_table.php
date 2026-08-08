@@ -9,14 +9,14 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('document_requests', function (Blueprint $table) {
+        Schema::create('dcs_document_requests', function (Blueprint $table) {
             $table->id();
             $table->foreignId('version_id')
-                  ->constrained('version_type');
+                  ->constrained('dcs_version_type');
             $table->foreignId('doc_type_id')
-                  ->constrained('doc_types');
+                  ->constrained('dcs_doc_types');
             $table->foreignId('sub_type_id')->nullable()
-                  ->constrained('doc_types');
+                  ->constrained('dcs_doc_types');
             $table->enum('approval_status', ['applicable', 'not_applicable'])->nullable();
             $table->foreignId('created_by')
                   ->constrained('accounts');
@@ -28,6 +28,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('document_requests');
+        Schema::dropIfExists('dcs_document_requests');
     }
 };

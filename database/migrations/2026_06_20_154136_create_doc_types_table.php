@@ -10,15 +10,15 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('doc_types', function (Blueprint $table) {
+        Schema::create('dcs_doc_types', function (Blueprint $table) {
             $table->id();
             $table->foreignId('parent_id')->nullable()
-                  ->constrained('doc_types')
+                  ->constrained('dcs_doc_types')
                   ->cascadeOnDelete();
             $table->string('doc_type_name');
         });
 
-        DB::table('doc_types')->insert([
+        DB::table('dcs_doc_types')->insert([
             ['id' => 1,  'parent_id' => null, 'doc_type_name' => 'Internal'],
             ['id' => 2,  'parent_id' => null, 'doc_type_name' => 'Internal Forms'],
             ['id' => 3,  'parent_id' => null, 'doc_type_name' => 'External'],
@@ -38,6 +38,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('doc_types');
+        Schema::dropIfExists('dcs_doc_types');
     }
 };

@@ -9,10 +9,10 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('retrieval_offices', function (Blueprint $table) {
+        Schema::create('dcs_retrieval_offices', function (Blueprint $table) {
             $table->id();
             $table->foreignId('retrieval_id')
-                  ->constrained('document_retrieval')
+                  ->constrained('dcs_document_retrieval')
                   ->cascadeOnDelete();
             $table->foreignId('office_id')
                   ->constrained('offices');
@@ -22,6 +22,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('retrieval_offices');
+        Schema::dropIfExists('dcs_retrieval_offices');
     }
 };

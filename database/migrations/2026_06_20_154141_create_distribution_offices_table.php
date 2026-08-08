@@ -9,10 +9,10 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('distribution_offices', function (Blueprint $table) {
+        Schema::create('dcs_distribution_offices', function (Blueprint $table) {
             $table->id();
             $table->foreignId('distribution_id')
-                  ->constrained('document_distribution')
+                  ->constrained('dcs_document_distribution')
                   ->cascadeOnDelete();
             $table->foreignId('office_id')
                   ->constrained('offices');
@@ -22,6 +22,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('distribution_offices');
+        Schema::dropIfExists('dcs_distribution_offices');
     }
 };

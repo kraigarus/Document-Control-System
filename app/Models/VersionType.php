@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class VersionType extends Model
 {
-    protected $table = 'version_type';
+    protected $table = 'dcs_version_type';
     public $timestamps = false;
 
     protected $fillable = [
@@ -15,7 +15,7 @@ class VersionType extends Model
 
     public function checklists()
     {
-        return $this->belongsToMany(ChecklistType::class, 'checklist_version', 'version_id', 'checklist_id');
+        return $this->belongsToMany(ChecklistType::class, 'dcs_checklist_version', 'version_id', 'checklist_id');
     }
 
     public function documentRequests()

@@ -10,13 +10,13 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('originators', function (Blueprint $table) {
+        Schema::create('dcs_originators', function (Blueprint $table) {
             $table->id();
             $table->string('originator_name')->unique();
             $table->timestamps();
         });
 
-        DB::table('originators')->insert([
+        DB::table('dcs_originators')->insert([
             ['id' => 1,  'originator_name' => 'Juan Dela Cruz',    'created_at' => now(), 'updated_at' => now()],
             ['id' => 2,  'originator_name' => 'Maria De Jesus',    'created_at' => now(), 'updated_at' => now()],
             ['id' => 3,  'originator_name' => 'John Doe',          'created_at' => now(), 'updated_at' => now()],
@@ -32,6 +32,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('originators');
+        Schema::dropIfExists('dcs_originators');
     }
 };

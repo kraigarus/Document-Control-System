@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class DocRevision extends Model
 {
     public $timestamps = false;
-    protected $table = 'doc_revision';
+    protected $table = 'dcs_doc_revision';
 
     protected $fillable = [
         'dcn_id',

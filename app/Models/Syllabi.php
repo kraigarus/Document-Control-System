@@ -9,7 +9,7 @@ class Syllabi extends Model
 {
     use HasFactory;
 
-    protected $table = 'syllabi';
+    protected $table = 'dcs_syllabi';
 
     protected $fillable = [
         'request_id',

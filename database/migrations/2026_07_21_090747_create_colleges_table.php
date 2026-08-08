@@ -10,7 +10,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('colleges', function (Blueprint $table) {
+        Schema::create('dcs_colleges', function (Blueprint $table) {
             $table->id();
             $table->foreignId('office_id')
                   ->nullable()
@@ -21,7 +21,7 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        DB::table('colleges')->insert([
+        DB::table('dcs_colleges')->insert([
             ['id' => 1, 'office_id' => 28, 'college_code' => 'CCS',   'college_name' => 'College of Computer Studies', 'created_at' => now(), 'updated_at' => now()],
             ['id' => 2, 'office_id' => 29, 'college_code' => 'CEA',   'college_name' => 'College of Engineering and Architecture', 'created_at' => now(), 'updated_at' => now()],
             ['id' => 3, 'office_id' => 30, 'college_code' => 'CHS',   'college_name' => 'College of Health Sciences', 'created_at' => now(), 'updated_at' => now()],
@@ -33,6 +33,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('colleges');
+        Schema::dropIfExists('dcs_colleges');
     }
 };

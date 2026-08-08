@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ProgramCourse extends Model
 {
-    protected $table = 'program_courses';
+    protected $table = 'dcs_program_courses';
 
     protected $fillable = [
         'program_id',

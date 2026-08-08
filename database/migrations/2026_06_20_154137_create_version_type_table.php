@@ -10,12 +10,12 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('version_type', function (Blueprint $table) {
+        Schema::create('dcs_version_type', function (Blueprint $table) {
             $table->id();
             $table->string('version_name');
         });
 
-        DB::table('version_type')->insert([
+        DB::table('dcs_version_type')->insert([
             ['id' => 1, 'version_name' => 'New'],
             ['id' => 2, 'version_name' => 'Revised'],
         ]);
@@ -23,6 +23,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('version_type');
+        Schema::dropIfExists('dcs_version_type');
     }
 };

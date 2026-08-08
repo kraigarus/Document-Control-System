@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class MasterlistRegistration extends Model
 {
-    protected $table = 'masterlist_registration';
+    protected $table = 'dcs_masterlist_registration';
 
     protected $fillable = [
         'checklist_id',
@@ -59,14 +59,14 @@ class MasterlistRegistration extends Model
 
     public function creator()
     {
-        return $this->belongsTo(Account::class, 'created_by');
+        return $this->belongsTo(User::class, 'created_by');
     }
 
     public function relatedDocuments()
     {
         return $this->belongsToMany(
             MasterlistRegistration::class,
-            'masterlist_related_docs',
+            'dcs_masterlist_related_docs',
             'masterlist_id',
             'related_doc_id'
         )->withTimestamps();
@@ -76,7 +76,7 @@ class MasterlistRegistration extends Model
     {
         return $this->belongsToMany(
             MasterlistRegistration::class,
-            'masterlist_related_docs',
+            'dcs_masterlist_related_docs',
             'related_doc_id',
             'masterlist_id'
         )->withTimestamps();

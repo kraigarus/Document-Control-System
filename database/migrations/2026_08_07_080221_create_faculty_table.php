@@ -9,11 +9,11 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('faculties', function (Blueprint $table) {
+        Schema::create('dcs_faculties', function (Blueprint $table) {
             $table->id();
             $table->string('faculty_name')->unique();
             $table->foreignId('college_id')->nullable()
-                  ->constrained('colleges')
+                  ->constrained('dcs_colleges')
                   ->nullOnDelete();
             $table->timestamps();
         });
@@ -21,6 +21,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('faculties');
+        Schema::dropIfExists('dcs_faculties');
     }
 };

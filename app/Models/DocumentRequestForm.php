@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class DocumentRequestForm extends Model
 {
-    protected $table = 'document_request_form';
+    protected $table = 'dcs_document_request_form';
 
     protected $fillable = [
         'checklist_id',
@@ -50,11 +50,11 @@ class DocumentRequestForm extends Model
 
     public function offices()
     {
-        return $this->belongsToMany(Office::class, 'drf_offices', 'document_request_form_id', 'office_id');
+        return $this->belongsToMany(Office::class, 'dcs_drf_offices', 'document_request_form_id', 'office_id');
     }
 
     public function creator()
     {
-        return $this->belongsTo(Account::class, 'created_by');
+        return $this->belongsTo(User::class, 'created_by');
     }
 }

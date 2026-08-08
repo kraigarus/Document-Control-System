@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class DistributionOffice extends Model
 {
-    protected $table = 'distribution_offices';
+    protected $table = 'dcs_distribution_offices';
     public $timestamps = false;
 
     protected $fillable = [

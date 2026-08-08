@@ -9,29 +9,29 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('syllabi', function (Blueprint $table) {
+        Schema::create('dcs_syllabi', function (Blueprint $table) {
             $table->id();
             $table->foreignId('request_id')
-                  ->constrained('document_requests')
+                  ->constrained('dcs_document_requests')
                   ->cascadeOnDelete();
             $table->foreignId('doc_type_id')
                   ->nullable()
-                  ->constrained('doc_types')
+                  ->constrained('dcs_doc_types')
                   ->nullOnDelete();
             $table->foreignId('college_id')->nullable()
-                  ->constrained('colleges')
+                  ->constrained('dcs_colleges')
                   ->nullOnDelete();
             $table->foreignId('program_id')->nullable()
-                  ->constrained('programs')
+                  ->constrained('dcs_programs')
                   ->nullOnDelete();
             $table->foreignId('semester_id')->nullable()
-                  ->constrained('semesters')
+                  ->constrained('dcs_semesters')
                   ->nullOnDelete();
             $table->foreignId('school_year_id')->nullable()
-                  ->constrained('school_years')
+                  ->constrained('dcs_school_years')
                   ->nullOnDelete();
             $table->foreignId('course_id')
-                  ->constrained('program_courses')
+                  ->constrained('dcs_program_courses')
                   ->cascadeOnDelete();
             $table->boolean('is_available')->default(false);
             $table->integer('no_copies')->default(1);
@@ -44,6 +44,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('syllabi');
+        Schema::dropIfExists('dcs_syllabi');
     }
 };

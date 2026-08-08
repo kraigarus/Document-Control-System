@@ -9,13 +9,13 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('masterlist_related_docs', function (Blueprint $table) {
+        Schema::create('dcs_masterlist_related_docs', function (Blueprint $table) {
             $table->id();
             $table->foreignId('masterlist_id')
-                  ->constrained('masterlist_registration')
+                  ->constrained('dcs_masterlist_registration')
                   ->cascadeOnDelete();
             $table->foreignId('related_doc_id')
-                  ->constrained('masterlist_registration')
+                  ->constrained('dcs_masterlist_registration')
                   ->cascadeOnDelete();
             $table->timestamps();
             $table->unique(['masterlist_id', 'related_doc_id']);
@@ -24,6 +24,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('masterlist_related_docs');
+        Schema::dropIfExists('dcs_masterlist_related_docs');
     }
 };

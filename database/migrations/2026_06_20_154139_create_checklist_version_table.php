@@ -10,17 +10,17 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('checklist_version', function (Blueprint $table) {
+        Schema::create('dcs_checklist_version', function (Blueprint $table) {
             $table->id();
             $table->foreignId('checklist_id')
-                  ->constrained('checklist_types')
+                  ->constrained('dcs_checklist_types')
                   ->cascadeOnDelete();
             $table->foreignId('version_id')
-                  ->constrained('version_type')
+                  ->constrained('dcs_version_type')
                   ->cascadeOnDelete();
         });
 
-        DB::table('checklist_version')->insert([
+        DB::table('dcs_checklist_version')->insert([
             ['id' => 1, 'checklist_id' => 1, 'version_id' => 1],
             ['id' => 2, 'checklist_id' => 3, 'version_id' => 1],
             ['id' => 3, 'checklist_id' => 5, 'version_id' => 1],
@@ -34,6 +34,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('checklist_version');
+        Schema::dropIfExists('dcs_checklist_version');
     }
 };

@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class DocumentRequest extends Model
 {
-    protected $table = 'document_requests';
+    protected $table = 'dcs_document_requests';
 
     protected $fillable = [
         'version_id',
@@ -34,12 +34,12 @@ class DocumentRequest extends Model
 
     public function creator()
     {
-        return $this->belongsTo(Account::class, 'created_by');
+        return $this->belongsTo(User::class, 'created_by');
     }
 
     public function updater()
     {
-        return $this->belongsTo(Account::class, 'updated_by');
+        return $this->belongsTo(User::class, 'updated_by');
     }
 
     public function approvalRecords()

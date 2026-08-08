@@ -10,13 +10,13 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('semesters', function (Blueprint $table) {
+        Schema::create('dcs_semesters', function (Blueprint $table) {
             $table->id();
             $table->string('semester_name', 50);
             $table->timestamps();
         });
 
-        DB::table('semesters')->insert([
+        DB::table('dcs_semesters')->insert([
             ['semester_name' => '1st Semester', 'created_at' => now(), 'updated_at' => now()],
             ['semester_name' => '2nd Semester', 'created_at' => now(), 'updated_at' => now()],
             ['semester_name' => 'Summer', 'created_at' => now(), 'updated_at' => now()],
@@ -25,6 +25,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('semesters');
+        Schema::dropIfExists('dcs_semesters');
     }
 };

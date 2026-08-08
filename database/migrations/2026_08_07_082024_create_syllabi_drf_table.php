@@ -9,13 +9,13 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('syllabi_drf', function (Blueprint $table) {
+        Schema::create('dcs_syllabi_drf', function (Blueprint $table) {
             $table->id();
             $table->foreignId('syllabi_id')
-                  ->constrained('syllabi')
+                  ->constrained('dcs_syllabi')
                   ->cascadeOnDelete();
             $table->foreignId('faculty_id')->nullable()
-                  ->constrained('faculties')
+                  ->constrained('dcs_faculties')
                   ->nullOnDelete();
             $table->string('faculty_name');
             $table->boolean('is_drf_available')->default(false);
@@ -29,6 +29,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('syllabi_drf');
+        Schema::dropIfExists('dcs_syllabi_drf');
     }
 };

@@ -9,16 +9,16 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('masterlist_registration', function (Blueprint $table) {
+        Schema::create('dcs_masterlist_registration', function (Blueprint $table) {
             $table->id();
             $table->foreignId('checklist_id')->nullable()
-                  ->constrained('checklist_types');
+                  ->constrained('dcs_checklist_types');
             $table->foreignId('version_id')->nullable()
-                  ->constrained('version_type');
+                  ->constrained('dcs_version_type');
             $table->foreignId('request_id')->nullable()
-                  ->constrained('document_requests');
+                  ->constrained('dcs_document_requests');
             $table->foreignId('doc_type_id')->nullable()
-                  ->constrained('doc_types');
+                  ->constrained('dcs_doc_types');
             $table->string('doc_no', 100)->nullable();
             $table->date('doc_receipt_date')->nullable();
             $table->time('doc_receipt_time')->nullable();
@@ -41,6 +41,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('masterlist_registration');
+        Schema::dropIfExists('dcs_masterlist_registration');
     }
 };

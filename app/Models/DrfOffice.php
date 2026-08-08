@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class DrfOffice extends Model
 {
-    protected $table = 'drf_offices';
+    protected $table = 'dcs_drf_offices';
 
     protected $fillable = [
         'document_request_form_id',

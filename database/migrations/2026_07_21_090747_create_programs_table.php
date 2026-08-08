@@ -10,17 +10,17 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('programs', function (Blueprint $table) {
+        Schema::create('dcs_programs', function (Blueprint $table) {
             $table->id();
             $table->foreignId('college_id')
-                  ->constrained('colleges')
+                  ->constrained('dcs_colleges')
                   ->cascadeOnDelete();
             $table->string('program_code', 50);
             $table->string('program_name');
             $table->timestamps();
         });
 
-        DB::table('programs')->insert([
+        DB::table('dcs_programs')->insert([
             // CCS
             ['college_id' => 1, 'program_code' => 'BSIT',      'program_name' => 'Bachelor of Science in Information Technology', 'created_at' => now(), 'updated_at' => now()],
             ['college_id' => 1, 'program_code' => 'BSCS',      'program_name' => 'Bachelor of Science in Computer Science', 'created_at' => now(), 'updated_at' => now()],
@@ -61,6 +61,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('programs');
+        Schema::dropIfExists('dcs_programs');
     }
 };

@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class ChecklistVersion extends Model
 {
-    protected $table = 'checklist_version';
+    protected $table = 'dcs_checklist_version';
     public $timestamps = false;
 
     protected $fillable = [

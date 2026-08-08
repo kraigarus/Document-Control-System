@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class ChecklistType extends Model
 {
-    protected $table = 'checklist_types';
+    protected $table = 'dcs_checklist_types';
     public $timestamps = false;
 
     protected $fillable = [
@@ -15,7 +15,7 @@ class ChecklistType extends Model
 
     public function versions()
     {
-        return $this->belongsToMany(VersionType::class, 'checklist_version', 'checklist_id', 'version_id');
+        return $this->belongsToMany(VersionType::class, 'dcs_checklist_version', 'checklist_id', 'version_id');
     }
 
     public function approvalRecords()

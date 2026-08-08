@@ -9,7 +9,7 @@ class SyllabiDrf extends Model
 {
     use HasFactory;
 
-    protected $table = 'syllabi_drf';
+    protected $table = 'dcs_syllabi_drf';
 
     protected $fillable = [
         'syllabi_id',

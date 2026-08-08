@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Faculty extends Model
 {
-    protected $table = 'faculties';
+    protected $table = 'dcs_faculties';
 
     protected $fillable = [
         'faculty_name',
