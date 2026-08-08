@@ -1,79 +1,68 @@
 <?php
-// app/Models/Syllabi.php
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Syllabi extends Model
 {
+    use HasFactory;
+
     protected $table = 'syllabi';
-    protected $primaryKey = 'syllabi_id';
 
     protected $fillable = [
         'request_id',
+        'doc_type_id',
         'college_id',
         'program_id',
         'semester_id',
         'school_year_id',
-        'drf_id',
-        'course_name',
-        'syllabi_availability',
+        'course_id',
+        'is_available',
         'no_copies',
         'no_pages',
         'date_received',
         'time_received',
-        'drf_availability',
     ];
 
-    protected $casts = [
-        'date_received' => 'date',
-    ];
-
-    // Relationships
-    public function college(): BelongsTo
+    public function request()
     {
-        return $this->belongsTo(College::class, 'college_id', 'college_id');
+        return $this->belongsTo(DocumentRequest::class, 'request_id');
     }
 
-    public function program(): BelongsTo
+    public function docType()
     {
-        return $this->belongsTo(Program::class, 'program_id', 'program_id');
+        return $this->belongsTo(DocType::class, 'doc_type_id');
     }
 
-    public function semester(): BelongsTo
+    public function college()
     {
-        return $this->belongsTo(Semester::class, 'semester_id', 'semester_id');
+        return $this->belongsTo(College::class, 'college_id');
     }
 
-    public function schoolYear(): BelongsTo
+    public function program()
     {
-        return $this->belongsTo(SchoolYear::class, 'school_year_id', 'school_year_id');
+        return $this->belongsTo(Program::class, 'program_id');
     }
 
-    public function request(): BelongsTo
+    public function semester()
     {
-        return $this->belongsTo(DocumentRequest::class, 'request_id', 'request_id');
+        return $this->belongsTo(Semester::class, 'semester_id');
     }
 
-    public function drf(): BelongsTo
+    public function schoolYear()
     {
-        return $this->belongsTo(DocumentRequestForm::class, 'drf_id', 'drf_id');
+        return $this->belongsTo(SchoolYear::class, 'school_year_id');
     }
 
-    public function rowFaculty(): HasMany
+    public function course()
     {
-        return $this->hasMany(SyllabiFaculty::class, 'syllabi_id', 'syllabi_id');
+        return $this->belongsTo(ProgramCourse::class, 'course_id');
     }
 
-    /** Convenience accessor: "Dr. Cruz, Dr. Santos" for display/review purposes. */
-    public function getFacultyNamesAttribute(): string
+    public function drfs()
     {
-        return $this->relationLoaded('rowFaculty')
-            ? $this->rowFaculty->pluck('faculty_name')->implode(', ')
-            : '';
+        return $this->hasMany(SyllabiDrf::class, 'syllabi_id');
     }
 }

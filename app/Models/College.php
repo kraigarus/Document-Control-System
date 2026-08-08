@@ -3,22 +3,23 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class College extends Model
 {
     protected $table = 'colleges';
-    protected $primaryKey = 'college_id';
 
     protected $fillable = [
+        'office_id',
+        'college_code',
         'college_name',
     ];
 
     /**
-     * Get the programs associated with the college.
+     * Get the administrative office associated with this college.
      */
-    public function programs(): HasMany
+    public function office(): BelongsTo
     {
-        return $this->hasMany(Program::class, 'college_id', 'college_id');
+        return $this->belongsTo(Office::class, 'office_id');
     }
 }

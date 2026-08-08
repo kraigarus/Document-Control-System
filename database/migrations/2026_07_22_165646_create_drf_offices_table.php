@@ -1,4 +1,5 @@
 <?php
+// 011 — drf_offices
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -10,16 +11,12 @@ return new class extends Migration
     {
         Schema::create('drf_offices', function (Blueprint $table) {
             $table->id();
-
-            $table->foreignId('drf_id')
-                  ->constrained('document_request_form', 'drf_id')
+            $table->foreignId('document_request_form_id')
+                  ->constrained('document_request_form')
                   ->cascadeOnDelete();
-
-            // Foreign Key to Offices
             $table->foreignId('office_id')
-                  ->constrained('offices', 'office_id')
+                  ->constrained('offices')
                   ->cascadeOnDelete();
-
             $table->timestamps();
         });
     }

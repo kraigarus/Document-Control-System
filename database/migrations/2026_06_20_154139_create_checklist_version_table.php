@@ -1,7 +1,9 @@
 <?php
+// 007 — checklist_version
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -11,10 +13,10 @@ return new class extends Migration
         Schema::create('checklist_version', function (Blueprint $table) {
             $table->id();
             $table->foreignId('checklist_id')
-                  ->constrained('checklist_types', 'checklist_id')
+                  ->constrained('checklist_types')
                   ->cascadeOnDelete();
             $table->foreignId('version_id')
-                  ->constrained('version_type', 'version_id')
+                  ->constrained('version_type')
                   ->cascadeOnDelete();
         });
 

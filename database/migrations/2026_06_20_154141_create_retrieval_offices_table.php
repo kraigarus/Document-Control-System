@@ -1,4 +1,5 @@
 <?php
+// 017 — retrieval_offices
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -11,10 +12,10 @@ return new class extends Migration
         Schema::create('retrieval_offices', function (Blueprint $table) {
             $table->id();
             $table->foreignId('retrieval_id')
-                  ->constrained('document_retrieval', 'retrieval_id')
+                  ->constrained('document_retrieval')
                   ->cascadeOnDelete();
             $table->foreignId('office_id')
-                  ->constrained('offices', 'office_id');
+                  ->constrained('offices');
             $table->integer('copies')->nullable();
         });
     }

@@ -8,7 +8,6 @@ class DocRevision extends Model
 {
     public $timestamps = false;
     protected $table = 'doc_revision';
-    protected $primaryKey = 'revision_id';
 
     protected $fillable = [
         'dcn_id',

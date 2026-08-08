@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Model;
 class ChecklistType extends Model
 {
     protected $table = 'checklist_types';
-    protected $primaryKey = 'checklist_id';
     public $timestamps = false;
 
     protected $fillable = [

@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Model;
 class VersionType extends Model
 {
     protected $table = 'version_type';
-    protected $primaryKey = 'version_id';
     public $timestamps = false;
 
     protected $fillable = [

@@ -1,4 +1,5 @@
 <?php
+// 018 — masterlist_registration
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -9,15 +10,15 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('masterlist_registration', function (Blueprint $table) {
-            $table->id('masterlist_id');
+            $table->id();
             $table->foreignId('checklist_id')->nullable()
-                  ->constrained('checklist_types', 'checklist_id');
+                  ->constrained('checklist_types');
             $table->foreignId('version_id')->nullable()
-                  ->constrained('version_type', 'version_id');
+                  ->constrained('version_type');
             $table->foreignId('request_id')->nullable()
-                  ->constrained('document_requests', 'request_id');
+                  ->constrained('document_requests');
             $table->foreignId('doc_type_id')->nullable()
-                  ->constrained('doc_types', 'doc_type_id');
+                  ->constrained('doc_types');
             $table->string('doc_no', 100)->nullable();
             $table->date('doc_receipt_date')->nullable();
             $table->time('doc_receipt_time')->nullable();
@@ -33,11 +34,8 @@ return new class extends Migration
             $table->text('brief_purpose')->nullable();
             $table->string('scanned_masterlist')->nullable();
             $table->foreignId('created_by')
-                  ->constrained('accounts', 'id');
+                  ->constrained('accounts');
             $table->timestamps();
-            $table->enum('stamp_status', [
-                'controlled', 'obsolete', 'master_copy', 'reference', 'certified_true_copy'
-            ])->default('controlled');
         });
     }
 

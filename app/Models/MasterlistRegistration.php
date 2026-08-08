@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Model;
 class MasterlistRegistration extends Model
 {
     protected $table = 'masterlist_registration';
-    protected $primaryKey = 'masterlist_id';
 
     protected $fillable = [
         'checklist_id',
@@ -29,7 +28,6 @@ class MasterlistRegistration extends Model
         'brief_purpose',
         'scanned_masterlist',
         'created_by',
-        'stamp_status',
     ];
 
     protected $casts = [
@@ -86,11 +84,11 @@ class MasterlistRegistration extends Model
 
     public function allRelatedDocuments()
     {
-        return $this->relatedDocuments->merge($this->relatedToDocuments)->unique('masterlist_id');
+        return $this->relatedDocuments->merge($this->relatedToDocuments)->unique('id');
     }
 
     public function sourceOffices()
     {
-        return $this->hasMany(MasterlistSourceOffice::class, 'masterlist_id', 'masterlist_id');
+        return $this->hasMany(MasterlistSourceOffice::class, 'masterlist_id');
     }
 }

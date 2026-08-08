@@ -1,4 +1,5 @@
 <?php
+// 016 — document_retrieval
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -9,15 +10,15 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('document_retrieval', function (Blueprint $table) {
-            $table->id('retrieval_id');
+            $table->id();
             $table->foreignId('checklist_id')->nullable()
-                  ->constrained('checklist_types', 'checklist_id');
+                  ->constrained('checklist_types');
             $table->foreignId('version_id')->nullable()
-                  ->constrained('version_type', 'version_id');
+                  ->constrained('version_type');
             $table->foreignId('request_id')->nullable()
-                  ->constrained('document_requests', 'request_id');
+                  ->constrained('document_requests');
             $table->foreignId('doc_type_id')->nullable()
-                  ->constrained('doc_types', 'doc_type_id');
+                  ->constrained('doc_types');
             $table->date('doc_retrieval_date_actual')->nullable();
             $table->time('doc_retrieval_time_actual')->nullable();
             $table->date('doc_retrieval_date_file')->nullable();
@@ -26,7 +27,7 @@ return new class extends Migration
             $table->text('remarks')->nullable();
             $table->string('scanned_retrieval')->nullable();
             $table->foreignId('created_by')
-                  ->constrained('accounts', 'id');
+                  ->constrained('accounts');
             $table->timestamps();
         });
     }

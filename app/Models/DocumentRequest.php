@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Model;
 class DocumentRequest extends Model
 {
     protected $table = 'document_requests';
-    protected $primaryKey = 'request_id';
 
     protected $fillable = [
         'version_id',
@@ -76,10 +75,5 @@ class DocumentRequest extends Model
     public function syllabi()
     {
         return $this->hasMany(Syllabi::class, 'request_id');
-    }
-
-    public function stamps()
-    {
-        return $this->hasMany(\App\Models\DocumentStamp::class, 'document_request_id', 'request_id');
     }
 }

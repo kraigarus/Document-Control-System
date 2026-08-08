@@ -1,4 +1,5 @@
 <?php
+// 013 — doc_revision
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -9,9 +10,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('doc_revision', function (Blueprint $table) {
-            $table->id('revision_id');
+            $table->id();
             $table->foreignId('dcn_id')->nullable()
-                  ->constrained('document_change_notice', 'dcn_id')
+                  ->constrained('document_change_notice')
                   ->cascadeOnDelete();
             $table->string('title')->nullable();
             $table->string('document_no', 100)->nullable();

@@ -1,4 +1,5 @@
 <?php
+// 020 — masterlist_source_offices
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -9,19 +10,14 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('masterlist_source_offices', function (Blueprint $table) {
-            $table->id('masterlist_office_id');
-
+            $table->id();
             $table->foreignId('masterlist_id')
-                ->constrained('masterlist_registration', 'masterlist_id')
-                ->onDelete('cascade');
-
-            $table->foreignId('office_id')
-                ->nullable()
-                ->constrained('offices', 'office_id')
-                ->nullOnDelete();
-
+                  ->constrained('masterlist_registration')
+                  ->cascadeOnDelete();
+            $table->foreignId('office_id')->nullable()
+                  ->constrained('offices')
+                  ->nullOnDelete();
             $table->timestamps();
-
             $table->index('masterlist_id');
         });
     }

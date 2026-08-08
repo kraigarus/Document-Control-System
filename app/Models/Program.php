@@ -8,10 +8,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Program extends Model
 {
     protected $table = 'programs';
-    protected $primaryKey = 'program_id';
 
     protected $fillable = [
         'college_id',
+        'program_code',
         'program_name',
     ];
 

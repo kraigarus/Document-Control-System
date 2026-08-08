@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Model;
 class DocumentRetrieval extends Model
 {
     protected $table = 'document_retrieval';
-    protected $primaryKey = 'retrieval_id';
 
     protected $fillable = [
         'checklist_id',

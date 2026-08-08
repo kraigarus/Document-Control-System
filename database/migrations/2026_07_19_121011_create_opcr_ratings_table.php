@@ -1,4 +1,5 @@
 <?php
+// 021 — opcr_ratings (already used standard id — no changes)
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;

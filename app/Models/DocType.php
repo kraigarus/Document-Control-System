@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Model;
 class DocType extends Model
 {
     protected $table = 'doc_types';
-    protected $primaryKey = 'doc_type_id';
     public $timestamps = false;
 
     protected $fillable = [
@@ -32,11 +31,11 @@ class DocType extends Model
 
     public function subTypes()
     {
-        return $this->hasMany(DocType::class, 'parent_id', 'doc_type_id');
+        return $this->hasMany(DocType::class, 'parent_id');
     }
 
     public function parentType()
     {
-        return $this->belongsTo(DocType::class, 'parent_id', 'doc_type_id');
+        return $this->belongsTo(DocType::class, 'parent_id');
     }
 }

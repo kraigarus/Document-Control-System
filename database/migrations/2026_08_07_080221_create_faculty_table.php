@@ -1,4 +1,5 @@
 <?php
+// 028 — faculties
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -9,10 +10,10 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('faculties', function (Blueprint $table) {
-            $table->id('faculty_id');
+            $table->id();
             $table->string('faculty_name')->unique();
             $table->foreignId('college_id')->nullable()
-                  ->constrained('colleges', 'college_id')
+                  ->constrained('colleges')
                   ->nullOnDelete();
             $table->timestamps();
         });

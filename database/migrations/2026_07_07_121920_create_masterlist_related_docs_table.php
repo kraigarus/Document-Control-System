@@ -1,4 +1,5 @@
 <?php
+// 019 — masterlist_related_docs (renamed from 'related_documents' to match the model)
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -10,12 +11,14 @@ return new class extends Migration
     {
         Schema::create('masterlist_related_docs', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('masterlist_id');
-            $table->unsignedBigInteger('related_doc_id');
+            $table->foreignId('masterlist_id')
+                  ->constrained('masterlist_registration')
+                  ->cascadeOnDelete();
+            $table->foreignId('related_doc_id')
+                  ->constrained('masterlist_registration')
+                  ->cascadeOnDelete();
             $table->timestamps();
-
-            $table->foreign('masterlist_id')->references('masterlist_id')->on('masterlist_registration')->onDelete('cascade');
-            $table->foreign('related_doc_id')->references('request_id')->on('document_requests')->onDelete('cascade');
+            $table->unique(['masterlist_id', 'related_doc_id']);
         });
     }
 

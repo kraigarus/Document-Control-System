@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Model;
 class DocumentRequestForm extends Model
 {
     protected $table = 'document_request_form';
-    protected $primaryKey = 'drf_id';
 
     protected $fillable = [
         'checklist_id',
@@ -18,7 +17,6 @@ class DocumentRequestForm extends Model
         'drf_date',
         'drf_receipt_date',
         'drf_receipt_time',
-        'office_id', 
         'doc_title',
         'scanned_drf',
         'created_by',
@@ -50,9 +48,9 @@ class DocumentRequestForm extends Model
         return $this->belongsTo(DocType::class, 'doc_type_id');
     }
 
-    public function drfOffices()
+    public function offices()
     {
-        return $this->hasMany(DrfOffice::class, 'drf_id', 'drf_id');
+        return $this->belongsToMany(Office::class, 'drf_offices', 'document_request_form_id', 'office_id');
     }
 
     public function creator()

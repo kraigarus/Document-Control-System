@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Model;
 class ApprovalRecord extends Model
 {
     protected $table = 'approval_records';
-    protected $primaryKey = 'approval_id';
     public $timestamps = false;
 
     protected $fillable = [

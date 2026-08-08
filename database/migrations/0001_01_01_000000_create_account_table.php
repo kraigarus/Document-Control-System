@@ -1,4 +1,5 @@
 <?php
+// 001 — accounts
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;

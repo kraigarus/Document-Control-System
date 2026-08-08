@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Model;
 class DocumentDistribution extends Model
 {
     protected $table = 'document_distribution';
-    protected $primaryKey = 'distribution_id';
 
     protected $fillable = [
         'checklist_id',

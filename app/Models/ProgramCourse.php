@@ -8,7 +8,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class ProgramCourse extends Model
 {
     protected $table = 'program_courses';
-    protected $primaryKey = 'course_id';
 
     protected $fillable = [
         'program_id',
@@ -18,11 +17,11 @@ class ProgramCourse extends Model
 
     public function program(): BelongsTo
     {
-        return $this->belongsTo(Program::class, 'program_id', 'program_id');
+        return $this->belongsTo(Program::class, 'program_id');
     }
 
     public function semester(): BelongsTo
     {
-        return $this->belongsTo(Semester::class, 'semester_id', 'semester_id');
+        return $this->belongsTo(Semester::class, 'semester_id');
     }
 }

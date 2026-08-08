@@ -1,4 +1,5 @@
 <?php
+// 015 — distribution_offices
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -11,10 +12,10 @@ return new class extends Migration
         Schema::create('distribution_offices', function (Blueprint $table) {
             $table->id();
             $table->foreignId('distribution_id')
-                  ->constrained('document_distribution', 'distribution_id')
+                  ->constrained('document_distribution')
                   ->cascadeOnDelete();
             $table->foreignId('office_id')
-                  ->constrained('offices', 'office_id');
+                  ->constrained('offices');
             $table->integer('copies')->nullable();
         });
     }

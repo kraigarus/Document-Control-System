@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Model;
 class DocumentChangeNotice extends Model
 {
     protected $table = 'document_change_notice';
-    protected $primaryKey = 'dcn_id';
 
     protected $fillable = [
         'checklist_id',

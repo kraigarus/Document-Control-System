@@ -3,11 +3,12 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Office extends Model
 {
     protected $table = 'offices';
-    protected $primaryKey = 'office_id';
     public $timestamps = false;
 
     protected $fillable = [
@@ -15,9 +16,14 @@ class Office extends Model
         'status',
     ];
 
-    public function documentRequestForms()
+    public function documentRequestForms(): BelongsToMany
     {
-        return $this->hasMany(DocumentRequestForm::class, 'office_id');
+        return $this->belongsToMany(
+            DocumentRequestForm::class,
+            'drf_offices',
+            'office_id',
+            'document_request_form_id'
+        );
     }
 
     public function documentChangeNotices()
@@ -25,8 +31,18 @@ class Office extends Model
         return $this->hasMany(DocumentChangeNotice::class, 'office_id');
     }
 
-    public function masterlistRegistrations()
+    public function masterlistRegistrations(): BelongsToMany
     {
-        return $this->hasMany(MasterlistRegistration::class, 'office_id');
+        return $this->belongsToMany(
+            MasterlistRegistration::class,
+            'masterlist_source_offices',
+            'office_id',
+            'masterlist_id'
+        );
+    }
+
+    public function college(): HasOne
+    {
+        return $this->hasOne(College::class, 'office_id');
     }
 }

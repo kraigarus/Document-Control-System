@@ -7,20 +7,19 @@ use Illuminate\Database\Eloquent\Model;
 class DrfOffice extends Model
 {
     protected $table = 'drf_offices';
-    protected $primaryKey = 'id';
 
     protected $fillable = [
-        'drf_id',
+        'document_request_form_id',
         'office_id',
     ];
 
-    public function drf()
+    public function documentRequestForm()
     {
-        return $this->belongsTo(DocumentRequestForm::class, 'drf_id', 'drf_id');
+        return $this->belongsTo(DocumentRequestForm::class, 'document_request_form_id');
     }
 
     public function office()
     {
-        return $this->belongsTo(Office::class, 'office_id', 'office_id');
+        return $this->belongsTo(Office::class, 'office_id');
     }
 }
