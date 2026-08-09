@@ -11,7 +11,9 @@ return new class extends Migration
     {
         Schema::create('dcs_opcr_ratings', function (Blueprint $table) {
             $table->id();
-            $table->integer('request_id');
+            $table->foreignId('request_id')
+                ->constrained('dcs_document_requests')
+                ->cascadeOnDelete();
             $table->string('sub_type');
             $table->decimal('rating_q', 5, 2)->nullable();
             $table->decimal('rating_e', 5, 2)->nullable();

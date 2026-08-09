@@ -195,7 +195,7 @@
                                 <td class="col-action">
                                     <button type="button" class="st-btn-stamp {{ $anyStamped ? 'st-btn-stamp-change' : '' }}"
                                         data-files='@json($files)'
-                                        data-request-id="{{ $doc->request_id }}"
+                                        data-request-id="{{ $doc->id }}"
                                         data-title="{{ $title }}"
                                         data-doc-no="{{ $docNo }}"
                                         data-rev="{{ $revNo }}">

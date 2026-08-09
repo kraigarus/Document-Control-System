@@ -26,7 +26,7 @@
         <select id="filterSubType">
             <option value="all">All Sub-types</option>
             @foreach($subTypes ?? [] as $sub)
-                <option value="{{ $sub->doc_type_id }}">{{ $sub->doc_type_name }}</option>
+                <option value="{{ $sub->id }}">{{ $sub->doc_type_name }}</option>
             @endforeach
         </select>
     </div>
@@ -44,7 +44,7 @@
         <select id="filterSourceUnit">
             <option value="">All Units</option>
             @foreach($offices ?? [] as $office)
-                <option value="{{ $office->office_id }}">{{ $office->office_name }}</option>
+                <option value="{{ $office->id }}">{{ $office->office_name }}</option>
             @endforeach
         </select>
     </div>
@@ -106,7 +106,7 @@
         <div class="db-type-grid" id="docTypeGrid">
             <button class="db-type-btn active" data-type-id="all">ALL</button>
             @foreach($docTypes ?? [] as $type)
-                <button class="db-type-btn" data-type-id="{{ $type->doc_type_id }}">{{ strtoupper($type->doc_type_name) }}</button>
+                <button class="db-type-btn" data-type-id="{{ $type->id }}">{{ strtoupper($type->doc_type_name) }}</button>
             @endforeach
         </div>
         <div class="db-controls-right">

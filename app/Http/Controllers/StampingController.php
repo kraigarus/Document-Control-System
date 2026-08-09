@@ -91,7 +91,7 @@ class StampingController extends Controller
               ->orWhereHas('documentRetrieval', fn ($q2) =>
                 $q2->whereNotNull('scanned_retrieval')->where('scanned_retrieval', '!=', ''));
         })
-        ->orderBy('request_id', 'desc')
+        ->orderBy('id', 'desc')
         ->paginate(15);
 
         $docTypes = DocType::whereNull('parent_id')->orderBy('doc_type_name')->get();
@@ -108,7 +108,7 @@ class StampingController extends Controller
         $validated = $request->validate([
             'file_path'    => 'required|string|max:500',
             'file_key'     => 'required|string|in:masterlist,drf,dcn,distribution,retrieval',
-            'request_id'   => 'required|integer|exists:document_requests,request_id',
+            'request_id'   => 'required|integer|exists:dcs_document_requests,id',
             'doc_no'       => 'nullable|string|max:100',
             'doc_title'    => 'nullable|string|max:500',
             'rev'          => 'nullable|string|max:20',
@@ -467,7 +467,7 @@ class StampingController extends Controller
     public function remove(Request $request)
     {
         $request->validate([
-            'request_id' => 'required|integer|exists:document_requests,request_id',
+            'request_id' => 'required|integer|exists:dcs_document_requests,id',
             'file_key'   => 'required|string|in:masterlist,drf,dcn,distribution,retrieval',
             'file_path'  => 'required|string',
         ]);

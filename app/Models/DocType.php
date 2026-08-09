@@ -29,13 +29,4 @@ class DocType extends Model
         return $this->hasMany(DocumentRequest::class, 'doc_type_id');
     }
 
-    public function subTypes()
-    {
-        return $this->hasMany(DocType::class, 'parent_id');
-    }
-
-    public function parentType()
-    {
-        return $this->belongsTo(DocType::class, 'parent_id');
-    }
 }

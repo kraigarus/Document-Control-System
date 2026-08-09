@@ -16,4 +16,9 @@ class OpcrRating extends Model
         'rating_t',
         'rating_a',
     ];
+
+    public function request()
+    {
+        return $this->belongsTo(DocumentRequest::class, 'request_id');
+    }
 }

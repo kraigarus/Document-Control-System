@@ -4,14 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
-use App\Models\{DocumentRequest, DocType, Office, Originator, DocRevision, Syllabi};
+use App\Models\{DocumentRequest, DocType, Office, Originator};
 
 class DatabaseController extends Controller
 {
-    // ──────────────────────────────────────────────────────────
-    // INDEX — render the page
-    // ──────────────────────────────────────────────────────────
     public function index()
     {
         $docTypes    = DocType::whereNull('parent_id')->get();
@@ -24,26 +20,24 @@ class DatabaseController extends Controller
         ));
     }
 
-    // ──────────────────────────────────────────────────────────
-    // DATA — JSON endpoint for the table
-    // ──────────────────────────────────────────────────────────
     public function data(Request $request)
     {
         try {
             $query = DocumentRequest::with([
                 'docType',
                 'documentRequestForm',
-                'documentRequestForm.drfOffices.office',
                 'masterlistRegistration',
                 'masterlistRegistration.sourceOffices.office',
                 'masterlistRegistration.relatedDocuments',
                 'masterlistRegistration.relatedToDocuments',
                 'approvalRecords',
                 'documentChangeNotice',
+                'documentChangeNotice.revisions',
                 'documentRetrieval',
-                'documentRetrieval.offices',
+                'documentRetrieval.offices.office',
                 'documentDistribution',
-                'documentDistribution.offices',
+                'documentDistribution.offices.office',
+                'syllabi.course',
             ]);
 
             if ($request->input('doc_type_id') && $request->input('doc_type_id') !== 'all') {
@@ -104,20 +98,17 @@ class DatabaseController extends Controller
 
             $allDocs = $query->get();
 
-            $syllabiDrfIds = Syllabi::whereIn('request_id', $allDocs->pluck('request_id'))
-                ->pluck('drf_id')->filter()->unique()->values();
+            $allRows = $allDocs->map(function ($doc) {
+                // A request is "syllabi-driven" if it has related Syllabi rows —
+                // in that case its DRF details live in Syllabi->drfs (per faculty),
+                // not in the generic documentRequestForm, so we hide the generic DRF fields.
+                $hasSyllabi = $doc->syllabi->isNotEmpty();
+                $drf = ($doc->documentRequestForm && !$hasSyllabi) ? $doc->documentRequestForm : null;
 
-            $syllabiCoursesByRequest = Syllabi::whereIn('request_id', $allDocs->pluck('request_id'))
-                ->orderBy('syllabi_id')
-                ->get(['request_id', 'course_name'])
-                ->groupBy('request_id');
-
-            $allRows = $allDocs->map(function ($doc) use ($syllabiDrfIds, $syllabiCoursesByRequest) {
-                $drf = null;
-                if ($doc->documentRequestForm) {
-                    $isSyllabiDrf = $syllabiDrfIds->contains($doc->documentRequestForm->drf_id);
-                    $drf = $isSyllabiDrf ? null : $doc->documentRequestForm;
-                }
+                $syllabiCourses = $doc->syllabi
+                    ->pluck('course.course_name')
+                    ->filter()
+                    ->values();
 
                 $ml   = $doc->masterlistRegistration;
                 $appr = $doc->approvalRecords ? $doc->approvalRecords->first() : null;
@@ -126,29 +117,21 @@ class DatabaseController extends Controller
                 $dist = $doc->documentDistribution;
 
                 $dcnPurpose = null;
-                if ($dcn) {
-                    $firstRev = DocRevision::where('dcn_id', $dcn->dcn_id)->first();
-                    if ($firstRev) $dcnPurpose = $firstRev->brief_purpose;
-                }
-
-                $drfOfficesList = null;
-                if ($drf && $drf->drfOffices) {
-                    $drfOfficesList = $drf->drfOffices
-                        ->map(fn ($o) => $o->office ? $o->office->office_name : null)
-                        ->filter()->implode(', ') ?: null;
+                if ($dcn && $dcn->revisions->isNotEmpty()) {
+                    $dcnPurpose = $dcn->revisions->sortBy('id')->first()->brief_purpose;
                 }
 
                 $retOffices = null;
                 if ($ret && $ret->offices) {
                     $retOffices = $ret->offices
-                        ->map(fn ($o) => $o->office ? $o->office->office_name : $o->office_name)
+                        ->map(fn ($o) => $o->office ? $o->office->office_name : null)
                         ->filter()->implode(', ') ?: null;
                 }
 
                 $distOffices = null;
                 if ($dist && $dist->offices) {
                     $distOffices = $dist->offices
-                        ->map(fn ($o) => $o->office ? $o->office->office_name : $o->office_name)
+                        ->map(fn ($o) => $o->office ? $o->office->office_name : null)
                         ->filter()->implode(', ') ?: null;
                 }
 
@@ -166,7 +149,7 @@ class DatabaseController extends Controller
                 }
 
                 return [
-                    'request_id'       => $doc->request_id,
+                    'request_id'       => $doc->id,
                     'doc_type_id'      => $doc->doc_type_id,
                     'sub_type_id'      => $doc->sub_type_id,
                     'doc_type_name'    => $doc->docType->doc_type_name ?? 'Uncategorized',
@@ -183,8 +166,7 @@ class DatabaseController extends Controller
                                             'doc_no' => $r->doc_no,
                                             'title'  => $r->doc_title,
                                         ])->values() : [],
-                    'syllabi_courses'  => ($syllabiCoursesByRequest->get($doc->request_id) ?? collect())
-                                        ->pluck('course_name')->filter()->values(),
+                    'syllabi_courses'  => $syllabiCourses,
                     'approval_no'      => $appr ? $appr->approval_no : null,
                     'approval_date'    => ($appr && $appr->approval_date) ? \Carbon\Carbon::parse($appr->approval_date)->format('M d, Y') : null,
                     'deadline_date'    => ($ml && $ml->deadline) ? \Carbon\Carbon::parse($ml->deadline)->format('M d, Y') : null,
@@ -277,7 +259,6 @@ class DatabaseController extends Controller
 
                 if ($rankA !== $rankB) return $rankA <=> $rankB;
 
-                // Same rank (either both matched the same custom slot, or both unmatched) — fall back to alphabetical
                 $catCompare = strcmp($catA, $catB);
                 if ($catCompare !== 0) return $catCompare;
 
@@ -301,17 +282,11 @@ class DatabaseController extends Controller
         }
     }
 
-    // ──────────────────────────────────────────────────────────
-    // EXPORT
-    // ──────────────────────────────────────────────────────────
     public function export()
     {
         return redirect()->route('database.index')->with('info', 'Export feature coming soon.');
     }
 
-    // ──────────────────────────────────────────────────────────
-    // HELPERS
-    // ──────────────────────────────────────────────────────────
     private function formatTime($time)
     {
         if (!$time) return null;
