@@ -1,5 +1,7 @@
-import { defineConfig } from 'vite'
-import laravel from 'laravel-vite-plugin'
+import { defineConfig } from 'vite';
+import laravel from 'laravel-vite-plugin';
+
+const isDocker = process.env.DOCKER === 'true';
 
 export default defineConfig({
     plugins: [
@@ -8,9 +10,9 @@ export default defineConfig({
                 'resources/css/app.css',
                 'resources/css/portal.css',
                 'resources/css/dcs/login.css',
-                
+
                 'resources/js/dcs/calendar.js',
-                
+
                 'resources/js/dcs/dashboard.js',
                 'resources/css/dcs/dashboard.css',
 
@@ -36,7 +38,6 @@ export default defineConfig({
                 'resources/js/dcs/reports.js',
                 'resources/js/dcs/report-filter.js',
 
-
                 'resources/css/dcs/stamping.css',
                 'resources/js/dcs/stamping.js',
 
@@ -50,15 +51,23 @@ export default defineConfig({
         }),
     ],
     server: {
-        host: process.env.DOCKER ? '0.0.0.0' : 'localhost',
+        host: isDocker ? '0.0.0.0' : 'localhost',
         port: 5173,
-        hmr: {
-            host: 'localhost',
-        },
-        watch: {
-            usePolling: true,
-            interval: 800,
-            ignored: ['**/storage/framework/views/**'],
-        },
+        strictPort: true,
+        cors: true,
+
+        ...(isDocker && {
+            origin: process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173',
+            hmr: {
+                host: 'localhost',
+                port: 5173,
+                protocol: 'ws',
+            },
+            watch: {
+                usePolling: true,
+                interval: 500,
+                ignored: ['**/vendor/**', '**/storage/framework/views/**'],
+            },
+        }),
     },
-})
+});
