@@ -9,6 +9,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
     @vite(['resources/css/dcs/update.css', 'resources/js/dcs/update.js'])
+</head>
+<body>
     @include('partials.header')
     @include('partials.sidebar')
     @include('partials.inactivity-modal')
@@ -57,7 +59,7 @@
             <select class="upd-filter-select" id="updTypeFilter">
                 <option value="all">All Document Types</option>
                 @foreach($docTypes as $type)
-                    <option value="{{ $type->doc_type_id }}">{{ $type->doc_type_name }}</option>
+                    <option value="{{ $type->id }}">{{ $type->doc_type_name }}</option>
                 @endforeach
             </select>
             <button type="button" class="upd-btn-search" id="resetSearchBtn" title="Reset filters">

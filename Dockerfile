@@ -23,6 +23,7 @@ RUN apk add --no-cache \
         postgresql-client \
         postgresql-dev \
         tesseract-ocr \
+        tesseract-ocr-data-eng \
         ghostscript \
         imagemagick \
         imagemagick-dev \

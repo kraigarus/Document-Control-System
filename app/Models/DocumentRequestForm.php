@@ -53,6 +53,11 @@ class DocumentRequestForm extends Model
         return $this->belongsToMany(Office::class, 'dcs_drf_offices', 'document_request_form_id', 'office_id');
     }
 
+    public function drfOffices()
+    {
+        return $this->hasMany(DrfOffice::class, 'document_request_form_id');
+    }
+
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');

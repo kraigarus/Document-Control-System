@@ -200,6 +200,11 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     // ── Lock revision field for new registrations ──
     const revField = document.getElementById('masterlistRevisionNo');
+    if (revField) {
+        revField.addEventListener('input', function () {
+            this.dataset.userEdited = 'true';
+        });
+    }
 
     // ── Version type change → apply revision mode ──
     const versionTypeEl = document.getElementById('versionType');
@@ -231,6 +236,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         arrowId: 'drfSourceArrowBtn',
         resultsId: 'drfSourceResults',
         chipsId: 'drfSourceInlineChips',
+        summaryId: 'drfSourceSummary',
         allowFreeText: false,
         officeFieldName: 'drfSourceUnit[]',
         nameFieldName: null,
@@ -244,6 +250,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         arrowId: 'masterlistSourceArrowBtn',
         resultsId: 'masterlistSourceSuggestions',
         chipsId: 'masterlistSourceInlineChips',
+        summaryId: 'masterlistSourceSummary',
         allowFreeText: true,
         officeFieldName: 'masterlistOfficeIds[]',
         nameFieldName: 'masterlistOriginatorNames[]',
@@ -257,6 +264,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         arrowId: 'masterlistOriginatorArrowBtn',
         resultsId: 'masterlistOriginatorResults',
         chipsId: 'masterlistOriginatorInlineChips',
+        summaryId: 'masterlistOriginatorSummary',
         allowFreeText: true,
         singleSelect: true,
         fieldName: 'masterlistOriginator',
@@ -353,12 +361,15 @@ function applyRevisedModeLookupResult(data, hintEl, revField) {
         setSaveEnabled(true);
 
         if (revField) {
-            revField.value = data.next_rev;
+            // Only auto-suggest the next revision if the user hasn't already typed one
+            if (!revField.value || revField.dataset.userEdited !== 'true') {
+                revField.value = data.next_rev;
+            }
             revField.readOnly = false;
             revField.style.background = '';
             revField.style.cursor = '';
-            revField.setAttribute('min', data.next_rev);
-            revField.setAttribute('title', 'Suggested: Rev ' + data.next_rev + ' (latest is ' + data.latest_rev + ')');
+            revField.removeAttribute('min');
+            revField.setAttribute('title', 'Suggested: Rev ' + data.next_rev + ' (latest is ' + data.latest_rev + '). Lower revision numbers are allowed.');
         }
 
         const titleField = document.getElementById('masterlistDocTitle');
@@ -490,6 +501,7 @@ function applyRevisionMode() {
     if (isRevisedMode()) {
         if (revField) {
             revField.value = '';
+            revField.dataset.userEdited = '';
             revField.readOnly = false;
             revField.style.background = '';
             revField.style.cursor = '';
@@ -764,6 +776,7 @@ function createSourceUnitWidget(opts) {
     function addFreeText(val) {
         if (!opts.allowFreeText || !val) return;
         if (opts.singleSelect) selected = [];
+        else if (selected.some(i => i.label.toLowerCase() === val.toLowerCase())) return;
         idCounter++;
         selected.push({ type: 'name', id: 'n' + idCounter, label: val });
         render();
@@ -772,6 +785,23 @@ function createSourceUnitWidget(opts) {
     function removeItem(type, id) {
         selected = selected.filter(i => !(i.type === type && String(i.id) === String(id)));
         render();
+    }
+
+    // Writes the comma-joined selected labels back into the input, with a
+    // trailing ", " (multi-select) so typing can continue for the next entry.
+    // Input height/box size is untouched — text just scrolls inside it.
+    function syncInputText() {
+        const inputEl = document.getElementById(opts.inputId);
+        if (!inputEl) return;
+        if (selected.length === 0) {
+            inputEl.value = '';
+            return;
+        }
+        const joined = selected.map(i => i.label).join(', ');
+        inputEl.value = opts.singleSelect ? joined : joined + ', ';
+
+        const len = inputEl.value.length;
+        inputEl.setSelectionRange(len, len);
     }
 
     function render() {
@@ -786,6 +816,8 @@ function createSourceUnitWidget(opts) {
             widget.appendChild(input);
         });
 
+        // This chips panel (toggled by the arrow button) IS the "view all" —
+        // no separate summary element needed.
         const chipsEl = document.getElementById(opts.chipsId);
         if (chipsEl) {
             chipsEl.innerHTML = selected.length === 0
@@ -803,9 +835,17 @@ function createSourceUnitWidget(opts) {
         }
     }
 
+    // Everything after the last comma is the "in-progress" search segment;
+    // everything before it is already-committed selections shown as text.
+    function getCurrentQuery(input) {
+        const raw = input.value;
+        const lastComma = raw.lastIndexOf(',');
+        return (lastComma === -1 ? raw : raw.slice(lastComma + 1)).trim();
+    }
+
     function handleSearch(input) {
         const dropdown = document.getElementById(opts.resultsId);
-        const q = input.value.trim();
+        const q = opts.singleSelect ? input.value.trim() : getCurrentQuery(input);
         if (q.length < 1) { dropdown.style.display = 'none'; return; }
         const filtered = filterItems(getList(), labelKey, q).filter(o => !isOfficeSelected(o[idKey]));
         if (filtered.length === 0) {
@@ -820,13 +860,15 @@ function createSourceUnitWidget(opts) {
     }
 
     function handleKeydown(e, input) {
-        if (e.key !== 'Enter') return;
+        if (e.key !== 'Enter' && e.key !== ',') return;
         e.preventDefault();
     }
 
     function pick(itemId) {
         addOffice(itemId);
-        document.getElementById(opts.inputId).value = '';
+        const inputEl = document.getElementById(opts.inputId);
+        if (inputEl) inputEl.focus();
+        syncInputText();
         document.getElementById(opts.resultsId).style.display = 'none';
     }
 
@@ -877,7 +919,14 @@ function createSourceUnitWidget(opts) {
 
     function reset() {
         selected = [];
+        const inputEl = document.getElementById(opts.inputId);
+        if (inputEl) inputEl.value = '';
         render();
+    }
+
+    function removeItemAndSync(type, id) {
+        removeItem(type, id);
+        syncInputText();
     }
 
     function seedFromString(str) {
@@ -888,14 +937,24 @@ function createSourceUnitWidget(opts) {
             else { idCounter++; selected.push({ type: 'name', id: 'n' + idCounter, label: part }); }
         });
         render();
+        syncInputText();
     }
 
-    // wire the DOM once
     const inputEl = document.getElementById(opts.inputId);
     const arrowEl = document.getElementById(opts.arrowId);
     inputEl.addEventListener('input', function () { closePanel(); handleSearch(this); });
     inputEl.addEventListener('keydown', function (e) { handleKeydown(e, this); });
+
+    function jumpCaretToEnd() {
+        setTimeout(() => {
+            const len = inputEl.value.length;
+            inputEl.setSelectionRange(len, len);
+        }, 0);
+    }
+    inputEl.addEventListener('focus', jumpCaretToEnd);
+    inputEl.addEventListener('click', jumpCaretToEnd);
     arrowEl.addEventListener('click', togglePanel);
+
     document.addEventListener('click', function (e) {
         const widget = document.getElementById(opts.widgetId);
         const chipsEl = document.getElementById(opts.chipsId);
@@ -909,7 +968,7 @@ function createSourceUnitWidget(opts) {
 
     render();
 
-    const api = { pick, removeItem, reset, seedFromString, get selected() { return selected; } };
+    const api = { pick, removeItem: removeItemAndSync, reset, seedFromString, openPanel: togglePanel, get selected() { return selected; } };
     window.__sourceWidgets[opts.key] = api;
     return api;
 }

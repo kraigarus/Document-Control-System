@@ -26,23 +26,6 @@ class RegisterController extends Controller
     // ──────────────────────────────────────────────────────────
     // SHARED HELPERS
     // ──────────────────────────────────────────────────────────
-
-    /**
-     * Convert minutes to MySQL TIME format (HH:MM:00).
-     */
-    private function minutesToTime(?int $minutes): ?string
-    {
-        if ($minutes === null || $minutes < 0) {
-            return null;
-        }
-        $hours = intdiv($minutes, 60);
-        $mins  = $minutes % 60;
-        if ($hours > 838) {
-            return '838:59:59';
-        }
-        return sprintf('%02d:%02d:00', $hours, $mins);
-    }
-
     /**
      * Parse a time value and return a clean display string.
      */
@@ -98,7 +81,7 @@ class RegisterController extends Controller
             $matchingIds = $matching->pluck('id');
             $latest = MasterlistRegistration::whereIn('request_id', $matchingIds)
                 ->where('doc_no', $docNo)
-                ->orderByRaw('CAST(revise_no AS UNSIGNED) DESC')
+                ->orderByDesc('revise_no')
                 ->first();
 
             return [
@@ -190,8 +173,8 @@ class RegisterController extends Controller
                 SELECT
                     ml.request_id,
                     ROW_NUMBER() OVER (
-                        PARTITION BY ml.doc_no, dr.doc_type_id, IFNULL(dr.sub_type_id, 0)
-                        ORDER BY CAST(ml.revise_no AS UNSIGNED) DESC
+                        PARTITION BY ml.doc_no, dr.doc_type_id, COALESCE(dr.sub_type_id, 0)
+                        ORDER BY ml.revise_no DESC
                     ) AS rn
                 FROM dcs_masterlist_registration ml
                 JOIN dcs_document_requests dr ON ml.request_id = dr.id
@@ -275,14 +258,21 @@ class RegisterController extends Controller
                     ->with('error', $this->mismatchErrorMessage($docNo, $result));
             }
 
-            $existing = $result['latest'];
-            $nextRev  = (int) $existing->revise_no + 1;
+            $existing    = $result['latest'];
+            $nextRev     = (int) $existing->revise_no + 1;
+            $requestedRev = (int) $request->input('masterlistRevisionNo');
 
-            // Only warn if the revision number doesn't match the expected next revision
-            // but still allow saving — the field is now editable with a suggested value
-            if ((int) $request->input('masterlistRevisionNo') < $nextRev) {
+            // Allow any revision number (including lower than latest) as long as it
+            // doesn't already exist for this document + type combination.
+            $matchingIds   = $result['matches']->pluck('id');
+            $duplicateExists = MasterlistRegistration::whereIn('request_id', $matchingIds)
+                ->where('doc_no', $docNo)
+                ->where('revise_no', $requestedRev)
+                ->exists();
+
+            if ($duplicateExists) {
                 return back()->withInput()
-                    ->with('error', 'Revision number must be at least ' . $nextRev . ' (latest revision is ' . $existing->revise_no . ').');
+                    ->with('error', 'Revision ' . $requestedRev . ' for document "' . $docNo . '" already exists. Please use a different revision number.');
             }
         }
 
@@ -488,7 +478,7 @@ class RegisterController extends Controller
 
                 $masterlistTimeSpent = null;
                 if ($request->filled('masterlistTimeSpent') && is_numeric($request->masterlistTimeSpent) && $request->masterlistTimeSpent >= 0) {
-                    $masterlistTimeSpent = $this->minutesToTime(intval($request->masterlistTimeSpent));
+                    $masterlistTimeSpent = intval($request->masterlistTimeSpent);   // ← just the raw minutes
                 }
 
                 $masterlist = MasterlistRegistration::create([
@@ -533,20 +523,58 @@ class RegisterController extends Controller
                     );
                 }
 
-                // Create the Masterlist record for this Syllabi document
-                MasterlistRegistration::create([
-                    'checklist_id'     => 3,
-                    'version_id'       => $versionId,
-                    'request_id'       => $requestId,
-                    'doc_type_id'      => $docTypeId,
-                    'doc_no'           => $request->syllabiDocNo,
-                    'doc_title'        => $request->syllabiDocTitle,
-                    'effectivity_date' => $request->syllabiEffectivityDate,
-                    'deadline'         => $request->syllabiDeadline,
-                    'revise_no'        => $request->masterlistRevisionNo ?? 0,
-                    'no_pages'         => $totalPages,
-                    'created_by'       => auth()->id(),
-                ]);
+                $masterlist     = MasterlistRegistration::where('request_id', $requestId)->first();
+                $masterlistFile = $masterlist ? $masterlist->scanned_masterlist : null;
+
+                if ($request->hasFile('uploadScannedCopy')) {
+                    if ($masterlistFile) $filesToDelete[] = $masterlistFile;
+                    $masterlistFile = $request->file('uploadScannedCopy')->store('scans/masterlist', 'public');
+                    $uploadedFiles[] = $masterlistFile;
+                }
+
+                $masterlistTimeSpent = null;
+                if ($request->filled('masterlistTimeSpent') && is_numeric($request->masterlistTimeSpent) && $request->masterlistTimeSpent >= 0) {
+                    $masterlistTimeSpent = intval($request->masterlistTimeSpent);
+                }
+
+                $masterlistData = [
+                    'checklist_id'        => 3,
+                    'version_id'          => $versionId,
+                    'doc_type_id'         => $docTypeId,
+                    'doc_no'              => $request->syllabiDocNo,
+                    'doc_title'           => $request->syllabiDocTitle,
+                    'doc_receipt_date'    => $request->masterlistReceiptDate,
+                    'doc_receipt_time'    => $request->masterlistReceiptTime,
+                    'doc_registered_date' => $request->masterlistRegisteredDate,
+                    'doc_registered_time' => $request->masterlistRegisteredTime,
+                    'time_spent'          => $masterlistTimeSpent,
+                    'effectivity_date'    => $request->syllabiEffectivityDate,
+                    'deadline'            => $request->syllabiDeadline,
+                    'revise_no'           => $request->masterlistRevisionNo ?? 0,
+                    'no_pages'            => $totalPages,
+                    'originator_name'     => $request->masterlistOriginator,
+                    'brief_purpose'       => $request->briefPurpose,
+                    'scanned_masterlist'  => $masterlistFile,
+                ];
+
+                if ($masterlist) {
+                    $masterlist->update($masterlistData);
+                } else {
+                    $masterlist = MasterlistRegistration::create(array_merge($masterlistData, [
+                        'request_id' => $requestId,
+                        'created_by' => auth()->id(),
+                    ]));
+                }
+
+                MasterlistSourceOffice::where('masterlist_id', $masterlist->id)->delete();
+                $this->saveOriginsFromArrays(
+                    $masterlist,
+                    $request->input('masterlistOfficeIds', []),
+                    $request->input('masterlistOriginatorNames', [])
+                );
+
+                $relatedIds = array_filter(array_map('intval', $request->input('relatedDocumentIds', [])));
+                $this->saveRelatedDocuments($masterlist, $relatedIds);
 
                 $this->saveSyllabiRows($requestId, $versionId, $docTypeId, $request, $uploadedFiles);
             }
@@ -561,7 +589,7 @@ class RegisterController extends Controller
 
                 $retrievalTimeSpent = null;
                 if ($request->filled('retrievalTimeSpent') && is_numeric($request->retrievalTimeSpent) && $request->retrievalTimeSpent >= 0) {
-                    $retrievalTimeSpent = $this->minutesToTime(intval($request->retrievalTimeSpent));
+                    $retrievalTimeSpent = intval($request->retrievalTimeSpent);
                 }
 
                 $retrieval = DocumentRetrieval::create([
@@ -600,7 +628,7 @@ class RegisterController extends Controller
 
                 $distTimeSpent = null;
                 if ($request->filled('distributionTimeSpent') && is_numeric($request->distributionTimeSpent) && $request->distributionTimeSpent >= 0) {
-                    $distTimeSpent = $this->minutesToTime(intval($request->distributionTimeSpent));
+                    $distTimeSpent = intval($request->distributionTimeSpent);
                 }
 
                 $distribution = DocumentDistribution::create([
@@ -674,8 +702,13 @@ class RegisterController extends Controller
      */
     private function saveOriginsFromArrays(MasterlistRegistration $masterlist, array $officeIds, array $names = []): void
     {
-        foreach (array_filter($officeIds) as $officeId) {
-            MasterlistSourceOffice::create(['masterlist_id' => $masterlist->id, 'office_id' => (int) $officeId]);
+        foreach ($officeIds as $officeId) {
+            $id = (int) trim((string) $officeId);
+            if ($id <= 0) continue;  // ← rejects 0, negatives, and whitespace-only
+            MasterlistSourceOffice::create([
+                'masterlist_id' => $masterlist->id,
+                'office_id'     => $id,
+            ]);
         }
     }
 
@@ -1479,7 +1512,7 @@ class RegisterController extends Controller
 
                 $masterlistTimeSpent = null;
                 if ($request->filled('masterlistTimeSpent') && is_numeric($request->masterlistTimeSpent) && $request->masterlistTimeSpent >= 0) {
-                    $masterlistTimeSpent = $this->minutesToTime(intval($request->masterlistTimeSpent));
+                    $masterlistTimeSpent = intval($request->masterlistTimeSpent);   // ← just the raw minutes
                 }
 
                 $masterlistData = [
@@ -1538,37 +1571,66 @@ class RegisterController extends Controller
             }
 
             if ($isSyllabi) {
+                $totalPages = 0;
+                if ($request->has('syllabiNoPages')) {
+                    $totalPages = array_sum(
+                        array_filter($request->syllabiNoPages, fn($p) => is_numeric($p) && $p > 0)
+                    );
+                }
+
                 $masterlist     = MasterlistRegistration::where('request_id', $requestId)->first();
+                $masterlistFile = $masterlist ? $masterlist->scanned_masterlist : null;
+
+                if ($request->hasFile('uploadScannedCopy')) {
+                    if ($masterlistFile) $filesToDelete[] = $masterlistFile;
+                    $masterlistFile = $request->file('uploadScannedCopy')->store('scans/masterlist', 'public');
+                    $uploadedFiles[] = $masterlistFile;
+                }
+
+                $masterlistTimeSpent = null;
+                if ($request->filled('masterlistTimeSpent') && is_numeric($request->masterlistTimeSpent) && $request->masterlistTimeSpent >= 0) {
+                    $masterlistTimeSpent = intval($request->masterlistTimeSpent);
+                }
+
                 $masterlistData = [
-                    'checklist_id'     => 3,
-                    'version_id'       => $versionId,
-                    'doc_type_id'      => $docTypeId,
-                    'doc_no'           => $request->syllabiDocNo,
-                    'doc_title'        => $request->syllabiDocTitle,
-                    'effectivity_date' => $request->syllabiEffectivityDate,
-                    'deadline'         => $request->syllabiDeadline,
-                    'revise_no'        => $request->masterlistRevisionNo ?? 0,
+                    'checklist_id'        => 3,
+                    'version_id'          => $versionId,
+                    'doc_type_id'         => $docTypeId,
+                    'doc_no'              => $request->syllabiDocNo,
+                    'doc_title'           => $request->syllabiDocTitle,
+                    'doc_receipt_date'    => $request->masterlistReceiptDate,
+                    'doc_receipt_time'    => $request->masterlistReceiptTime,
+                    'doc_registered_date' => $request->masterlistRegisteredDate,
+                    'doc_registered_time' => $request->masterlistRegisteredTime,
+                    'time_spent'          => $masterlistTimeSpent,
+                    'effectivity_date'    => $request->syllabiEffectivityDate,
+                    'deadline'            => $request->syllabiDeadline,
+                    'revise_no'           => $request->masterlistRevisionNo ?? 0,
+                    'no_pages'            => $totalPages,
+                    'originator_name'     => $request->masterlistOriginator,
+                    'brief_purpose'       => $request->briefPurpose,
+                    'scanned_masterlist'  => $masterlistFile,
                 ];
 
                 if ($masterlist) {
                     $masterlist->update($masterlistData);
                 } else {
-                    MasterlistRegistration::create(array_merge($masterlistData, [
+                    $masterlist = MasterlistRegistration::create(array_merge($masterlistData, [
                         'request_id' => $requestId,
                         'created_by' => auth()->id(),
                     ]));
                 }
 
-                // Delete old syllabi rows (and their DRF child rows/files)
-                $oldSyllabi = Syllabi::with('drfs')->where('request_id', $requestId)->get();
-                foreach ($oldSyllabi as $old) {
-                    foreach ($old->drfs as $sd) {
-                        if ($sd->scanned_drf) $filesToDelete[] = $sd->scanned_drf;
-                    }
-                }
-                $oldSyllabi->each->delete();
+                MasterlistSourceOffice::where('masterlist_id', $masterlist->id)->delete();
+                $this->saveOriginsFromArrays(
+                    $masterlist,
+                    $request->input('masterlistOfficeIds', []),
+                    $request->input('masterlistOriginatorNames', [])
+                );
 
-                // Re-create syllabi rows using shared method
+                $relatedIds = array_filter(array_map('intval', $request->input('relatedDocumentIds', [])));
+                $this->saveRelatedDocuments($masterlist, $relatedIds);
+
                 $this->saveSyllabiRows($requestId, $versionId, $docTypeId, $request, $uploadedFiles);
             }
 
@@ -1585,7 +1647,7 @@ class RegisterController extends Controller
 
                 $retrievalTimeSpent = null;
                 if ($request->filled('retrievalTimeSpent') && is_numeric($request->retrievalTimeSpent) && $request->retrievalTimeSpent >= 0) {
-                    $retrievalTimeSpent = $this->minutesToTime(intval($request->retrievalTimeSpent));
+                    $retrievalTimeSpent = intval($request->retrievalTimeSpent);
                 }
 
                 $retrievalData = [
@@ -1636,7 +1698,7 @@ class RegisterController extends Controller
 
                 $distTimeSpent = null;
                 if ($request->filled('distributionTimeSpent') && is_numeric($request->distributionTimeSpent) && $request->distributionTimeSpent >= 0) {
-                    $distTimeSpent = $this->minutesToTime(intval($request->distributionTimeSpent));
+                    $distTimeSpent = intval($request->distributionTimeSpent);
                 }
 
                 $distData = [

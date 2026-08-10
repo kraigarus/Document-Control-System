@@ -427,12 +427,12 @@
                         <div class="reg-reldocs" id="masterlistOriginatorWidget">
                             <div class="reg-reldocs-inputwrap">
                                 <input type="text" id="masterlistOriginatorSearch" class="reg-reldocs-input"
-                                    placeholder="Type a name"
-                                    autocomplete="off">
+                                    placeholder="Type a name" autocomplete="off">
                                 <button type="button" class="reg-reldocs-arrow-btn" id="masterlistOriginatorArrowBtn">
                                     <i class="fa-solid fa-chevron-down"></i>
                                 </button>
                             </div>
+                            <div class="reg-reldocs-summary" id="masterlistOriginatorSummary" style="display:none;"></div>
                             <div id="masterlistOriginatorResults" class="reg-reldocs-dropdown" style="display:none;"></div>
                             <div id="masterlistOriginatorInlineChips" class="reg-reldocs-dropdown reg-reldocs-selected-panel" style="display:none;"></div>
                         </div>
@@ -442,12 +442,12 @@
                         <div class="reg-reldocs" id="masterlistSourceWidget">
                             <div class="reg-reldocs-inputwrap">
                                 <input type="text" id="masterlistSourceSearch" class="reg-reldocs-input"
-                                    placeholder="Type office name"
-                                    autocomplete="off">
+                                    placeholder="Type office name" autocomplete="off">
                                 <button type="button" class="reg-reldocs-arrow-btn" id="masterlistSourceArrowBtn">
                                     <i class="fa-solid fa-chevron-down"></i>
                                 </button>
                             </div>
+                            <div class="reg-reldocs-summary" id="masterlistSourceSummary" style="display:none;"></div>
                             <div id="masterlistSourceSuggestions" class="reg-reldocs-dropdown" style="display:none;"></div>
                             <div id="masterlistSourceInlineChips" class="reg-reldocs-dropdown reg-reldocs-selected-panel" style="display:none;"></div>
                         </div>

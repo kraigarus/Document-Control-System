@@ -179,6 +179,10 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::put('/originators/{id}', [SettingsController::class, 'updateOriginator'])->name('originators.update');
         Route::delete('/originators/{id}', [SettingsController::class, 'destroyOriginator'])->name('originators.destroy');
 
+        Route::post('/faculties', [SettingsController::class, 'storeFaculty']);
+        Route::put('/faculties/{id}', [SettingsController::class, 'updateFaculty']);
+        Route::delete('/faculties/{id}', [SettingsController::class, 'destroyFaculty']);
+
         // Colleges
         Route::post('/colleges',       [SettingsController::class, 'storeCollege'])->name('colleges.store');
         Route::put('/colleges/{id}',   [SettingsController::class, 'updateCollege'])->name('colleges.update');

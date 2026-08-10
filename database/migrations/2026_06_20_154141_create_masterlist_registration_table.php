@@ -24,7 +24,7 @@ return new class extends Migration
             $table->time('doc_receipt_time')->nullable();
             $table->date('doc_registered_date')->nullable();
             $table->time('doc_registered_time')->nullable();
-            $table->time('time_spent')->nullable();
+            $table->integer('time_spent')->nullable();
             $table->string('doc_title')->nullable();
             $table->date('effectivity_date')->nullable();
             $table->integer('revise_no')->nullable();

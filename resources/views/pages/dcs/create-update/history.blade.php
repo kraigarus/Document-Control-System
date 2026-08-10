@@ -91,7 +91,7 @@
                         </div>
                         @if($isLatest)
                             <div class="hst-card-actions">
-                                <a href="{{ route('register.edit', $rev->request_id) }}" class="hst-btn-edit">
+                                <a href="{{ route('register.edit', $rev->id) }}" class="hst-btn-edit">
                                     <i class="fa-solid fa-pen-to-square"></i> Edit This Revision
                                 </a>
                             </div>

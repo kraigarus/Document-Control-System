@@ -23,7 +23,7 @@ return new class extends Migration
             $table->time('doc_retrieval_time_actual')->nullable();
             $table->date('doc_retrieval_date_file')->nullable();
             $table->time('doc_retrieval_time_file')->nullable();
-            $table->time('time_spent')->nullable();
+            $table->integer('time_spent')->nullable();
             $table->text('remarks')->nullable();
             $table->string('scanned_retrieval')->nullable();
             $table->foreignId('created_by')

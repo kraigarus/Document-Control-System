@@ -12,8 +12,10 @@ use App\Models\MasterlistSourceOffice;
 use App\Models\RetrievalOffice;
 use App\Models\DistributionOffice;
 use App\Models\Originator;
-use App\Models\{College, Program, Semester, SchoolYear};
+use App\Models\{College, Program, Semester, SchoolYear, Faculty};
 use App\Models\ProgramCourse;
+use App\Models\Syllabi;
+use App\Models\SyllabiDrf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -44,9 +46,10 @@ class SettingsController extends Controller
         $offices     = Office::orderBy('office_name')->get();
         $versionTypes = VersionType::orderBy(self::VERSION_NAME_FIELD)->get();
         $originators = Originator::orderBy('originator_name')->get();
+        $faculties = Faculty::with('college')->orderBy('faculty_name')->get();
         $colleges    = College::with('programs')->orderBy('college_code')->get();
         $programs    = Program::with('college')->orderBy('program_name')->get();
-        $semesters   = Semester::orderBy('semester_id')->get();
+        $semesters   = Semester::orderBy('id')->get();
         $schoolYears = SchoolYear::orderBy('school_year')->get();
         $programCourses = ProgramCourse::with(['program.college', 'semester'])
             ->orderBy('program_id')
@@ -55,7 +58,7 @@ class SettingsController extends Controller
             ->get();
 
         return view('pages.dcs.settings.index', compact(
-            'docTypes', 'offices', 'versionTypes', 'originators',
+            'docTypes', 'offices', 'versionTypes', 'originators', 'faculties',
             'colleges', 'programs', 'semesters', 'schoolYears', 'programCourses'
         ));
     }
@@ -68,7 +71,7 @@ class SettingsController extends Controller
     {
         $validated = $request->validate([
             'doc_type_name' => 'required|string|max:255',
-            'parent_id'     => 'nullable|integer|exists:doc_types,doc_type_id',
+            'parent_id'     => 'nullable|integer|exists:dcs_doc_types,id',
         ]);
 
         $exists = DocType::where('doc_type_name', $validated['doc_type_name'])
@@ -101,7 +104,7 @@ class SettingsController extends Controller
 
         $exists = DocType::where('doc_type_name', $validated['doc_type_name'])
             ->where('parent_id', $docType->parent_id)
-            ->where('doc_type_id', '!=', $id)
+            ->where('id', '!=', $id)
             ->exists();
 
         if ($exists) {
@@ -182,7 +185,7 @@ class SettingsController extends Controller
         $office = Office::findOrFail($id);
 
         $validated = $request->validate([
-            'office_name' => 'required|string|max:255|unique:offices,office_name,' . $id . ',office_id',
+            'office_name' => 'required|string|max:255|unique:offices,office_name,' . $id . ',id',
         ]);
 
         $office->update($validated);
@@ -246,7 +249,7 @@ class SettingsController extends Controller
         $field = self::VERSION_NAME_FIELD;
 
         $validated = $request->validate([
-            $field => 'required|string|max:255|unique:version_type,' . $field,
+            $field => 'required|string|max:255|unique:dcs_version_type,' . $field,
         ]);
 
         $versionType = VersionType::create($validated);
@@ -264,7 +267,7 @@ class SettingsController extends Controller
         $versionType = VersionType::findOrFail($id);
 
         $validated = $request->validate([
-            $field => 'required|string|max:255|unique:version_type,' . $field . ',' . $id . ',version_id',
+            $field => 'required|string|max:255|unique:dcs_version_type,' . $field . ',' . $id . ',id',
         ]);
 
         $versionType->update($validated);
@@ -298,14 +301,14 @@ class SettingsController extends Controller
     // ── Originators ──
     public function storeOriginator(Request $request)
     {
-        $request->validate(['originator_name' => 'required|string|max:255|unique:originators,originator_name']);
+        $request->validate(['originator_name' => 'required|string|max:255|unique:dcs_originators,originator_name']);
         Originator::create(['originator_name' => $request->originator_name]);
         return response()->json(['success' => true, 'message' => 'Originator added.']);
     }
 
     public function updateOriginator(Request $request, $id)
     {
-        $request->validate(['originator_name' => 'required|string|max:255|unique:originators,originator_name,' . $id . ',originator_id']);
+        $request->validate(['originator_name' => 'required|string|max:255|unique:dcs_originators,originator_name,' . $id . ',id']);
         $orig = Originator::findOrFail($id);
         $orig->update(['originator_name' => $request->originator_name]);
         return response()->json(['success' => true, 'message' => 'Originator updated.']);
@@ -321,7 +324,7 @@ class SettingsController extends Controller
     public function storeCollege(Request $request)
     {
         $request->validate([
-            'college_name' => 'required|string|max:255|unique:colleges,college_name',
+            'college_name' => 'required|string|max:255|unique:dcs_colleges,college_name',
         ]);
 
         $name = $request->college_name;
@@ -350,7 +353,7 @@ class SettingsController extends Controller
     public function updateCollege(Request $request, $id)
     {
         $request->validate([
-            'college_name' => 'required|string|max:255|unique:colleges,college_name,' . $id . ',college_id',
+            'college_name' => 'required|string|max:255|unique:dcs_colleges,college_name,' . $id . ',id',
         ]);
 
         $college = College::findOrFail($id);
@@ -364,7 +367,7 @@ class SettingsController extends Controller
 
         $base = $code;
         $counter = 1;
-        while (College::where('college_code', $code)->where('college_id', '!=', $id)->exists()) {
+        while (College::where('college_code', $code)->where('id', '!=', $id)->exists()) {
             $code = $base . $counter;
             $counter++;
         }
@@ -379,7 +382,16 @@ class SettingsController extends Controller
 
     public function destroyCollege($id)
     {
-        College::findOrFail($id)->delete();
+        $college = College::findOrFail($id);
+
+        if ($college->programs()->exists()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This college has programs. Remove or reassign them first.',
+            ], 422);
+        }
+
+        $college->delete();
         return response()->json(['success' => true, 'message' => 'College deleted.']);
     }
 
@@ -387,7 +399,7 @@ class SettingsController extends Controller
     public function storeProgram(Request $request)
     {
         $request->validate([
-            'college_id'   => 'required|exists:colleges,college_id',
+            'college_id'   => 'required|exists:dcs_colleges,id',
             'program_name' => 'required|string|max:255',
             'program_code' => 'nullable|string|max:20',
         ]);
@@ -398,7 +410,7 @@ class SettingsController extends Controller
     public function updateProgram(Request $request, $id)
     {
         $request->validate([
-            'college_id'   => 'required|exists:colleges,college_id',
+            'college_id'   => 'required|exists:dcs_colleges,id',
             'program_name' => 'required|string|max:255',
             'program_code' => 'nullable|string|max:20',
         ]);
@@ -408,6 +420,16 @@ class SettingsController extends Controller
 
     public function destroyProgram($id)
     {
+        $inUse = ProgramCourse::where('program_id', $id)->exists()
+            || Syllabi::where('program_id', $id)->exists();
+
+        if ($inUse) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This program is referenced by courses or syllabi and cannot be deleted.',
+            ], 422);
+        }
+
         Program::findOrFail($id)->delete();
         return response()->json(['success' => true, 'message' => 'Program deleted.']);
     }
@@ -415,20 +437,31 @@ class SettingsController extends Controller
     // ── Semesters ──
     public function storeSemester(Request $request)
     {
-        $request->validate(['semester_name' => 'required|string|max:50|unique:semesters,semester_name']);
+        $request->validate(['semester_name' => 'required|string|max:50|unique:dcs_semesters,semester_name']);
         Semester::create($request->only('semester_name'));
         return response()->json(['success' => true, 'message' => 'Semester added.']);
     }
 
     public function updateSemester(Request $request, $id)
     {
-        $request->validate(['semester_name' => 'required|string|max:50|unique:semesters,semester_name,' . $id . ',semester_id']);
+        $request->validate(['semester_name' => 'required|string|max:50|unique:dcs_semesters,semester_name,' . $id . ',id']);
         Semester::findOrFail($id)->update($request->only('semester_name'));
         return response()->json(['success' => true, 'message' => 'Semester updated.']);
     }
 
+    
     public function destroySemester($id)
     {
+        $inUse = ProgramCourse::where('semester_id', $id)->exists()
+            || Syllabi::where('semester_id', $id)->exists();
+
+        if ($inUse) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This semester is referenced by courses or syllabi and cannot be deleted.',
+            ], 422);
+        }
+
         Semester::findOrFail($id)->delete();
         return response()->json(['success' => true, 'message' => 'Semester deleted.']);
     }
@@ -436,20 +469,29 @@ class SettingsController extends Controller
     // ── School Years ──
     public function storeSchoolYear(Request $request)
     {
-        $request->validate(['school_year' => 'required|string|max:50|unique:school_years,school_year']);
+        $request->validate(['school_year' => 'required|string|max:50|unique:dcs_school_years,school_year']);
         SchoolYear::create($request->only('school_year'));
         return response()->json(['success' => true, 'message' => 'School year added.']);
     }
 
     public function updateSchoolYear(Request $request, $id)
     {
-        $request->validate(['school_year' => 'required|string|max:50|unique:school_years,school_year,' . $id . ',school_year_id']);
+        $request->validate(['school_year' => 'required|string|max:50|unique:dcs_school_years,school_year,' . $id . ',id']);
         SchoolYear::findOrFail($id)->update($request->only('school_year'));
         return response()->json(['success' => true, 'message' => 'School year updated.']);
     }
 
     public function destroySchoolYear($id)
     {
+        $inUse = Syllabi::where('school_year_id', $id)->exists();
+
+        if ($inUse) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This school year is referenced by syllabi and cannot be deleted.',
+            ], 422);
+        }
+
         SchoolYear::findOrFail($id)->delete();
         return response()->json(['success' => true, 'message' => 'School year deleted.']);
     }
@@ -458,8 +500,8 @@ class SettingsController extends Controller
     public function storeProgramCourse(Request $request)
     {
         $request->validate([
-            'program_id'  => 'required|integer|exists:programs,program_id',
-            'semester_id' => 'required|integer|exists:semesters,semester_id',
+            'program_id'  => 'required|integer|exists:dcs_programs,id',
+            'semester_id' => 'required|integer|exists:dcs_semesters,id',
             'course_name' => 'required|string|max:255',
         ]);
 
@@ -485,15 +527,15 @@ class SettingsController extends Controller
         $course = ProgramCourse::findOrFail($id);
 
         $request->validate([
-            'program_id'  => 'required|integer|exists:programs,program_id',
-            'semester_id' => 'required|integer|exists:semesters,semester_id',
+            'program_id'  => 'required|integer|exists:dcs_programs,id',
+            'semester_id' => 'required|integer|exists:dcs_semesters,id',
             'course_name' => 'required|string|max:255',
         ]);
 
         $exists = ProgramCourse::where('program_id', $request->program_id)
             ->where('semester_id', $request->semester_id)
             ->where('course_name', $request->course_name)
-            ->where('course_id', '!=', $id)
+            ->where('id', '!=', $id)
             ->exists();
 
         if ($exists) {
@@ -510,9 +552,83 @@ class SettingsController extends Controller
 
     public function destroyProgramCourse($id)
     {
-        ProgramCourse::findOrFail($id)->delete();
+        $inUse = Syllabi::where('course_id', $id)->exists();
 
+        if ($inUse) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This course is referenced by syllabi and cannot be deleted.',
+            ], 422);
+        }
+
+        ProgramCourse::findOrFail($id)->delete();
         return response()->json(['success' => true, 'message' => 'Course deleted.']);
+    }
+
+    // ── Faculties ──
+    public function storeFaculty(Request $request)
+    {        
+        $request->validate([
+            'faculty_name' => 'required|string|max:255',
+            'college_id'   => 'nullable|integer|exists:dcs_colleges,id',
+        ]);
+
+        $exists = Faculty::where('faculty_name', $request->faculty_name)
+            ->where('college_id', $request->college_id)
+            ->exists();
+
+        if ($exists) {
+            return response()->json([
+                'success' => false,
+                'message' => 'A faculty with this name already exists in the selected college.',
+            ], 422);
+        }
+
+        Faculty::create($request->only('faculty_name', 'college_id'));
+
+        return response()->json(['success' => true, 'message' => 'Faculty added.']);
+    }
+
+    public function updateFaculty(Request $request, $id)
+    {
+        $request->validate([
+            'faculty_name' => 'required|string|max:255',
+            'college_id'   => 'nullable|integer|exists:dcs_colleges,id',
+        ]);
+
+        $exists = Faculty::where('faculty_name', $request->faculty_name)
+            ->where('college_id', $request->college_id)
+            ->where('id', '!=', $id)
+            ->exists();
+
+        if ($exists) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Another faculty with this name already exists in the selected college.',
+            ], 422);
+        }
+
+        Faculty::findOrFail($id)->update($request->only('faculty_name', 'college_id'));
+
+        return response()->json(['success' => true, 'message' => 'Faculty updated.']);
+    }
+
+    public function destroyFaculty($id)
+    {
+        $faculty = Faculty::findOrFail($id);
+
+        $inUse = SyllabiDrf::where('faculty_id', $id)->exists();
+
+        if ($inUse) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This faculty is referenced by syllabi DRF records and cannot be deleted.',
+            ], 422);
+        }
+
+        $faculty->delete();
+
+        return response()->json(['success' => true, 'message' => 'Faculty deleted.']);
     }
 
 }

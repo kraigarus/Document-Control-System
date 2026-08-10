@@ -39,6 +39,9 @@
         <button class="tab-btn" data-tab="originators">
             <i class="fa-solid fa-user-pen"></i> Originators
         </button>
+        <button class="tab-btn" data-tab="faculties">
+            <i class="fa-solid fa-chalkboard-user"></i> Faculties
+        </button>
         <button class="tab-btn" data-tab="colleges">
             <i class="fa-solid fa-graduation-cap"></i> Colleges
         </button>
@@ -75,14 +78,14 @@
                 </thead>
                 <tbody id="versionTypesTableBody">
                     @forelse($versionTypes as $v)
-                        <tr data-id="{{ $v->version_id }}">
+                        <tr data-id="{{ $v->id }}">
                             <td>{{ $v->version_name }}</td>
                             <td>
                                 <div class="row-actions">
-                                    <button class="icon-btn" title="Edit" onclick="openVersionTypeModal({{ $v->version_id }})" data-name="{{ $v->version_name }}">
+                                    <button class="icon-btn" title="Edit" onclick="openVersionTypeModal({{ $v->id }})" data-name="{{ $v->version_name }}">
                                         <i class="fa-solid fa-pen"></i>
                                     </button>
-                                    <button class="icon-btn icon-btn-danger" title="Delete" onclick="deleteVersionType({{ $v->version_id }})">
+                                    <button class="icon-btn icon-btn-danger" title="Delete" onclick="deleteVersionType({{ $v->id }})">
                                         <i class="fa-solid fa-trash"></i>
                                     </button>
                                 </div>
@@ -107,20 +110,20 @@
 
         <div class="doctype-list">
             @forelse($docTypes as $type)
-                <div class="doctype-group" data-id="{{ $type->doc_type_id }}">
+                <div class="doctype-group" data-id="{{ $type->id }}">
                     <div class="doctype-parent-row">
                         <div class="doctype-name">
                             <i class="fa-solid fa-folder"></i>
                             <span>{{ $type->doc_type_name }}</span>
                         </div>
                         <div class="row-actions">
-                            <button class="icon-btn" title="Add sub-type" onclick="openDocTypeModal(null, {{ $type->doc_type_id }})">
+                            <button class="icon-btn" title="Add sub-type" onclick="openDocTypeModal(null, {{ $type->id }})">
                                 <i class="fa-solid fa-plus"></i>
                             </button>
-                            <button class="icon-btn" title="Edit" onclick="openDocTypeModal({{ $type->doc_type_id }})" data-name="{{ $type->doc_type_name }}">
+                            <button class="icon-btn" title="Edit" onclick="openDocTypeModal({{ $type->id }})" data-name="{{ $type->doc_type_name }}">
                                 <i class="fa-solid fa-pen"></i>
                             </button>
-                            <button class="icon-btn icon-btn-danger" title="Delete" onclick="deleteDocType({{ $type->doc_type_id }})">
+                            <button class="icon-btn icon-btn-danger" title="Delete" onclick="deleteDocType({{ $type->id }})">
                                 <i class="fa-solid fa-trash"></i>
                             </button>
                         </div>
@@ -129,16 +132,16 @@
                     @if($type->subTypes->count())
                         <div class="doctype-subtypes">
                             @foreach($type->subTypes as $sub)
-                                <div class="doctype-sub-row" data-id="{{ $sub->doc_type_id }}">
+                                <div class="doctype-sub-row" data-id="{{ $sub->id }}">
                                     <div class="doctype-name">
                                         <i class="fa-solid fa-turn-up fa-rotate-90"></i>
                                         <span>{{ $sub->doc_type_name }}</span>
                                     </div>
                                     <div class="row-actions">
-                                        <button class="icon-btn" title="Edit" onclick="openDocTypeModal({{ $sub->doc_type_id }})" data-name="{{ $sub->doc_type_name }}">
+                                        <button class="icon-btn" title="Edit" onclick="openDocTypeModal({{ $sub->id }})" data-name="{{ $sub->doc_type_name }}">
                                             <i class="fa-solid fa-pen"></i>
                                         </button>
-                                        <button class="icon-btn icon-btn-danger" title="Delete" onclick="deleteDocType({{ $sub->doc_type_id }})">
+                                        <button class="icon-btn icon-btn-danger" title="Delete" onclick="deleteDocType({{ $sub->id }})">
                                             <i class="fa-solid fa-trash"></i>
                                         </button>
                                     </div>
@@ -176,23 +179,23 @@
                 </thead>
                 <tbody id="officesTableBody">
                     @forelse($offices as $office)
-                        <tr data-id="{{ $office->office_id }}">
+                        <tr data-id="{{ $office->id }}">
                             <td data-label="Office">{{ $office->office_name }}</td>
                             <td data-label="Status">
                                 <label class="status-toggle">
                                     <input type="checkbox"
                                         {{ $office->status === 'active' ? 'checked' : '' }}
-                                        onchange="toggleOfficeStatus({{ $office->office_id }}, this)">
+                                        onchange="toggleOfficeStatus({{ $office->id }}, this)">
                                     <span class="toggle-track"></span>
                                     <span class="toggle-label">{{ ucfirst($office->status) }}</span>
                                 </label>
                             </td>
                             <td>
                                 <div class="row-actions">
-                                    <button class="icon-btn" title="Edit" onclick="openOfficeModal({{ $office->office_id }})" data-name="{{ $office->office_name }}">
+                                    <button class="icon-btn" title="Edit" onclick="openOfficeModal({{ $office->id }})" data-name="{{ $office->office_name }}">
                                         <i class="fa-solid fa-pen"></i>
                                     </button>
-                                    <button class="icon-btn icon-btn-danger" title="Delete" onclick="deleteOffice({{ $office->office_id }})">
+                                    <button class="icon-btn icon-btn-danger" title="Delete" onclick="deleteOffice({{ $office->id }})">
                                         <i class="fa-solid fa-trash"></i>
                                     </button>
                                 </div>
@@ -225,14 +228,14 @@
                 </thead>
                 <tbody id="originatorsTableBody">
                     @forelse($originators as $orig)
-                        <tr data-id="{{ $orig->originator_id }}">
+                        <tr data-id="{{ $orig->id }}">
                             <td data-label="Originator">{{ $orig->originator_name }}</td>
                             <td>
                                 <div class="row-actions">
-                                    <button class="icon-btn" title="Edit" onclick="openOriginatorModal({{ $orig->originator_id }})" data-name="{{ $orig->originator_name }}">
+                                    <button class="icon-btn" title="Edit" onclick="openOriginatorModal({{ $orig->id }})" data-name="{{ $orig->originator_name }}">
                                         <i class="fa-solid fa-pen"></i>
                                     </button>
-                                    <button class="icon-btn icon-btn-danger" title="Delete" onclick="deleteOriginator({{ $orig->originator_id }})">
+                                    <button class="icon-btn icon-btn-danger" title="Delete" onclick="deleteOriginator({{ $orig->id }})">
                                         <i class="fa-solid fa-trash"></i>
                                     </button>
                                 </div>
@@ -240,6 +243,52 @@
                         </tr>
                     @empty
                         <tr><td colspan="2" class="empty-cell">No originators yet.</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- ══════════════ FACULTIES ══════════════ -->
+    <section class="tab-panel" id="panel-faculties">
+        <div class="panel-toolbar">
+            <span class="panel-subtitle">Manage faculty members per college</span>
+            <button class="btn-primary" onclick="openFacultyModal()">
+                <i class="fa-solid fa-plus"></i> Add Faculty
+            </button>
+        </div>
+
+        <div class="table-wrap">
+            <table class="settings-table">
+                <thead>
+                    <tr>
+                        <th>College</th>
+                        <th>Faculty Name</th>
+                        <th style="width:140px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="facultiesTableBody">
+                    @forelse($faculties as $fac)
+                        <tr data-id="{{ $fac->id }}">
+                            <td data-label="College">{{ $fac->college->college_name ?? '—' }}</td>
+                            <td data-label="Faculty">{{ $fac->faculty_name }}</td>
+                            <td>
+                                <div class="row-actions">
+                                    <button class="icon-btn" title="Edit"
+                                            onclick="openFacultyModal({{ $fac->id }})"
+                                            data-name="{{ $fac->faculty_name }}"
+                                            data-college="{{ $fac->college_id ?? '' }}">
+                                        <i class="fa-solid fa-pen"></i>
+                                    </button>
+                                    <button class="icon-btn icon-btn-danger" title="Delete"
+                                            onclick="deleteFaculty({{ $fac->id }})">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="3" class="empty-cell">No faculties yet.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -266,18 +315,18 @@
                 </thead>
                 <tbody id="collegesTableBody">
                     @forelse($colleges as $college)
-                        <tr data-id="{{ $college->college_id }}">
+                        <tr data-id="{{ $college->id }}">
                             <td data-label="College">{{ $college->college_name }}</td>
                             <td data-label="Programs">{{ $college->programs->count() }}</td>
                             <td>
                                 <div class="row-actions">
                                     <button class="icon-btn" title="Edit"
                                             data-name="{{ $college->college_name }}"
-                                            onclick="openCollegeModal({{ $college->college_id }})">
+                                            onclick="openCollegeModal({{ $college->id }})">
                                         <i class="fa-solid fa-pen"></i>
                                     </button>
                                     <button class="icon-btn icon-btn-danger" title="Delete"
-                                            onclick="deleteCollege({{ $college->college_id }})">
+                                            onclick="deleteCollege({{ $college->id }})">
                                         <i class="fa-solid fa-trash"></i>
                                     </button>
                                 </div>
@@ -320,21 +369,21 @@
                             </td>
                         </tr>
                         @forelse($college->programs as $prog)
-                            <tr data-id="{{ $prog->program_id }}">
+                            <tr data-id="{{ $prog->id }}">
                                 <td data-label="College">{{ $college->college_name }}</td>
                                 <td data-label="Program">{{ $prog->program_name }}</td>
                                 <td data-label="Code">{{ $prog->program_code ?? '—' }}</td>
                                 <td>
                                     <div class="row-actions">
                                         <button class="icon-btn" title="Edit"
-                                                onclick="openProgramModal({{ $prog->program_id }})"
+                                                onclick="openProgramModal({{ $prog->id }})"
                                                 data-college="{{ $prog->college_id }}"
                                                 data-name="{{ $prog->program_name }}"
                                                 data-code="{{ $prog->program_code }}">
                                             <i class="fa-solid fa-pen"></i>
                                         </button>
                                         <button class="icon-btn icon-btn-danger" title="Delete"
-                                                onclick="deleteProgram({{ $prog->program_id }})">
+                                                onclick="deleteProgram({{ $prog->id }})">
                                             <i class="fa-solid fa-trash"></i>
                                         </button>
                                     </div>
@@ -372,14 +421,14 @@
                 </thead>
                 <tbody id="semestersTableBody">
                     @forelse($semesters as $sem)
-                        <tr data-id="{{ $sem->semester_id }}">
+                        <tr data-id="{{ $sem->id }}">
                             <td data-label="Semester">{{ $sem->semester_name }}</td>
                             <td>
                                 <div class="row-actions">
-                                    <button class="icon-btn" title="Edit" onclick="openSemesterModal({{ $sem->semester_id }})" data-name="{{ $sem->semester_name }}">
+                                    <button class="icon-btn" title="Edit" onclick="openSemesterModal({{ $sem->id }})" data-name="{{ $sem->semester_name }}">
                                         <i class="fa-solid fa-pen"></i>
                                     </button>
-                                    <button class="icon-btn icon-btn-danger" title="Delete" onclick="deleteSemester({{ $sem->semester_id }})">
+                                    <button class="icon-btn icon-btn-danger" title="Delete" onclick="deleteSemester({{ $sem->id }})">
                                         <i class="fa-solid fa-trash"></i>
                                     </button>
                                 </div>
@@ -412,14 +461,14 @@
                 </thead>
                 <tbody id="schoolYearsTableBody">
                     @forelse($schoolYears as $sy)
-                        <tr data-id="{{ $sy->school_year_id }}">
+                        <tr data-id="{{ $sy->id }}">
                             <td data-label="School Year">{{ $sy->school_year }}</td>
                             <td>
                                 <div class="row-actions">
-                                    <button class="icon-btn" title="Edit" onclick="openSchoolYearModal({{ $sy->school_year_id }})" data-name="{{ $sy->school_year }}">
+                                    <button class="icon-btn" title="Edit" onclick="openSchoolYearModal({{ $sy->id }})" data-name="{{ $sy->school_year }}">
                                         <i class="fa-solid fa-pen"></i>
                                     </button>
-                                    <button class="icon-btn icon-btn-danger" title="Delete" onclick="deleteSchoolYear({{ $sy->school_year_id }})">
+                                    <button class="icon-btn icon-btn-danger" title="Delete" onclick="deleteSchoolYear({{ $sy->id }})">
                                         <i class="fa-solid fa-trash"></i>
                                     </button>
                                 </div>
@@ -455,7 +504,7 @@
                 </thead>
                 <tbody id="programCoursesTableBody">
                     @forelse($programCourses as $course)
-                        <tr data-id="{{ $course->course_id }}">
+                        <tr data-id="{{ $course->id }}">
                             <td data-label="College">{{ $course->program->college->college_name ?? '—' }}</td>
                             <td data-label="Program">{{ $course->program->program_name ?? '—' }}</td>
                             <td data-label="Semester">{{ $course->semester->semester_name ?? '—' }}</td>
@@ -463,13 +512,13 @@
                             <td>
                                 <div class="row-actions">
                                     <button class="icon-btn" title="Edit"
-                                            onclick="openProgramCourseModal({{ $course->course_id }})"
+                                            onclick="openProgramCourseModal({{ $course->id }})"
                                             data-program="{{ $course->program_id }}"
                                             data-semester="{{ $course->semester_id }}"
                                             data-name="{{ $course->course_name }}">
                                         <i class="fa-solid fa-pen"></i>
                                     </button>
-                                    <button class="icon-btn icon-btn-danger" title="Delete" onclick="deleteProgramCourse({{ $course->course_id }})">
+                                    <button class="icon-btn icon-btn-danger" title="Delete" onclick="deleteProgramCourse({{ $course->id }})">
                                         <i class="fa-solid fa-trash"></i>
                                     </button>
                                 </div>

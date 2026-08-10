@@ -909,6 +909,7 @@ body {
     gap: 6px;
     margin-top: 8px;
 }
+
 .reg-inline-chip {
     display: inline-flex;
     align-items: center;

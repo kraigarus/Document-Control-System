@@ -1,11 +1,26 @@
 let allOffices = [];
 let allDocTypes = [];
 let allOriginators = [];
+let allFaculties = [];
 let syllabiGroupCounter = 0;
 let syllabiCurrentStep = 1;
+let syllabiRowUidCounter = 0;
 let relatedDocsCache = [];
 let relatedDocsSelected = window.__existingRelatedDocs || [];
 let relatedDocsSelectedPanelOpen = false;
+let docNoDuplicate = false;
+let revisionRowUidCounter = 0;
+let revSearchCache = {};
+let revSearchTimers = {};
+let syllabiTitleManuallyEdited = false;
+window.__isSyllabiMode = false;
+window.__syllabiModeLabel = 'Syllabi';
+window.__syllabiFaculty = window.__syllabiFaculty || {};
+
+const SYLLABI_LIKE_SUBTYPE_IDS = [11, 12];
+function isSyllabiLikeSubType(subTypeId) {
+    return SYLLABI_LIKE_SUBTYPE_IDS.includes(parseInt(subTypeId));
+}
 
 const ALLOWED_EXTENSIONS = ['pdf', 'docx'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -19,7 +34,7 @@ const CURRENT_APPROVAL_BODY = CFG.CURRENT_APPROVAL_BODY || '';
 const IS_EDIT_MODE = true;
 
 // ══════════════════════════════════════════════
-// SHARED HELPERS (mirrors register.js)
+// SHARED HELPERS
 // ══════════════════════════════════════════════
 function escapeHtml(str) {
     const div = document.createElement('div');
@@ -71,21 +86,64 @@ function formatDuration(totalMinutes) {
     return minutes + " min";
 }
 
+function filterOffices(query) {
+    const q = query.trim().toLowerCase();
+    if (q.length < 1) return [];
+    return allOffices.filter(o => o.office_name.toLowerCase().includes(q));
+}
+
+function emptyOfficeRowHTML() {
+    return '<tr class="reg-empty-row"><td colspan="3"><div class="reg-empty-state"><i class="fa-solid fa-building-circle-xmark"></i><span>No offices added yet</span></div></td></tr>';
+}
+
 function filterItems(list, labelKey, query) {
     const q = query.trim().toLowerCase();
     if (q.length < 1) return [];
     return list.filter(o => o[labelKey].toLowerCase().includes(q));
 }
 
+function seedOfficeRow(tbodyId, totalId, officeId, officeName, copies) {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    const isRetrieval = tbodyId === "retrievalBody";
+    const officeNameAttr = isRetrieval ? "retrievalOffice[]" : "distOffice[]";
+    const copiesNameAttr = isRetrieval ? "retrievalCopies[]" : "distCopies[]";
+    const emptyRow = tbody.querySelector(".reg-empty-row");
+    if (emptyRow) emptyRow.remove();
+    const existing = [...tbody.querySelectorAll('input[type="hidden"]')].find(inp => inp.value == officeId);
+    if (existing) return;
+    const tr = document.createElement("tr");
+    tr.className = "reg-office-added";
+    tr.innerHTML = `
+        <td><input type="hidden" name="${officeNameAttr}" value="${officeId}"><div class="reg-office-name"><div class="reg-office-icon"><i class="fa-solid fa-building"></i></div><span class="reg-office-text">${escapeHtml(officeName)}</span></div></td>
+        <td style="text-align:center;"><input type="number" name="${copiesNameAttr}" value="${copies}" min="1" oninput="updateTotal('${totalId}', '${tbodyId}')"></td>
+        <td><button type="button" class="btn-remove" onclick="removeOffice(this, '${totalId}', '${tbodyId}')"><i class="fa-solid fa-xmark"></i></button></td>
+    `;
+    tbody.appendChild(tr);
+}
+
+function tableIsEmpty(tbodyId) {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return true;
+    return tbody.querySelectorAll('input[type="hidden"]').length === 0;
+}
+
+function positionFixedDropdown(dropdownEl, inputEl) {
+    const rect = inputEl.getBoundingClientRect();
+    dropdownEl.style.position = 'fixed';
+    dropdownEl.style.top = (rect.bottom + 4) + 'px';
+    dropdownEl.style.left = rect.left + 'px';
+    dropdownEl.style.width = Math.max(rect.width, 160) + 'px';
+    dropdownEl.style.maxHeight = '220px';
+    dropdownEl.style.overflowY = 'auto';
+    dropdownEl.style.zIndex = 9999;
+}
+
 function injectHiddenForDisabled(selectId, hiddenName) {
     const sel = document.getElementById(selectId);
     if (!sel || !sel.disabled) return;
-    // Don't duplicate a hidden input that already carries this name (blade or a prior run)
     const existingByName = sel.parentElement.querySelector('input[type="hidden"][name="' + hiddenName + '"]');
-    if (existingByName) {
-        existingByName.value = sel.value; // keep it in sync instead of adding a sibling
-        return;
-    }
+    if (existingByName) { existingByName.value = sel.value; return; }
     const hidden = document.createElement('input');
     hidden.type = 'hidden';
     hidden.name = hiddenName;
@@ -93,6 +151,46 @@ function injectHiddenForDisabled(selectId, hiddenName) {
     hidden.dataset.for = selectId;
     sel.parentElement.appendChild(hidden);
 }
+
+function resetTextLikeInputs(el) {
+    el.querySelectorAll('input[type="text"], input[type="number"], input[type="date"], input[type="time"], textarea').forEach(input => { input.value = ''; });
+    el.querySelectorAll('select').forEach(sel => { sel.selectedIndex = 0; });
+}
+
+function resetFileWidgetsIn(el) {
+    el.querySelectorAll('input[type="file"]').forEach(file => {
+        file.value = '';
+        const container = file.closest('.reg-upload');
+        if (container) {
+            const icon = container.querySelector('i');
+            const label = container.querySelector('span');
+            if (icon && label) resetUploadArea(container, icon, label, 'Choose .pdf or .docx file');
+        }
+    });
+    el.querySelectorAll('.reg-upload-cell').forEach(cell => {
+        const icon = cell.querySelector('i');
+        const label = cell.querySelector('span');
+        if (icon && label) resetUploadCell(cell, icon, label, 'No file chosen');
+    });
+}
+
+function resetUploadCell(cell, icon, label, originalText) {
+    cell.classList.remove('reg-upload-cell-success', 'reg-upload-cell-error');
+    cell.style.borderColor = '';
+    cell.style.background = '';
+    clearFileIcon(icon, label, originalText);
+    removeExistingError(cell);
+}
+
+function getSelectTextWithCode(id) {
+    const el = document.getElementById(id);
+    if (!el || el.selectedIndex < 0) return "";
+    const opt = el.options[el.selectedIndex];
+    const text = opt.text || "";
+    const code = opt.dataset ? opt.dataset.code : "";
+    return code ? `${text} (${code})` : text;
+}
+
 // ══════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════
@@ -106,17 +204,19 @@ document.addEventListener("DOMContentLoaded", async function () {
     if (form) form.setAttribute("autocomplete", "off");
 
     try {
-        const [offices, docTypes, versionTypes, approvalBodies, originators] = await Promise.all([
+        const [offices, docTypes, versionTypes, approvalBodies, originators, faculties] = await Promise.all([
             fetch("/api/offices").then(r => r.json()),
             fetch("/api/doc-types").then(r => r.json()),
             fetch("/api/version-types").then(r => r.json()),
             fetch("/api/approval-bodies").then(r => r.json()),
             fetch("/api/originators").then(r => r.json()),
+            fetch("/api/faculties").then(r => r.json()),
         ]);
 
         allOffices = Array.isArray(offices) ? offices : [];
         allDocTypes = Array.isArray(docTypes) ? docTypes : [];
         allOriginators = Array.isArray(originators) ? originators : [];
+        allFaculties = Array.isArray(faculties) ? faculties : [];
 
         const versionSelect = document.getElementById("versionType");
         while (versionSelect.options.length > 1) versionSelect.remove(1);
@@ -178,7 +278,29 @@ document.addEventListener("DOMContentLoaded", async function () {
 
         loadChecklists(CURRENT_VERSION_ID);
 
-        // ── Chip widgets, seeded with existing data ──
+        // ── Wire doc no lookup ──
+        const revField = document.getElementById('masterlistRevisionNo');
+        initDocNoLookup(revField);
+
+        // ── Auto-copy DRF title to Masterlist title ──
+        const drfTitle = document.getElementById('drfTitle');
+        const mlTitle = document.getElementById('masterlistDocTitle');
+        if (drfTitle && mlTitle) {
+            drfTitle.addEventListener('input', () => { mlTitle.value = drfTitle.value; });
+        }
+
+        // ── Wire initial DCN revision row search ──
+        const initialRevisionRow = document.querySelector('#revisionTableBody tr');
+        if (initialRevisionRow) bindRevisionRowSearch(initialRevisionRow);
+
+        // ── Version type change → apply revision mode ──
+        const versionTypeEl = document.getElementById("versionType");
+        if (versionTypeEl) {
+            versionTypeEl.addEventListener('change', () => { applyRevisionMode(); });
+        }
+        applyRevisionMode();
+
+        // ── Chip widgets ──
         createSourceUnitWidget({
             key: 'drf',
             widgetId: 'drfSourceUnitWidget',
@@ -228,11 +350,21 @@ document.addEventListener("DOMContentLoaded", async function () {
         // ── Syllabi: rebuild wizard rows from existing grouped data ──
         seedExistingSyllabiGroups();
 
+        // ── Syllabi context wiring ──
+        initSyllabiContextWiring();
+
+        // ── Syllabi title tracking ──
+        const titleInput = document.getElementById("syllabiDocTitle");
+        if (titleInput) {
+            titleInput.addEventListener("input", () => { syllabiTitleManuallyEdited = true; });
+        }
+
     } catch (err) {
         console.error("Failed to load data:", err);
         showApiError("Failed to load form data. Please refresh the page.");
     }
 
+    // ── Dirty state detection ──
     (function () {
         const updateBtn = document.querySelector('.reg-btn-save');
         if (!updateBtn) return;
@@ -290,8 +422,7 @@ document.addEventListener("DOMContentLoaded", async function () {
                 if (dirty) return;
                 const el = document.getElementById(id);
                 if (el && initialState['visible|' + id] !== undefined) {
-                    const currentVisible = el.style.display !== 'none';
-                    if (currentVisible !== initialState['visible|' + id]) dirty = true;
+                    if ((el.style.display !== 'none') !== initialState['visible|' + id]) dirty = true;
                 }
             });
             ['retrievalBody', 'distBody'].forEach(bodyId => {
@@ -342,7 +473,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         calcMasterlistTimeSpent();
         calcRetrievalTimeSpent();
         calcDistributionTimeSpent();
-        updateSyllabiTotalCopies();
+        updateSyllabiTotals();
     }, 150);
 
     setTimeout(() => { revertAutofill(); }, 500);
@@ -386,7 +517,7 @@ async function loadChecklists(versionId) {
         const res = await fetch("/api/checklist-versions/" + versionId);
         if (!res.ok) throw new Error("HTTP " + res.status);
         const checklists = await res.json();
-        renderChecklistsEdit(checklists);
+        renderChecklists(checklists, false);
         initializeEditState();
     } catch (err) {
         console.error("Failed to load checklists:", err);
@@ -396,7 +527,7 @@ async function loadChecklists(versionId) {
 
 const SECTION_MAP = { 1: "section-1", 2: "section-2", 3: "section-3", 4: "section-4", 5: "section-5" };
 
-function renderChecklistsEdit(checklists) {
+function renderChecklists(checklists, disabled) {
     const container = document.getElementById("dynamicCheckboxes");
     container.innerHTML = "";
 
@@ -409,6 +540,7 @@ function renderChecklistsEdit(checklists) {
         cb.name = "checklists[]";
         cb.value = c.checklist_id;
         cb.autocomplete = "off";
+        if (disabled) cb.disabled = true;
 
         const sectionId = SECTION_MAP[c.checklist_id];
         const section = sectionId ? document.getElementById(sectionId) : null;
@@ -422,8 +554,14 @@ function renderChecklistsEdit(checklists) {
         label.appendChild(span);
 
         let userTouched = false;
-        label.addEventListener("pointerdown", function () { userTouched = true; });
-        label.addEventListener("keydown", function () { userTouched = true; });
+        label.addEventListener("pointerdown", function (e) {
+            if (e.target.disabled) return;
+            userTouched = true;
+        });
+        label.addEventListener("keydown", function () {
+            if (cb.disabled) return;
+            userTouched = true;
+        });
 
         cb.addEventListener("change", function () {
             if (!userTouched) { this.checked = (this.dataset.lastChecked === "true"); return; }
@@ -443,12 +581,320 @@ function initializeEditState() {
         cb.dataset.lastChecked = cb.checked ? "true" : "false";
         toggleSection(parseInt(cb.value), cb.checked);
     });
+    showFormActions();
     enableApproval();
     setTimeout(initFileInputs, 100);
+
+    // Set syllabi mode from initial sub-type
+    const subTypeId = document.getElementById("subType")?.value;
+    if (subTypeId && isSyllabiLikeSubType(subTypeId)) {
+        const subTypeData = allDocTypes.find(d => d.doc_type_id == subTypeId);
+        window.__isSyllabiMode = true;
+        window.__syllabiModeLabel = subTypeData ? subTypeData.doc_type_name : 'Syllabi';
+        const syllabiSection = document.getElementById("section-syllabi");
+        if (syllabiSection) {
+            syllabiSection.style.display = "block";
+            applySyllabiSectionLabel();
+        }
+    }
+}
+
+function lockChecklist() {
+    const container = document.getElementById("dynamicCheckboxes");
+    container.querySelectorAll("input[type='checkbox']").forEach(cb => {
+        cb.disabled = true;
+        cb.checked = false;
+        cb.dataset.lastChecked = "false";
+        toggleSection(parseInt(cb.value), false);
+    });
+    hideFormActions();
+    disableApproval();
+}
+
+function showFormActions() {
+    const el = document.getElementById("formActions");
+    if (el) el.style.display = "flex";
+}
+
+function hideFormActions() {
+    const el = document.getElementById("formActions");
+    if (el) el.style.display = "none";
 }
 
 // ══════════════════════════════════════════════
-// SHARED SOURCE UNIT WIDGET FACTORY (identical to register.js)
+// DOCUMENT NO. LOOKUP
+// ══════════════════════════════════════════════
+function initDocNoLookup(revField) {
+    const docNoInput = document.getElementById('masterlistDocNo');
+    const hintEl = document.getElementById('docNoHint');
+    if (!docNoInput) return;
+
+    let docNoTimer = null;
+    docNoInput.addEventListener('input', () => {
+        clearTimeout(docNoTimer);
+        const docNo = docNoInput.value.trim();
+        if (!docNo) { handleEmptyDocNo(hintEl, revField); return; }
+        if (hintEl) {
+            hintEl.innerHTML = '<span style="color:#94a3b8"><i class="fa-solid fa-spinner fa-spin"></i> Checking document...</span>';
+            hintEl.style.color = '';
+            hintEl.dataset.valid = '';
+        }
+        docNoTimer = setTimeout(() => runDocNoLookup(docNo, hintEl, revField), 500);
+    });
+}
+
+function handleEmptyDocNo(hintEl, revField) {
+    docNoDuplicate = false;
+    if (hintEl) { hintEl.innerHTML = ''; hintEl.dataset.valid = ''; }
+}
+
+async function runDocNoLookup(docNo, hintEl, revField) {
+    try {
+        const docTypeId = document.getElementById('docType').value;
+        const subTypeId = document.getElementById('subType').value;
+        const excludeRequestId = document.getElementById('requestId')?.value || '';
+        const url = '/register/check-docno?doc_no=' + encodeURIComponent(docNo) +
+                    (docTypeId ? '&doc_type_id=' + docTypeId : '') +
+                    (subTypeId ? '&sub_type_id=' + subTypeId : '') +
+                    (excludeRequestId ? '&exclude_request_id=' + excludeRequestId : '');
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (data.exists && !data.is_self) {
+            docNoDuplicate = true;
+            if (hintEl) {
+                hintEl.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' +
+                    'This document number is already registered under <strong>' +
+                    (data.existing_type_name || 'this document type') +
+                    '</strong>. Please use a unique document number.' +
+                    '<br><span style="font-weight:400;font-size:11px;">You cannot save until you enter a unique document number.</span>';
+                hintEl.style.color = '#dc2626';
+                hintEl.dataset.valid = 'duplicate';
+            }
+        } else if (data.wrong_type) {
+            docNoDuplicate = false;
+            if (hintEl) {
+                hintEl.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> ' + data.message +
+                    '<br><span style="font-weight:400;font-size:11px;">This number is registered under a different document type. You may continue.</span>';
+                hintEl.style.color = '#d97706';
+                hintEl.dataset.valid = 'different_type';
+            }
+        } else {
+            docNoDuplicate = false;
+            if (hintEl) {
+                hintEl.innerHTML = '<i class="fa-solid fa-circle-check"></i> Document number is available.';
+                hintEl.style.color = '#16a34a';
+                hintEl.dataset.valid = 'available';
+            }
+        }
+    } catch (e) {
+        console.error('DocNo lookup failed:', e);
+        docNoDuplicate = false;
+    }
+}
+
+// ══════════════════════════════════════════════
+// REVISION MODE HELPERS
+// ══════════════════════════════════════════════
+function isRevisedMode() {
+    const hidden = document.getElementById('registrationMode');
+    return hidden && hidden.value === 'revised';
+}
+
+function applyRevisionMode() {
+    const revField = document.getElementById('masterlistRevisionNo');
+    const hintEl = document.getElementById('docNoHint');
+
+    if (isRevisedMode()) {
+        if (revField) {
+            revField.dataset.userEdited = '';
+            revField.readOnly = false;
+            revField.style.background = '';
+            revField.style.cursor = '';
+            revField.removeAttribute('min');
+            revField.removeAttribute('title');
+        }
+        if (hintEl) {
+            hintEl.innerHTML = '<span style="color:#94a3b8"><i class="fa-solid fa-circle-info"></i> Enter an existing document number to continue</span>';
+            hintEl.style.color = '';
+            hintEl.dataset.valid = '';
+        }
+    } else {
+        docNoDuplicate = false;
+        if (revField) {
+            revField.readOnly = false;
+            revField.style.background = '';
+            revField.style.cursor = '';
+        }
+        if (hintEl) { hintEl.innerHTML = ''; hintEl.dataset.valid = ''; }
+    }
+}
+
+function updateRegistrationMode() {
+    const sel = document.getElementById('versionType');
+    const hidden = document.getElementById('registrationMode');
+    if (!sel || !hidden) return;
+    const text = sel.options[sel.selectedIndex]?.text?.toLowerCase() || '';
+    hidden.value = (text.includes('revised') || text.includes('revision') || text.includes('revise')) ? 'revised' : 'new';
+    applyRevisionMode();
+}
+
+// ══════════════════════════════════════════════
+// DCN — REVISION TABLE: DOCUMENT SEARCH + AUTOFILL
+// ══════════════════════════════════════════════
+function getOrCreateRevSearchDropdown(key) {
+    let dd = document.getElementById('revSearchDropdown_' + key);
+    if (!dd) {
+        dd = document.createElement('div');
+        dd.id = 'revSearchDropdown_' + key;
+        dd.className = 'reg-reldocs-dropdown';
+        dd.style.display = 'none';
+        document.body.appendChild(dd);
+    }
+    return dd;
+}
+
+function closeRevSearchDropdown(key) {
+    const dd = document.getElementById('revSearchDropdown_' + key);
+    if (dd) dd.style.display = 'none';
+}
+
+function removeRevSearchDropdown(key) {
+    const dd = document.getElementById('revSearchDropdown_' + key);
+    if (dd) dd.remove();
+}
+
+function handleRevisionSearchInput(input, key) {
+    if (input.readOnly) return;
+    clearTimeout(revSearchTimers[key]);
+    const dd = getOrCreateRevSearchDropdown(key);
+    const q = input.value.trim();
+    if (q.length < 1) { dd.style.display = 'none'; return; }
+
+    revSearchTimers[key] = setTimeout(async () => {
+        try {
+            const excludeId = document.getElementById('requestId')?.value || '';
+            const url = '/api/documents/search?q=' + encodeURIComponent(q)
+                + (excludeId ? '&exclude_request_id=' + excludeId : '');
+            const data = await fetch(url).then(r => r.json());
+            revSearchCache[key] = data;
+
+            dd.innerHTML = data.length === 0
+                ? '<div class="reg-reldocs-noresult">No matching documents found</div>'
+                : data.map((d, idx) => `<div onmousedown="pickRevisionDocument('${key}', ${idx})">${escapeHtml(d.label)}</div>`).join('');
+
+            positionFixedDropdown(dd, input);
+            dd.style.display = 'block';
+        } catch (e) { console.error('Revision doc search failed:', e); }
+    }, 300);
+}
+
+window.pickRevisionDocument = function (key, idx) {
+    const doc = (revSearchCache[key] || [])[idx];
+    if (!doc) return;
+    const uid = key.split('_')[0];
+    const row = document.querySelector(`#revisionTableBody tr[data-uid="${uid}"]`);
+    if (!row) return;
+
+    const titleInput   = row.querySelector('input[name="documentTitle[]"]');
+    const noInput      = row.querySelector('input[name="documentNo[]"]');
+    const effField     = row.querySelector('input[name="effectiveDate[]"]');
+    const revField     = row.querySelector('input[name="revisionNo[]"]');
+    const purposeField = row.querySelector('input[name="revisionPurpose[]"]');
+
+    if (titleInput) titleInput.value = doc.doc_title || '';
+    if (noInput) noInput.value = doc.doc_no || '';
+    if (effField && doc.effectivity_date) effField.value = doc.effectivity_date;
+    if (revField && doc.revise_no !== null && doc.revise_no !== undefined) revField.value = doc.revise_no;
+    if (purposeField && doc.brief_purpose) purposeField.value = doc.brief_purpose;
+
+    lockRevisionRowFields(row);
+    lockRevisionScannedCopyCell(row, doc.scanned_copy_url);
+    closeRevSearchDropdown(key);
+};
+
+function lockRevisionRowFields(row) {
+    row.dataset.linked = "true";
+    row.querySelectorAll(
+        'input[name="documentTitle[]"], input[name="documentNo[]"], input[name="effectiveDate[]"], input[name="revisionNo[]"], input[name="revisionPurpose[]"]'
+    ).forEach(el => {
+        el.readOnly = true;
+        el.classList.add('reg-revrow-locked');
+        el.style.background = '#f8fafc';
+        el.style.cursor = 'not-allowed';
+        el.style.color = '#475569';
+    });
+}
+
+function lockRevisionScannedCopyCell(row, scannedCopyUrl) {
+    const fileInput = row.querySelector('input[name="scannedCopy[]"]');
+    if (!fileInput) return;
+    const cell = fileInput.closest('td');
+    if (!cell) return;
+
+    if (scannedCopyUrl) {
+        const ext = scannedCopyUrl.split('.').pop().toLowerCase();
+        const isPdf = ext === 'pdf';
+        const iconClass = isPdf ? 'fa-solid fa-file-pdf' : 'fa-solid fa-file-word';
+        const linkClass = isPdf ? 'reg-revrow-viewfile reg-revrow-viewfile-pdf' : 'reg-revrow-viewfile reg-revrow-viewfile-doc';
+        const label = isPdf ? 'View PDF' : 'View Word document';
+        cell.style.textAlign = 'center';
+        cell.innerHTML = `<button type="button" class="${linkClass}" onclick="window.open('${scannedCopyUrl}', '_blank')" title="${label}"><i class="${iconClass}"></i></button>`;
+    } else {
+        cell.style.textAlign = 'center';
+        cell.innerHTML = `<div class="reg-file-error" style="margin:0;"><i class="fa-solid fa-circle-exclamation"></i> No scanned copy on file</div>`;
+    }
+}
+
+function bindRevisionSearchInput(input, uid, field) {
+    if (!input || input.dataset.searchBound) return;
+    input.dataset.searchBound = 'true';
+    const key = uid + '_' + field;
+    if (!input.id) input.id = 'revSearchInput_' + key;
+
+    input.addEventListener('input', () => handleRevisionSearchInput(input, key));
+    input.addEventListener('focus', () => {
+        if (!input.readOnly && input.value.trim().length >= 1) handleRevisionSearchInput(input, key);
+    });
+
+    const reposition = () => {
+        const dd = document.getElementById('revSearchDropdown_' + key);
+        if (dd && dd.style.display === 'block') positionFixedDropdown(dd, input);
+    };
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+}
+
+function bindRevisionRowSearch(tr) {
+    if (!tr.dataset.uid) tr.dataset.uid = ++revisionRowUidCounter;
+    const uid = tr.dataset.uid;
+    bindRevisionSearchInput(tr.querySelector('input[name="documentTitle[]"]'), uid, 'title');
+    bindRevisionSearchInput(tr.querySelector('input[name="documentNo[]"]'), uid, 'no');
+}
+
+function removeRevisionRowDropdowns(tr) {
+    if (!tr.dataset.uid) return;
+    removeRevSearchDropdown(tr.dataset.uid + '_title');
+    removeRevSearchDropdown(tr.dataset.uid + '_no');
+}
+
+window.removeRevisionRow = function (btn) {
+    const tr = btn.closest('tr');
+    if (tr) { removeRevisionRowDropdowns(tr); tr.remove(); }
+};
+
+document.addEventListener('click', function (e) {
+    document.querySelectorAll('[id^="revSearchDropdown_"]').forEach(dd => {
+        const key = dd.id.replace('revSearchDropdown_', '');
+        const input = document.getElementById('revSearchInput_' + key);
+        if (dd.style.display === 'block' && !dd.contains(e.target) && e.target !== input) {
+            dd.style.display = 'none';
+        }
+    });
+});
+
+// ══════════════════════════════════════════════
+// SHARED SOURCE UNIT WIDGET FACTORY
 // ══════════════════════════════════════════════
 window.__sourceWidgets = {};
 
@@ -470,6 +916,9 @@ function createSourceUnitWidget(opts) {
     function addOffice(itemId) {
         const item = getList().find(o => o[idKey] == itemId);
         if (!item) return;
+        // ── FIX: reject offices with falsy or zero IDs
+        if (!item[idKey] && item[idKey] !== 0) return;
+        if (String(item[idKey]) === '0' || String(item[idKey]) === '0') return;
         if (opts.singleSelect) selected = [];
         else if (isOfficeSelected(itemId)) return;
         selected.push({ type: 'office', id: item[idKey], label: item[labelKey] });
@@ -479,6 +928,7 @@ function createSourceUnitWidget(opts) {
     function addFreeText(val) {
         if (!opts.allowFreeText || !val) return;
         if (opts.singleSelect) selected = [];
+        else if (selected.some(i => i.label.toLowerCase() === val.toLowerCase())) return;
         idCounter++;
         selected.push({ type: 'name', id: 'n' + idCounter, label: val });
         render();
@@ -489,9 +939,26 @@ function createSourceUnitWidget(opts) {
         render();
     }
 
+    function syncInputText() {
+        const inputEl = document.getElementById(opts.inputId);
+        if (!inputEl) return;
+        if (selected.length === 0) { inputEl.value = ''; return; }
+        const joined = selected.map(i => i.label).join(', ');
+        inputEl.value = opts.singleSelect ? joined : joined + ', ';
+        const len = inputEl.value.length;
+        inputEl.setSelectionRange(len, len);
+    }
+
     function render() {
         const widget = document.getElementById(opts.widgetId);
-        widget.querySelectorAll('input[data-source-hidden]').forEach(el => el.remove());
+
+        // ── FIX: remove ALL hidden inputs for these field names,
+        //    including stale blade-rendered ones without data-source-hidden
+        const fieldNames = new Set([opts.officeFieldName, opts.nameFieldName, opts.fieldName].filter(Boolean));
+        fieldNames.forEach(name => {
+            widget.querySelectorAll('input[type="hidden"][name="' + name + '"]').forEach(el => el.remove());
+        });
+
         selected.forEach(item => {
             const input = document.createElement('input');
             input.type = 'hidden';
@@ -518,9 +985,15 @@ function createSourceUnitWidget(opts) {
         }
     }
 
+    function getCurrentQuery(input) {
+        const raw = input.value;
+        const lastComma = raw.lastIndexOf(',');
+        return (lastComma === -1 ? raw : raw.slice(lastComma + 1)).trim();
+    }
+
     function handleSearch(input) {
         const dropdown = document.getElementById(opts.resultsId);
-        const q = input.value.trim();
+        const q = opts.singleSelect ? input.value.trim() : getCurrentQuery(input);
         if (q.length < 1) { dropdown.style.display = 'none'; return; }
         const filtered = filterItems(getList(), labelKey, q).filter(o => !isOfficeSelected(o[idKey]));
         if (filtered.length === 0) {
@@ -534,14 +1007,16 @@ function createSourceUnitWidget(opts) {
         dropdown.style.display = 'block';
     }
 
-    function handleKeydown(e) {
-        if (e.key !== 'Enter') return;
+    function handleKeydown(e, input) {
+        if (e.key !== 'Enter' && e.key !== ',') return;
         e.preventDefault();
     }
 
     function pick(itemId) {
         addOffice(itemId);
-        document.getElementById(opts.inputId).value = '';
+        const inputEl = document.getElementById(opts.inputId);
+        if (inputEl) inputEl.focus();
+        syncInputText();
         document.getElementById(opts.resultsId).style.display = 'none';
     }
 
@@ -589,23 +1064,45 @@ function createSourceUnitWidget(opts) {
         }
     }
 
-    function reset() { selected = []; render(); }
+    function reset() {
+        selected = [];
+        const inputEl = document.getElementById(opts.inputId);
+        if (inputEl) inputEl.value = '';
+        render();
+    }
+
+    function removeItemAndSync(type, id) {
+        removeItem(type, id);
+        syncInputText();
+    }
 
     function seedFromString(str) {
         if (!str || selected.length > 0) return;
         str.split(',').map(s => s.trim()).filter(Boolean).forEach(part => {
             const office = allOffices.find(o => o.office_name.toLowerCase() === part.toLowerCase());
-            if (office) selected.push({ type: 'office', id: office.office_id, label: office.office_name });
-            else { idCounter++; selected.push({ type: 'name', id: 'n' + idCounter, label: part }); }
+            if (office && office[idKey]) {  // ← added guard
+                selected.push({ type: 'office', id: office.office_id, label: office.office_name });
+            } else if (!office) {
+                idCounter++;
+                selected.push({ type: 'name', id: 'n' + idCounter, label: part });
+            }
         });
         render();
+        syncInputText();
+    }
+
+    function jumpCaretToEnd() {
+        setTimeout(() => { const len = inputEl.value.length; inputEl.setSelectionRange(len, len); }, 0);
     }
 
     const inputEl = document.getElementById(opts.inputId);
     const arrowEl = document.getElementById(opts.arrowId);
     inputEl.addEventListener('input', function () { closePanel(); handleSearch(this); });
-    inputEl.addEventListener('keydown', function (e) { handleKeydown(e); });
+    inputEl.addEventListener('keydown', function (e) { handleKeydown(e, this); });
+    inputEl.addEventListener('focus', jumpCaretToEnd);
+    inputEl.addEventListener('click', jumpCaretToEnd);
     arrowEl.addEventListener('click', togglePanel);
+
     document.addEventListener('click', function (e) {
         const widget = document.getElementById(opts.widgetId);
         const chipsEl = document.getElementById(opts.chipsId);
@@ -619,7 +1116,7 @@ function createSourceUnitWidget(opts) {
 
     render();
 
-    const api = { pick, removeItem, reset, seedFromString, get selected() { return selected; } };
+    const api = { pick, removeItem: removeItemAndSync, reset, seedFromString, openPanel: togglePanel, get selected() { return selected; } };
     window.__sourceWidgets[opts.key] = api;
     return api;
 }
@@ -640,6 +1137,44 @@ window.closeSourceOverlay = closeSourceOverlay;
 
 function handleSourceOverlayEsc(e) { if (e.key === 'Escape') closeSourceOverlay(); }
 
+function openSourceOverlay(config) {
+    closeSourceOverlay();
+    window.__sourceOverlayConfigs[config.key] = config;
+
+    const backdrop = document.createElement('div');
+    backdrop.id = 'universalSourceBackdrop';
+    backdrop.className = 'drf-overlay-backdrop';
+    backdrop.onclick = closeSourceOverlay;
+    document.body.appendChild(backdrop);
+
+    const overlay = document.createElement('div');
+    overlay.id = 'universalSourceOverlay';
+    overlay.innerHTML = `
+        <div class="drf-overlay-header">
+            <span>${config.title}</span>
+            <button type="button" onclick="closeSourceOverlay()"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="drf-overlay-search">
+            <div class="reg-search">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                <input type="text" id="universalSourceOverlaySearch" placeholder="${config.searchPlaceholder}" autocomplete="off">
+            </div>
+        </div>
+        <div id="universalSourceOverlaySuggestions" class="drf-overlay-suggestions"></div>
+        <div class="drf-overlay-selected">
+            <div class="drf-overlay-selected-label">Selected (<span id="universalSourceOverlayCount">0</span>)</div>
+            <div id="universalSourceOverlayChips" class="drf-overlay-chips"></div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const searchInput = document.getElementById('universalSourceOverlaySearch');
+    searchInput.addEventListener('input', () => handleSourceOverlaySearch(config, searchInput));
+    document.addEventListener('keydown', handleSourceOverlayEsc);
+    searchInput.focus();
+    refreshSourceOverlay(config);
+}
+
 function refreshSourceOverlay(config) {
     const container = document.getElementById('universalSourceOverlayChips');
     const countEl = document.getElementById('universalSourceOverlayCount');
@@ -658,10 +1193,29 @@ function refreshSourceOverlay(config) {
     if (config.onChange) config.onChange();
 }
 
+function handleSourceOverlaySearch(config, input) {
+    const dropdown = document.getElementById('universalSourceOverlaySuggestions');
+    const q = input.value.trim();
+    if (q.length < 1) { dropdown.style.display = 'none'; return; }
+    const selectedIds = config.getSelected().map(i => i.id.split(':').pop());
+    const filtered = filterItems(config.getList(), config.labelKey, q).filter(o => !selectedIds.includes(String(o[config.idKey])));
+    if (filtered.length === 0) {
+        dropdown.innerHTML = `<div class="drf-overlay-noresult">No matching ${config.itemLabelPlural} found</div>`;
+        dropdown.style.display = 'block';
+        return;
+    }
+    dropdown.innerHTML = filtered.map(o =>
+        `<div onmousedown="pickSourceOverlayOffice('${config.key}', ${o[config.idKey]})">${escapeHtml(o[config.labelKey])}</div>`
+    ).join('');
+    dropdown.style.display = 'block';
+}
+
 window.pickSourceOverlayOffice = function (key, officeId) {
     const config = window.__sourceOverlayConfigs[key];
     if (!config) return;
     config.addOffice(officeId);
+    document.getElementById('universalSourceOverlaySearch').value = '';
+    document.getElementById('universalSourceOverlaySuggestions').style.display = 'none';
     refreshSourceOverlay(config);
 };
 
@@ -691,7 +1245,6 @@ window.handleRelatedDocSearch = function (input) {
                 + (excludeId ? '&exclude_request_id=' + excludeId : '');
             const data = await fetch(url).then(r => r.json());
             relatedDocsCache = data.filter(d => !relatedDocsSelected.some(s => s.masterlist_id === d.masterlist_id));
-
             if (relatedDocsCache.length === 0) {
                 dropdown.innerHTML = '<div class="reg-reldocs-noresult">No matching documents found</div>';
                 dropdown.style.display = 'block';
@@ -792,7 +1345,7 @@ function initSelectProtection() {
 }
 
 // ══════════════════════════════════════════════
-// FILE INPUTS
+// FILE INPUTS (with drag & drop)
 // ══════════════════════════════════════════════
 function initFileInputs() {
     document.querySelectorAll('.reg-upload').forEach(container => {
@@ -804,6 +1357,17 @@ function initFileInputs() {
         const label = container.querySelector('span');
         const originalText = label ? label.textContent : 'Choose .pdf or .docx file';
         input.addEventListener('change', function () { processUploadAreaFile(this, container, icon, label, originalText); });
+
+        container.addEventListener('dragover', function (e) { e.preventDefault(); container.classList.add('reg-upload-drag'); });
+        container.addEventListener('dragleave', function () { container.classList.remove('reg-upload-drag'); });
+        container.addEventListener('drop', function (e) {
+            e.preventDefault();
+            container.classList.remove('reg-upload-drag');
+            if (e.dataTransfer.files.length > 0) {
+                input.files = e.dataTransfer.files;
+                processUploadAreaFile(input, container, icon, label, originalText);
+            }
+        });
     });
 
     document.querySelectorAll('.reg-upload-cell').forEach(cell => {
@@ -823,7 +1387,7 @@ function initFileInputs() {
 }
 
 function processUploadAreaFile(input, container, icon, label, originalText) {
-    container.classList.remove('reg-upload-success', 'reg-upload-error');
+    container.classList.remove('reg-upload-success', 'reg-upload-error', 'reg-upload-drag');
     removeExistingError(container);
     removeExistingRemoveBtn(container);
 
@@ -849,6 +1413,50 @@ function processUploadAreaFile(input, container, icon, label, originalText) {
     label.style.color = 'var(--reg-success)';
     label.style.fontWeight = '600';
     addRemoveBtn(container, input, icon, label, originalText);
+
+    if (input.id === 'drfFile' && check.ext === 'pdf') {
+        triggerScanExtraction(input, file);
+    }
+}
+
+function triggerScanExtraction(input, file) {
+    const formData = new FormData();
+    formData.append('scan', file);
+    formData.append('section', 'drf');
+    formData.append('_token', document.querySelector('meta[name="csrf-token"]')?.content
+        || document.querySelector('input[name="_token"]')?.value);
+
+    const container = input.closest('.reg-upload');
+    const label = container?.querySelector('span');
+    const originalLabelText = label ? label.textContent : '';
+    if (label) label.textContent = 'Reading scanned document...';
+
+    fetch('/register/extract-scan', { method: 'POST', body: formData })
+        .then(r => r.json())
+        .then(data => {
+            if (label) label.textContent = originalLabelText;
+            if (data.extracted) {
+                autofillDrfFields(data.fields);
+            } else {
+                console.warn('Extraction failed:', data.reason);
+            }
+        })
+        .catch(err => {
+            if (label) label.textContent = originalLabelText;
+            console.error('Extraction request failed:', err);
+        });
+}
+
+function autofillDrfFields(fields) {
+    const map = { drfNo: 'drfNo', drfDate: 'drfDate', drfTitle: 'drfTitle' };
+    Object.entries(map).forEach(([fieldKey, elId]) => {
+        const value = fields[fieldKey];
+        const el = document.getElementById(elId);
+        if (value && el && !el.value) {
+            el.value = value;
+            el.classList.add('reg-autofilled');
+        }
+    });
 }
 
 function showUploadFieldError(container, message) {
@@ -860,11 +1468,14 @@ function showUploadFieldError(container, message) {
         err.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' + escapeHtml(message);
         parent.appendChild(err);
     }
+    container.style.animation = 'none';
+    container.offsetHeight;
+    container.style.animation = 'shake 0.4s ease';
 }
 
 function resetUploadArea(container, icon, label, originalText) {
-    container.classList.remove('reg-upload-success', 'reg-upload-error');
-    container.style.borderColor = ''; container.style.background = ''; container.style.borderStyle = '';
+    container.classList.remove('reg-upload-success', 'reg-upload-error', 'reg-upload-drag');
+    container.style.borderColor = ''; container.style.background = ''; container.style.borderStyle = ''; container.style.animation = '';
     clearFileIcon(icon, label, originalText);
     removeExistingRemoveBtn(container); removeExistingError(container);
 }
@@ -872,7 +1483,7 @@ function resetUploadArea(container, icon, label, originalText) {
 function addRemoveBtn(container, input, icon, label, originalText) {
     removeExistingRemoveBtn(container);
     const btn = document.createElement('button');
-    btn.type = 'button'; btn.className = 'reg-file-remove';
+    btn.type = 'button'; btn.className = 'reg-file-remove'; btn.title = 'Remove file';
     btn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
     btn.addEventListener('click', function (e) {
         e.preventDefault(); e.stopPropagation();
@@ -889,19 +1500,14 @@ function processUploadCellFile(input, cell) {
     const label = cell.querySelector('span');
     const icon = cell.querySelector('i');
     const originalText = 'No file chosen';
-    cell.classList.remove('reg-upload-cell-success', 'reg-upload-cell-error');
-    cell.style.borderColor = ''; cell.style.background = '';
-    removeExistingError(cell);
+    resetUploadCell(cell, icon, label, originalText);
 
-    if (!input.files || !input.files[0]) {
-        clearFileIcon(icon, label, originalText);
-        return;
-    }
+    if (!input.files || !input.files[0]) return;
 
     const file = input.files[0];
     const check = checkFile(file);
     if (!check.valid) {
-        showUploadFieldError(cell, fileTypeErrorMessage(check, file));
+        showUploadFieldError(cell, '.pdf and .docx only');
         clearFileIcon(icon, label, originalText);
         input.value = ''; return;
     }
@@ -921,38 +1527,115 @@ function validateTableFile(input) {
     const check = checkFile(file);
     if (!check.valid) {
         const e = document.createElement('div'); e.className = 'reg-file-error';
-        e.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' + escapeHtml(fileTypeErrorMessage(check, file));
+        e.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' +
+            (check.reason === 'type' ? '.pdf and .docx only' : 'Max 10MB');
         td.appendChild(e); input.value = '';
     }
 }
 
+function bindTableFileInput(fileInput) {
+    if (!fileInput) return;
+    fileInput.dataset.bound = "true";
+    fileInput.addEventListener('change', function () { validateTableFile(this); });
+}
+
 // ══════════════════════════════════════════════
-// VERSION / DOC TYPE (locked in edit mode)
+// VERSION / DOC TYPE (locked in edit mode, implementations kept for completeness)
 // ══════════════════════════════════════════════
-async function handleVersionChange() { /* locked in edit mode */ }
-function handleDocTypeChange() { /* locked in edit mode */ }
+async function handleVersionChange() {
+    // In edit mode, version type is locked — this handler is a no-op.
+    // Implementation kept for completeness if unlocked in the future.
+}
+
+function handleDocTypeChange() {
+    // In edit mode, doc type is locked — this handler is a no-op.
+    // Implementation kept for completeness if unlocked in the future.
+}
 
 function validateChecklistState() {
     const subTypeId = document.getElementById("subType").value;
     const subTypeData = allDocTypes.find(d => d.doc_type_id == subTypeId);
     const syllabiSection = document.getElementById("section-syllabi");
 
-    window.__isSyllabiMode = !!(subTypeData && subTypeData.doc_type_name.toLowerCase() === "syllabi");
+    const isSyllabiLike = isSyllabiLikeSubType(subTypeId);
+
+    // Clear stale syllabi state when sub-type changes
+    if (subTypeId !== window.__lastSubTypeId) {
+        resetSyllabiSection();
+    }
+    window.__lastSubTypeId = subTypeId;
+
+    window.__isSyllabiMode = isSyllabiLike;
+    window.__syllabiModeLabel = subTypeData ? subTypeData.doc_type_name : 'Syllabi';
 
     if (subTypeId) {
         unlockChecklist();
-        if (window.__isSyllabiMode && syllabiSection) syllabiSection.style.display = "block";
+        if (isSyllabiLike && syllabiSection) {
+            applySyllabiSectionLabel();
+            syllabiSection.style.display = "block";
+            setSyllabiStep(1);
+            loadSyllabiContextDropdowns();
+            if (document.getElementById("syllabiTableBody").children.length === 0) {
+                addSyllabiRow();
+            }
+            setTimeout(() => {
+                syllabiSection.querySelectorAll('.reg-upload-cell').forEach(cell => {
+                    const input = cell.querySelector('input[type="file"]');
+                    if (input && !input.dataset.bound) {
+                        input.setAttribute('accept', '.pdf,.docx');
+                        input.dataset.bound = "true";
+                        input.addEventListener('change', function () { processUploadCellFile(this, cell); });
+                    }
+                });
+            }, 50);
+        }
     }
 }
 
-function unlockChecklist() {
-    document.getElementById("dynamicCheckboxes").querySelectorAll("input[type='checkbox']").forEach(cb => {
-        cb.disabled = false;
-        cb.dataset.lastChecked = cb.checked ? "true" : "false";
-        toggleSection(parseInt(cb.value), cb.checked);
+function resetSyllabiSection() {
+    const syllabiBody = document.getElementById('syllabiTableBody');
+    if (syllabiBody) {
+        syllabiBody.querySelectorAll('tr[data-uid]').forEach(tr => removeSyllabiFacultyPicker(tr.dataset.uid));
+        syllabiBody.innerHTML = '';
+        syllabiGroupCounter = 0;
+    }
+    ['syllabiDocNo', 'syllabiDocTitle', 'syllabiEffectivityDate', 'syllabiDeadline'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
     });
+    syllabiTitleManuallyEdited = false;
+    const collegeSel = document.getElementById('syllabiCollege');
+    const programSel = document.getElementById('syllabiProgram');
+    const semSel = document.getElementById('syllabiSemester');
+    const sySel = document.getElementById('syllabiSchoolYear');
+    if (collegeSel) collegeSel.selectedIndex = 0;
+    if (programSel) { programSel.innerHTML = '<option value="" selected disabled>Select program</option>'; programSel.disabled = true; }
+    if (semSel) { semSel.selectedIndex = 0; semSel.disabled = true; }
+    if (sySel) { sySel.selectedIndex = 0; sySel.disabled = true; }
+}
+
+function applySyllabiSectionLabel() {
+    const label = window.__syllabiModeLabel || 'Syllabi';
+    const header = document.querySelector('#section-syllabi .reg-card-header span');
+    if (header) header.textContent = label;
+    document.querySelectorAll('#syllabiTableBody input[name="syllabiCourseName[]"], #syllabiTableBody textarea[name="syllabiCourseName[]"]').forEach(inp => {
+        inp.placeholder = /tos/i.test(label) ? 'Enter course/exam name' : 'Enter course name';
+    });
+}
+
+function unlockChecklist() {
+    const container = document.getElementById("dynamicCheckboxes");
+    container.querySelectorAll("input[type='checkbox']").forEach(cb => {
+        cb.disabled = false;
+        cb.checked = true;
+        cb.dataset.lastChecked = "true";
+        toggleSection(parseInt(cb.value), true);
+    });
+    showFormActions();
     enableApproval();
     setTimeout(initFileInputs, 100);
+    const saveBtn = document.querySelector('.reg-btn-save');
+    if (saveBtn) saveBtn.style.display = "";
 }
 
 window.toggleSection = function (checklistId, show) {
@@ -973,6 +1656,803 @@ function enableApproval() {
     document.querySelectorAll('input[name="approval_status"]').forEach(r => r.disabled = false);
 }
 
+function disableApproval() {
+    document.querySelectorAll('input[name="approval_status"]').forEach(r => {
+        r.disabled = true; r.checked = r.value === "not_applicable";
+    });
+    const approval = document.getElementById("section-approval");
+    if (approval) approval.style.display = "none";
+}
+
+// ══════════════════════════════════════════════
+// SYLLABI CONTEXT DROPDOWNS
+// ══════════════════════════════════════════════
+async function loadSyllabiContextDropdowns() {
+    try {
+        const [colleges, semesters, schoolYears] = await Promise.all([
+            fetch("/api/colleges").then(r => r.json()),
+            fetch("/api/semesters").then(r => r.json()),
+            fetch("/api/school-years").then(r => r.json()),
+        ]);
+        const collegeSel = document.getElementById("syllabiCollege");
+        const semSel = document.getElementById("syllabiSemester");
+        const sySel = document.getElementById("syllabiSchoolYear");
+
+        if (collegeSel && collegeSel.options.length <= 1) {
+            colleges.forEach(c => collegeSel.add(new Option(c.college_name, c.college_id)));
+        }
+        if (semSel && semSel.options.length <= 1) {
+            semesters.forEach(s => semSel.add(new Option(s.semester_name, s.semester_id)));
+        }
+        if (sySel && sySel.options.length <= 1) {
+            schoolYears.forEach(y => sySel.add(new Option(y.school_year, y.school_year_id)));
+        }
+    } catch (err) {
+        console.error("Failed to load syllabi context dropdowns:", err);
+    }
+}
+
+function syllabiContextComplete() {
+    return document.getElementById('syllabiCollege')?.value
+        && document.getElementById('syllabiProgram')?.value
+        && document.getElementById('syllabiSemester')?.value
+        && document.getElementById('syllabiSchoolYear')?.value;
+}
+
+async function autoPopulateSyllabiCourses() {
+    if (!syllabiContextComplete()) return;
+    const programId = document.getElementById('syllabiProgram').value;
+    const semesterId = document.getElementById('syllabiSemester').value;
+    try {
+        const courses = await fetch(`/api/program-courses/${programId}/${semesterId}`).then(r => r.json());
+        if (!courses || courses.length === 0) return;
+        const tbody = document.getElementById('syllabiTableBody');
+        const hasManualData = [...tbody.querySelectorAll('.syllabi-merged-course, textarea.syllabi-merged-course')]
+            .some(inp => inp.value.trim() !== '' && inp.dataset.autoFilled !== 'true');
+        if (hasManualData) return;
+
+        tbody.querySelectorAll('tr[data-uid]').forEach(tr => removeSyllabiFacultyPicker(tr.dataset.uid));
+        tbody.innerHTML = '';
+        syllabiGroupCounter = 0;
+
+        courses.forEach(c => {
+            syllabiGroupCounter++;
+            const groupId = 'g' + syllabiGroupCounter;
+            const newRow = buildSyllabiGroupFirstRow(groupId, 1);
+            tbody.appendChild(newRow);
+            const courseInput = newRow.querySelector('.syllabi-merged-course');
+            if (courseInput) {
+                courseInput.value = c.course_name;
+                courseInput.dataset.autoFilled = 'true';
+                courseInput.title = 'Loaded from Settings';
+                autosizeSyllabiCourse(courseInput);
+                courseInput.addEventListener('input', () => { courseInput.dataset.autoFilled = 'false'; });
+            }
+            cascadeDrfToNewRow(newRow);
+            syncSyllabiMergedFields(groupId);
+        });
+        updateSyllabiTotals();
+        applySyllabiSectionLabel();
+    } catch (err) {
+        console.error('Failed to auto-populate syllabi courses:', err);
+    }
+}
+
+function clearSyllabiCourseRows() {
+    const tbody = document.getElementById('syllabiTableBody');
+    if (!tbody) return;
+    tbody.querySelectorAll('tr[data-uid]').forEach(tr => removeSyllabiFacultyPicker(tr.dataset.uid));
+    tbody.innerHTML = '';
+    syllabiGroupCounter = 0;
+    updateSyllabiTotals();
+}
+
+async function initSyllabiContextWiring() {
+    const collegeSel = document.getElementById("syllabiCollege");
+    const programSel = document.getElementById("syllabiProgram");
+    const semSel = document.getElementById("syllabiSemester");
+    const sySel = document.getElementById("syllabiSchoolYear");
+
+    if (collegeSel && !collegeSel.dataset.wired) {
+        collegeSel.dataset.wired = "true";
+        collegeSel.addEventListener("change", async function () {
+            programSel.innerHTML = '<option value="" selected disabled>Select program</option>';
+            programSel.disabled = true;
+            semSel.value = ""; semSel.disabled = true;
+            sySel.value = ""; sySel.disabled = true;
+            updateSyllabiTitle();
+            clearSyllabiCourseRows();
+            if (!this.value) return;
+            try {
+                const programs = await fetch("/api/programs/" + this.value).then(r => r.json());
+                programs.forEach(p => {
+                    const opt = new Option(p.program_name, p.program_id);
+                    opt.dataset.code = p.program_code || "";
+                    programSel.add(opt);
+                });
+                programSel.disabled = false;
+            } catch (err) { console.error("Failed to load programs:", err); }
+        });
+    }
+    if (programSel && !programSel.dataset.wired) {
+        programSel.dataset.wired = "true";
+        programSel.addEventListener("change", function () {
+            semSel.value = ""; semSel.disabled = !this.value;
+            sySel.value = ""; sySel.disabled = true;
+            updateSyllabiTitle();
+            clearSyllabiCourseRows();
+        });
+    }
+    if (semSel && !semSel.dataset.wired) {
+        semSel.dataset.wired = "true";
+        semSel.addEventListener("change", function () {
+            sySel.value = ""; sySel.disabled = !this.value;
+            updateSyllabiTitle();
+            clearSyllabiCourseRows();
+        });
+    }
+    if (sySel && !sySel.dataset.wired) {
+        sySel.dataset.wired = "true";
+        sySel.addEventListener("change", function () {
+            updateSyllabiTitle();
+            autoPopulateSyllabiCourses();
+        });
+    }
+}
+
+// ══════════════════════════════════════════════
+// SYLLABI — AUTO-GENERATED DOCUMENT TITLE
+// ══════════════════════════════════════════════
+function formatSchoolYearText(text) {
+    if (!text) return '';
+    const m = text.match(/^(\d{4})\s*-\s*(\d{4})$/);
+    if (m) return 'S/Y ' + m[1] + ' – ' + m[2];
+    return /^s\/y/i.test(text) ? text : 'S/Y ' + text;
+}
+
+function updateSyllabiTitle() {
+    const titleInput = document.getElementById('syllabiDocTitle');
+    if (!titleInput || syllabiTitleManuallyEdited) return;
+    const college  = getSelectText('syllabiCollege');
+    const program  = getSelectTextWithCode('syllabiProgram');
+    const semester = getSelectText('syllabiSemester');
+    const schoolYr = getSelectText('syllabiSchoolYear');
+    const label    = window.__syllabiModeLabel || 'Syllabi';
+    if (!college || !program || !semester || !schoolYr) return;
+    titleInput.value = college + ' ' + label + ' for ' + program + ', ' + semester + ', ' + formatSchoolYearText(schoolYr);
+    const mlTitle = document.getElementById('masterlistDocTitle');
+    if (mlTitle) mlTitle.value = titleInput.value;
+}
+
+// ══════════════════════════════════════════════
+// SYLLABI — FACULTY PICKER
+// ══════════════════════════════════════════════
+function buildSyllabiFacultyCellHTML(uid) {
+    return `
+        <div class="syllabi-faculty-wrap" id="syllabiFacultyWrap_${uid}" style="position:relative;">
+            <input type="hidden" name="syllabiFaculty[]" id="syllabiFacultyHidden_${uid}">
+            <input type="text" id="syllabiFacultyInput_${uid}" class="syllabi-faculty-input"
+                placeholder="Type a faculty name" autocomplete="off">
+            <div id="syllabiFacultyChips_${uid}" class="syllabi-faculty-chips"></div>
+        </div>
+    `;
+}
+
+function initSyllabiFacultyPicker(uid, mode) {
+    window.__syllabiFaculty[uid] = { mode, selected: [] };
+    bindSyllabiFacultyInput(uid);
+    renderSyllabiFacultyChips(uid);
+}
+
+function setSyllabiFacultyMode(uid, mode) {
+    if (!window.__syllabiFaculty[uid]) { initSyllabiFacultyPicker(uid, mode); return; }
+    window.__syllabiFaculty[uid].mode = mode;
+    if (mode === 'single' && window.__syllabiFaculty[uid].selected.length > 1) {
+        window.__syllabiFaculty[uid].selected = window.__syllabiFaculty[uid].selected.slice(0, 1);
+    }
+    renderSyllabiFacultyChips(uid);
+}
+
+function bindSyllabiFacultyInput(uid) {
+    const input = document.getElementById('syllabiFacultyInput_' + uid);
+    if (!input || input.dataset.bound) return;
+    input.dataset.bound = 'true';
+
+    input.addEventListener('input', () => renderSyllabiFacultyDropdown(uid, input));
+    input.addEventListener('focus', () => renderSyllabiFacultyDropdown(uid, input));
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ',') {
+            e.preventDefault();
+            const val = input.value.trim().replace(/,$/, '');
+            if (val) addSyllabiFaculty(uid, val);
+        }
+    });
+
+    const reposition = () => {
+        const dd = document.getElementById('syllabiFacultyDropdown_' + uid);
+        if (dd && dd.style.display === 'block') positionFixedDropdown(dd, input);
+    };
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+}
+
+function getOrCreateSyllabiFacultyDropdown(uid) {
+    let dd = document.getElementById('syllabiFacultyDropdown_' + uid);
+    if (!dd) {
+        dd = document.createElement('div');
+        dd.id = 'syllabiFacultyDropdown_' + uid;
+        dd.className = 'reg-reldocs-dropdown';
+        dd.style.display = 'none';
+        document.body.appendChild(dd);
+    }
+    return dd;
+}
+
+function renderSyllabiFacultyDropdown(uid, input) {
+    const state = window.__syllabiFaculty[uid];
+    if (!state) return;
+    if (state.mode === 'single' && state.selected.length >= 1) { closeSyllabiFacultyDropdown(uid); return; }
+
+    const dd = getOrCreateSyllabiFacultyDropdown(uid);
+    const q = input.value.trim().toLowerCase();
+    if (q.length < 1) { dd.style.display = 'none'; return; }
+
+    const matches = allFaculties.filter(f =>
+        f.faculty_name.toLowerCase().includes(q) &&
+        !state.selected.some(s => s.label.toLowerCase() === f.faculty_name.toLowerCase())
+    );
+
+    dd.innerHTML = matches.length === 0
+        ? '<div class="reg-reldocs-noresult">No matching faculty found — press Enter to add "' + escapeHtml(input.value.trim()) + '"</div>'
+        : matches.map(f => `<div onmousedown="addSyllabiFaculty('${uid}', '${f.faculty_name.replace(/'/g, "\\'")}')">${escapeHtml(f.faculty_name)}</div>`).join('');
+
+    positionFixedDropdown(dd, input);
+    dd.style.display = 'block';
+}
+
+function closeSyllabiFacultyDropdown(uid) {
+    const dd = document.getElementById('syllabiFacultyDropdown_' + uid);
+    if (dd) dd.style.display = 'none';
+}
+
+window.addSyllabiFaculty = function (uid, name) {
+    const state = window.__syllabiFaculty[uid];
+    if (!state || !name) return;
+    if (state.mode === 'single') {
+        state.selected = [{ label: name }];
+    } else {
+        if (state.selected.length >= 2) return;
+        if (!state.selected.some(s => s.label.toLowerCase() === name.toLowerCase())) {
+            state.selected.push({ label: name });
+        }
+    }
+    const input = document.getElementById('syllabiFacultyInput_' + uid);
+    if (input) input.value = '';
+    closeSyllabiFacultyDropdown(uid);
+    renderSyllabiFacultyChips(uid);
+};
+
+window.removeSyllabiFaculty = function (uid, idx) {
+    const state = window.__syllabiFaculty[uid];
+    if (!state) return;
+    state.selected.splice(idx, 1);
+    renderSyllabiFacultyChips(uid);
+};
+
+function renderSyllabiFacultyChips(uid) {
+    const state = window.__syllabiFaculty[uid];
+    const chipsEl = document.getElementById('syllabiFacultyChips_' + uid);
+    const hidden = document.getElementById('syllabiFacultyHidden_' + uid);
+    const input = document.getElementById('syllabiFacultyInput_' + uid);
+    if (!state || !chipsEl || !hidden) return;
+
+    hidden.value = state.selected.map(s => s.label).join(', ');
+    chipsEl.innerHTML = state.selected.map((s, idx) => `
+        <span class="reg-inline-chip">
+            <span>${escapeHtml(s.label)}</span>
+            <button type="button" onclick="removeSyllabiFaculty('${uid}', ${idx})"><i class="fa-solid fa-xmark"></i></button>
+        </span>
+    `).join('');
+
+    if (input) {
+        const locked = state.mode === 'single' && state.selected.length >= 1;
+        input.style.display = locked ? 'none' : '';
+        input.placeholder = state.mode === 'multi' ? 'Add faculty (shared) — press Enter' : 'Type a faculty name';
+    }
+}
+
+function removeSyllabiFacultyPicker(uid) {
+    delete window.__syllabiFaculty[uid];
+    const dd = document.getElementById('syllabiFacultyDropdown_' + uid);
+    if (dd) dd.remove();
+}
+
+document.addEventListener('click', function (e) {
+    document.querySelectorAll('[id^="syllabiFacultyDropdown_"]').forEach(dd => {
+        const uid = dd.id.replace('syllabiFacultyDropdown_', '');
+        const input = document.getElementById('syllabiFacultyInput_' + uid);
+        if (dd.style.display === 'block' && !dd.contains(e.target) && e.target !== input) {
+            dd.style.display = 'none';
+        }
+    });
+});
+
+function buildSyllabiFacultyTd(uid, mirrorHiddenHTML = '') {
+    return `<td class="col-shared">${mirrorHiddenHTML}${buildSyllabiFacultyCellHTML(uid)}</td>`;
+}
+
+// ══════════════════════════════════════════════
+// SEED EXISTING SYLLABI GROUPS INTO THE WIZARD
+// ══════════════════════════════════════════════
+async function seedExistingSyllabiGroups() {
+    const groups = window.__existingSyllabiGroups || [];
+    await loadSyllabiContextDropdowns();
+
+    const tbody = document.getElementById("syllabiTableBody");
+    if (!tbody) return;
+    tbody.innerHTML = "";
+    syllabiGroupCounter = 0;
+
+    if (groups.length === 0) {
+        addSyllabiRow();
+        setSyllabiStep(1);
+        return;
+    }
+
+    const first = groups[0];
+    const collegeSel = document.getElementById("syllabiCollege");
+    const programSel = document.getElementById("syllabiProgram");
+    const semSel = document.getElementById("syllabiSemester");
+    const sySel = document.getElementById("syllabiSchoolYear");
+
+    if (collegeSel && first.college_id) {
+        collegeSel.value = first.college_id;
+        if (programSel) {
+            try {
+                const programs = await fetch("/api/programs/" + first.college_id).then(r => r.json());
+                programs.forEach(p => {
+                    const opt = new Option(p.program_name, p.program_id);
+                    opt.dataset.code = p.program_code || "";
+                    programSel.add(opt);
+                });
+                programSel.disabled = false;
+                if (first.program_id) programSel.value = first.program_id;
+            } catch (e) { console.error(e); }
+        }
+    }
+    if (semSel && first.semester_id) { semSel.disabled = false; semSel.value = first.semester_id; }
+    if (sySel && first.school_year_id) { sySel.disabled = false; sySel.value = first.school_year_id; }
+
+    // Seed doc info fields
+    if (first.doc_no) { const el = document.getElementById('syllabiDocNo'); if (el) el.value = first.doc_no; }
+    if (first.doc_title) { const el = document.getElementById('syllabiDocTitle'); if (el) el.value = first.doc_title; }
+    if (first.effectivity_date) { const el = document.getElementById('syllabiEffectivityDate'); if (el) el.value = first.effectivity_date; }
+    if (first.deadline) { const el = document.getElementById('syllabiDeadline'); if (el) el.value = first.deadline; }
+
+    updateSyllabiTitle();
+
+    groups.forEach(group => {
+        syllabiGroupCounter++;
+        const groupId = "g" + syllabiGroupCounter;
+        const rowCount = Math.max(1, group.rows.length);
+        const firstRow = buildSyllabiGroupFirstRow(groupId, rowCount);
+        tbody.appendChild(firstRow);
+
+        const courseInput = firstRow.querySelector('.syllabi-merged-course');
+        const availCheckbox = firstRow.querySelector('.syllabi-merged-availability');
+        const availHidden = firstRow.querySelector('.syllabi-merged-availability-hidden');
+        const copiesInput = firstRow.querySelector('.syllabi-merged-copies');
+        const pagesInput = firstRow.querySelector('.syllabi-merged-pages');
+
+        if (courseInput) { courseInput.value = group.course_name || ''; autosizeSyllabiCourse(courseInput); }
+        if (availCheckbox) { availCheckbox.checked = !!group.availability; if (availHidden) availHidden.value = group.availability ? 'available' : 'not available'; }
+        if (copiesInput) copiesInput.value = rowCount;
+        if (pagesInput) pagesInput.value = group.rows[0]?.no_pages || '';
+
+        let lastRow = firstRow;
+        for (let i = 2; i <= rowCount; i++) {
+            const contRow = buildSyllabiContinuationRow(groupId, i);
+            lastRow.after(contRow);
+            lastRow = contRow;
+        }
+
+        syncSyllabiMergedFields(groupId);
+
+        const groupRows = [...document.querySelectorAll(`#syllabiTableBody tr[data-group="${groupId}"]`)]
+            .sort((a, b) => parseInt(a.dataset.copyNo) - parseInt(b.dataset.copyNo));
+
+        // Set faculty mode based on copy count
+        const mode = rowCount === 1 ? 'multi' : 'single';
+        groupRows.forEach(row => setSyllabiFacultyMode(row.dataset.uid, mode));
+
+        groupRows.forEach((tr, idx) => {
+            const data = group.rows[idx];
+            if (!data) return;
+            setVal(tr, 'syllabiOriginator[]', data.originator);
+            setVal(tr, 'syllabiDateReceived[]', data.date_received);
+            setVal(tr, 'syllabiTimeReceived[]', data.time_received);
+            setVal(tr, 'syllabiDrfNo[]', data.drf_no);
+            setVal(tr, 'syllabiDrfDate[]', data.drf_date);
+            setVal(tr, 'syllabiDrfReceived[]', data.drf_received_date);
+            setVal(tr, 'syllabiTimeSpent[]', data.time_spent);
+
+            // Seed faculty
+            if (data.faculty) {
+                data.faculty.split(',').forEach(name => {
+                    const trimmed = name.trim();
+                    if (trimmed) window.addSyllabiFaculty(tr.dataset.uid, trimmed);
+                });
+            }
+
+            // DRF availability checkbox
+            const drfHidden = tr.querySelector('.syllabi-hidden-toggle[name="syllabiDrfAvailability[]"]');
+            const checkboxes = tr.querySelectorAll('.syllabi-check-cell input[type="checkbox"]');
+            if (checkboxes[0]) {
+                checkboxes[0].checked = !!data.drf_available;
+                if (drfHidden) drfHidden.value = data.drf_available ? 'available' : 'not available';
+            }
+
+            // Registration checkbox + fields
+            if (checkboxes[1]) {
+                checkboxes[1].checked = !!data.registered;
+                toggleSyllabiRegFields(checkboxes[1]);
+                setVal(tr, 'syllabiRegDate[]', data.date_of_registration);
+                setVal(tr, 'syllabiRegTime[]', data.time_of_registration);
+            }
+
+            const display = tr.querySelector('.syllabi-time-spent-display');
+            if (display && data.time_spent) display.value = data.time_spent + ' min';
+
+            // Scanned DRF filename
+            if (data.scanned_drf_name) {
+                const cell = tr.querySelector('.syllabi-scan-drf-cell .reg-upload-cell');
+                if (cell) {
+                    const span = cell.querySelector('span');
+                    const icon = cell.querySelector('i');
+                    if (span) span.textContent = data.scanned_drf_name;
+                    if (icon) icon.className = 'fa-solid fa-file-pdf';
+                    cell.classList.add('reg-upload-cell-success');
+                }
+            }
+
+            // Scanned Registration filename
+            if (data.scanned_registration_name) {
+                const cell = tr.querySelector('.reg-upload-cell');
+                if (cell) {
+                    const span = cell.querySelector('span');
+                    const icon = cell.querySelector('i');
+                    if (span) span.textContent = data.scanned_registration_name;
+                    if (icon) icon.className = 'fa-solid fa-file-pdf';
+                    cell.classList.add('reg-upload-cell-success');
+                }
+            }
+        });
+    });
+
+    setSyllabiStep(1);
+    updateSyllabiTotals();
+}
+
+function setVal(tr, name, value) {
+    if (value === null || value === undefined || value === '') return;
+    const el = tr.querySelector(`[name="${name}"]`);
+    if (el) el.value = value;
+}
+
+// ══════════════════════════════════════════════
+// SYLLABI WIZARD — STEP NAVIGATION
+// ══════════════════════════════════════════════
+function setSyllabiStep(step) {
+    syllabiCurrentStep = step;
+    const table = document.getElementById("syllabiWizardTable");
+    if (table) table.dataset.activeStep = step;
+
+    document.querySelectorAll("#syllabiStepIndicator .reg-wizard-step").forEach(el => {
+        const s = parseInt(el.dataset.step);
+        el.classList.toggle("is-active", s === step);
+        el.classList.toggle("is-done", s < step);
+    });
+
+    const backBtn = document.getElementById("syllabiBackBtn");
+    const nextBtn = document.getElementById("syllabiNextBtn");
+    if (backBtn) backBtn.style.display = step === 1 ? "none" : "";
+    if (nextBtn) {
+        nextBtn.innerHTML = step === 3
+            ? '<i class="fa-solid fa-check"></i> Review &amp; Confirm'
+            : 'Next <i class="fa-solid fa-arrow-right"></i>';
+    }
+}
+
+window.syllabiStepNext = function () {
+    if (syllabiCurrentStep < 3) setSyllabiStep(syllabiCurrentStep + 1);
+    else confirmSave();
+};
+window.syllabiStepBack = function () {
+    if (syllabiCurrentStep > 1) setSyllabiStep(syllabiCurrentStep - 1);
+};
+
+// ══════════════════════════════════════════════
+// SYLLABI ROW BUILDER
+// ══════════════════════════════════════════════
+function buildSyllabiPerRowCells(uid) {
+    return `
+        <td class="col-step1"><input type="text" name="syllabiOriginator[]" placeholder="Originator"></td>
+        <td class="col-step1"><input type="date" name="syllabiDateReceived[]"></td>
+        <td class="col-step1"><input type="time" name="syllabiTimeReceived[]"></td>
+
+        <td class="col-step2 syllabi-check-cell">
+            <input type="hidden" name="syllabiDrfAvailability[]" value="not available" class="syllabi-hidden-toggle">
+            <input type="checkbox" onchange="this.previousElementSibling.value = this.checked ? 'available' : 'not available'">
+        </td>
+        <td class="col-step2"><input type="text" name="syllabiDrfNo[]" placeholder="Enter DRF No."></td>
+        <td class="col-step2"><input type="date" name="syllabiDrfDate[]" oninput="cascadeSyllabiField(this, 'syllabiDrfDate[]')"></td>
+        <td class="col-step2"><input type="date" name="syllabiDrfReceived[]" oninput="cascadeSyllabiField(this, 'syllabiDrfReceived[]')"></td>
+        <td class="col-step2 syllabi-scan-drf-cell">
+            <label class="reg-upload-cell">
+                <input type="file" name="syllabiScannedDrf[]" accept=".pdf,.docx">
+                <i class="fa-solid fa-cloud-arrow-up"></i>
+                <span>No file chosen</span>
+            </label>
+        </td>
+
+        <td class="col-step3 syllabi-check-cell">
+            <input type="hidden" name="syllabiIsRegistered[]" value="not registered" class="syllabi-hidden-toggle">
+            <input type="checkbox" onchange="toggleSyllabiRegFields(this)">
+        </td>
+        <td class="col-step3"><input type="date" name="syllabiRegDate[]" disabled oninput="calcSyllabiRowTimeSpent(this.closest('tr'))"></td>
+        <td class="col-step3"><input type="time" name="syllabiRegTime[]" disabled oninput="calcSyllabiRowTimeSpent(this.closest('tr'))"></td>
+        <td class="col-step3">
+            <input type="text" class="syllabi-time-spent-display" readonly placeholder="--" style="background:#f8fafc;text-align:center;">
+            <input type="hidden" name="syllabiTimeSpent[]">
+        </td>
+        <td class="col-step3">
+            <label class="reg-upload-cell">
+                <input type="file" name="syllabiScannedRegistration[]" accept=".pdf,.docx">
+                <i class="fa-solid fa-cloud-arrow-up"></i>
+                <span>No file chosen</span>
+            </label>
+        </td>
+    `;
+}
+
+window.cascadeSyllabiField = function (input, fieldName) {
+    const tbody = document.getElementById('syllabiTableBody');
+    if (!tbody) return;
+    const firstRow = tbody.querySelector('tr');
+    if (!firstRow || input.closest('tr') !== firstRow) return;
+    const val = input.value;
+    tbody.querySelectorAll('tr').forEach((tr, idx) => {
+        if (idx === 0) return;
+        const target = tr.querySelector(`input[name="${fieldName}"]`);
+        if (target) target.value = val;
+    });
+};
+
+function cascadeDrfToNewRow(newRow) {
+    const tbody = document.getElementById('syllabiTableBody');
+    if (!tbody) return;
+    const firstRow = tbody.querySelector('tr');
+    if (!firstRow || firstRow === newRow) return;
+    ['syllabiDrfDate[]', 'syllabiDrfReceived[]'].forEach(name => {
+        const source = firstRow.querySelector(`input[name="${name}"]`);
+        const target = newRow.querySelector(`input[name="${name}"]`);
+        if (source && target && source.value) target.value = source.value;
+    });
+}
+
+function autosizeSyllabiCourse(el) {
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+}
+
+function buildSyllabiGroupFirstRow(groupId, rowspan) {
+    const tr = document.createElement("tr");
+    tr.style.animation = "fadeSlideUp 0.25s ease";
+    tr.dataset.group = groupId;
+    tr.dataset.copyNo = 1;
+    tr.dataset.isFirst = "true";
+    const uid = ++syllabiRowUidCounter;
+    tr.dataset.uid = uid;
+
+    tr.innerHTML = `
+        <td class="col-pinned" rowspan="${rowspan}">
+            <textarea rows="1" name="syllabiCourseName[]" placeholder="Enter course name"
+                class="syllabi-merged-course"
+                oninput="syncSyllabiMergedFields('${groupId}'); autosizeSyllabiCourse(this);"></textarea>
+        </td>
+        <td class="col-step1" rowspan="${rowspan}">
+            <input type="hidden" name="syllabiAvailability[]" value="not available" class="syllabi-merged-availability-hidden">
+            <label class="reg-checkbox-wrap">
+                <input type="checkbox" class="syllabi-merged-availability" onchange="syncSyllabiMergedFields('${groupId}')">
+            </label>
+        </td>
+        <td class="col-step1" rowspan="${rowspan}">
+            <input type="number" name="syllabiCopies[]" min="1" value="${rowspan}"
+                class="syllabi-merged-copies" oninput="handleCopiesChange(this)">
+        </td>
+        <td class="col-step1" rowspan="${rowspan}">
+            <input type="number" name="syllabiNoPages[]" min="0" placeholder="0"
+                class="syllabi-merged-pages" oninput="syncSyllabiMergedFields('${groupId}')">
+        </td>
+        ${buildSyllabiFacultyTd(uid)}
+        ${buildSyllabiPerRowCells(uid)}
+        <td class="col-pinned" rowspan="${rowspan}">
+            <button type="button" class="reg-row-del" onclick="removeSyllabiGroup('${groupId}')" title="Remove course">
+                <i class="fa-solid fa-trash-can"></i>
+            </button>
+        </td>
+    `;
+
+    bindSyllabiRowFileInputs(tr);
+    initSyllabiFacultyPicker(uid, 'multi');
+    return tr;
+}
+
+function buildSyllabiContinuationRow(groupId, copyNo) {
+    const tr = document.createElement("tr");
+    tr.style.animation = "fadeSlideUp 0.25s ease";
+    tr.dataset.group = groupId;
+    tr.dataset.copyNo = copyNo;
+    const uid = ++syllabiRowUidCounter;
+    tr.dataset.uid = uid;
+
+    const mirrors = `
+        <input type="hidden" name="syllabiCourseName[]" class="syllabi-mirror-course">
+        <input type="hidden" name="syllabiAvailability[]" value="0" class="syllabi-mirror-availability">
+        <input type="hidden" name="syllabiCopies[]" class="syllabi-mirror-copies">
+        <input type="hidden" name="syllabiNoPages[]" class="syllabi-mirror-pages">
+    `;
+
+    tr.innerHTML = buildSyllabiFacultyTd(uid, mirrors) + buildSyllabiPerRowCells(uid);
+    bindSyllabiRowFileInputs(tr);
+    initSyllabiFacultyPicker(uid, 'single');
+    return tr;
+}
+
+window.syncSyllabiMergedFields = function (groupId) {
+    const firstRow = document.querySelector(`#syllabiTableBody tr[data-group="${groupId}"][data-is-first="true"]`);
+    if (!firstRow) return;
+
+    const courseVal = firstRow.querySelector('.syllabi-merged-course').value;
+    const availCheckbox = firstRow.querySelector('.syllabi-merged-availability');
+    const availHidden = firstRow.querySelector('.syllabi-merged-availability-hidden');
+    availHidden.value = availCheckbox.checked ? 'available' : 'not available';
+    const copiesVal = firstRow.querySelector('.syllabi-merged-copies').value;
+    const pagesVal = firstRow.querySelector('.syllabi-merged-pages').value;
+
+    document.querySelectorAll(`#syllabiTableBody tr[data-group="${groupId}"]:not([data-is-first="true"])`)
+        .forEach(row => {
+            const mc = row.querySelector('.syllabi-mirror-course');
+            const ma = row.querySelector('.syllabi-mirror-availability');
+            const mp = row.querySelector('.syllabi-mirror-copies');
+            const mpg = row.querySelector('.syllabi-mirror-pages');
+            if (mc) mc.value = courseVal;
+            if (ma) ma.value = availHidden.value;
+            if (mp) mp.value = copiesVal;
+            if (mpg) mpg.value = pagesVal;
+        });
+
+    updateSyllabiTotals();
+};
+
+window.addSyllabiRow = function () {
+    const tbody = document.getElementById("syllabiTableBody");
+    if (!tbody) return;
+    syllabiGroupCounter++;
+    const newRow = buildSyllabiGroupFirstRow("g" + syllabiGroupCounter, 1);
+    tbody.appendChild(newRow);
+    cascadeDrfToNewRow(newRow);
+    updateSyllabiTotals();
+    applySyllabiSectionLabel();
+};
+
+window.removeSyllabiGroup = function (groupId) {
+    document.querySelectorAll(`#syllabiTableBody tr[data-group="${groupId}"]`).forEach(r => {
+        removeSyllabiFacultyPicker(r.dataset.uid);
+        r.remove();
+    });
+    updateSyllabiTotals();
+};
+
+window.handleCopiesChange = function (input) {
+    const firstRow = input.closest("tr");
+    const group = firstRow.dataset.group;
+    const desired = Math.max(1, parseInt(input.value) || 1);
+    input.value = desired;
+
+    let groupRows = [...document.querySelectorAll(`#syllabiTableBody tr[data-group="${group}"]`)]
+        .sort((a, b) => parseInt(a.dataset.copyNo) - parseInt(b.dataset.copyNo));
+
+    if (desired > groupRows.length) {
+        let lastRow = groupRows[groupRows.length - 1];
+        for (let i = groupRows.length + 1; i <= desired; i++) {
+            const newRow = buildSyllabiContinuationRow(group, i);
+            lastRow.after(newRow);
+            cascadeDrfToNewRow(newRow);
+            lastRow = newRow;
+        }
+    } else if (desired < groupRows.length) {
+        for (let i = groupRows.length; i > desired; i--) {
+            removeSyllabiFacultyPicker(groupRows[i - 1].dataset.uid);
+            groupRows[i - 1].remove();
+        }
+    }
+
+    firstRow.querySelectorAll('[rowspan]').forEach(td => td.setAttribute('rowspan', desired));
+
+    // Update faculty mode based on final copy count
+    groupRows = [...document.querySelectorAll(`#syllabiTableBody tr[data-group="${group}"]`)];
+    const mode = desired === 1 ? 'multi' : 'single';
+    groupRows.forEach(row => setSyllabiFacultyMode(row.dataset.uid, mode));
+
+    syncSyllabiMergedFields(group);
+    updateSyllabiTotals();
+};
+
+window.toggleSyllabiRegFields = function (checkbox) {
+    const row = checkbox.closest("tr");
+    const regDate = row.querySelector('[name="syllabiRegDate[]"]');
+    const regTime = row.querySelector('[name="syllabiRegTime[]"]');
+    const hidden = checkbox.previousElementSibling;
+    hidden.value = checkbox.checked ? 'registered' : 'not registered';
+    regDate.disabled = !checkbox.checked;
+    regTime.disabled = !checkbox.checked;
+    if (!checkbox.checked) { regDate.value = ""; regTime.value = ""; calcSyllabiRowTimeSpent(row); }
+};
+
+window.calcSyllabiRowTimeSpent = function (row) {
+    const dR = row.querySelector('[name="syllabiDateReceived[]"]')?.value;
+    const tR = row.querySelector('[name="syllabiTimeReceived[]"]')?.value;
+    const dG = row.querySelector('[name="syllabiRegDate[]"]')?.value;
+    const tG = row.querySelector('[name="syllabiRegTime[]"]')?.value;
+    const display = row.querySelector('.syllabi-time-spent-display');
+    const hidden = row.querySelector('[name="syllabiTimeSpent[]"]');
+    if (!display || !hidden) return;
+    const result = computeDuration(dR, tR, dG, tG);
+    if (!result) { display.value = "--"; display.style.color = ""; hidden.value = ""; return; }
+    if (result.invalid) { display.value = "Invalid"; display.style.color = "var(--reg-error)"; hidden.value = ""; return; }
+    display.style.color = "";
+    display.value = result.totalMinutes + " min";
+    hidden.value = String(result.totalMinutes);
+};
+
+function bindSyllabiRowFileInputs(tr) {
+    tr.querySelectorAll('.reg-upload-cell input[type="file"]').forEach(fileInput => {
+        const cell = fileInput.closest('.reg-upload-cell');
+        fileInput.dataset.bound = "true";
+        fileInput.addEventListener('change', function () { processUploadCellFile(this, cell); });
+    });
+}
+
+// ══════════════════════════════════════════════
+// SYLLABI TOTALS (copies + pages)
+// ══════════════════════════════════════════════
+function updateSyllabiTotals() {
+    let totalCopies = 0;
+    document.querySelectorAll('#syllabiTableBody .syllabi-merged-copies').forEach(inp => {
+        totalCopies += parseInt(inp.value) || 0;
+    });
+    const copiesEl = document.getElementById('totalSyllabiCopies');
+    if (copiesEl) copiesEl.textContent = totalCopies;
+
+    let totalPages = 0;
+    document.querySelectorAll('#syllabiTableBody .syllabi-merged-pages').forEach(inp => {
+        totalPages += parseInt(inp.value) || 0;
+    });
+    const pagesEl = document.getElementById('totalSyllabiPages');
+    if (pagesEl) pagesEl.textContent = totalPages;
+
+    if (window.__isSyllabiMode) {
+        const mlPages = document.getElementById('masterlistNoOfPages');
+        if (mlPages) {
+            mlPages.value = totalPages;
+            mlPages.readOnly = true;
+            mlPages.style.background = '#f8fafc';
+            mlPages.style.cursor = 'not-allowed';
+        }
+    }
+}
+
 // ══════════════════════════════════════════════
 // TIME SPENT
 // ══════════════════════════════════════════════
@@ -983,7 +2463,6 @@ function calcTimeDiff(sDateId, sTimeId, eDateId, eTimeId, dispId, hidId) {
     const et = document.getElementById(eTimeId).value;
     const disp = document.getElementById(dispId);
     const hid = document.getElementById(hidId);
-
     const result = computeDuration(sd, st, ed, et);
     if (!result) { disp.value = "--"; disp.style.color = ""; hid.value = ""; return; }
     if (result.invalid) { disp.value = "Invalid"; disp.style.color = "var(--reg-error)"; hid.value = ""; return; }
@@ -1016,6 +2495,24 @@ function markFieldError(fieldId, message) {
             err.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' + escapeHtml(message);
             parent.appendChild(err);
         }
+    } else {
+        const syllabiSection = document.getElementById("section-syllabi");
+        if (syllabiSection && !syllabiSection.querySelector('.reg-field-error')) {
+            const err = document.createElement("div"); err.className = "reg-field-error";
+            err.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' + escapeHtml(message);
+            syllabiSection.appendChild(err);
+        }
+    }
+}
+
+function markTableError(tableId, message) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    const parent = table.closest(".reg-field") || table.closest(".reg-table-wrap")?.parentElement;
+    if (parent && !parent.querySelector(".reg-field-error")) {
+        const err = document.createElement("div"); err.className = "reg-field-error";
+        err.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' + escapeHtml(message);
+        parent.appendChild(err);
     }
 }
 
@@ -1051,15 +2548,30 @@ function validateForm() {
     clearValidation();
     const errors = [];
 
+    if (docNoDuplicate) {
+        errors.push({ field: "masterlistDocNo", message: "This document number is already registered. Please use a unique number." });
+        return errors;
+    }
+
     const checked = document.querySelectorAll("#dynamicCheckboxes input[type='checkbox']:checked:not(:disabled)");
     if (checked.length === 0) {
         errors.push({ field: "dynamicCheckboxes", message: "Please check at least one checklist.", type: "checklist" });
         return errors;
     }
 
+    validateTimeSpentFields(errors);
+    validateRevisionRowsLinked(errors);
+
+    return errors;
+}
+
+function validateTimeSpentFields(errors) {
     if (sectionVisible("section-3")) {
-        if (document.getElementById("masterlistTimeSpentDisplay").value === "Invalid") {
+        const ml = document.getElementById("masterlistTimeSpentDisplay");
+        if (ml && ml.value === "Invalid") {
             errors.push({ field: "masterlistRegisteredDate", message: "Masterlist: Document Registered must be after Document Receipt." });
+            ["masterlistReceiptDate", "masterlistReceiptTime", "masterlistRegisteredDate", "masterlistRegisteredTime"]
+                .forEach(id => document.getElementById(id)?.classList.add("reg-input-error"));
         }
     }
     if (sectionVisible("section-4")) {
@@ -1078,13 +2590,31 @@ function validateForm() {
             errors.push({ field: "distSearch", message: "At least one office required for Distribution.", type: "search" });
         }
     }
+}
 
-    return errors;
+function validateRevisionRowsLinked(errors) {
+    if (!sectionVisible("section-2")) return;
+    document.querySelectorAll("#revisionTableBody tr").forEach((row, idx) => {
+        const titleInput = row.querySelector('input[name="documentTitle[]"]');
+        const noInput = row.querySelector('input[name="documentNo[]"]');
+        const hasTypedText = (titleInput && titleInput.value.trim()) || (noInput && noInput.value.trim());
+        const isLinked = row.dataset.linked === "true";
+        if (hasTypedText && !isLinked) {
+            errors.push({
+                field: "revisionTableBody",
+                message: "DCN Row " + (idx + 1) + ": Please select an existing registered document from suggestions.",
+                type: "table"
+            });
+            row.querySelectorAll('input[name="documentTitle[]"], input[name="documentNo[]"]')
+                .forEach(el => el.classList.add("reg-input-error"));
+        }
+    });
 }
 
 function showValidationErrors(errors) {
     errors.forEach(err => {
-        if (err.type === "search") markSearchError(err.field, err.message);
+        if (err.type === "table") markTableError(err.field, err.message);
+        else if (err.type === "search") markSearchError(err.field, err.message);
         else if (err.type === "checklist") markChecklistError(err.message);
         else markFieldError(err.field, err.message);
     });
@@ -1095,7 +2625,7 @@ window.scrollToField = function (fieldId) {
     const field = document.getElementById(fieldId);
     if (!field) return;
     field.scrollIntoView({ behavior: "smooth", block: "center" });
-    setTimeout(() => { if (field.tagName === "SELECT" || field.tagName === "INPUT") field.focus(); }, 400);
+    setTimeout(() => { if (field.tagName === "SELECT" || field.tagName === "INPUT" || field.tagName === "TEXTAREA") field.focus(); }, 400);
 };
 
 document.addEventListener("input", function (e) {
@@ -1105,6 +2635,156 @@ document.addEventListener("input", function (e) {
         if (errDiv) errDiv.remove();
     }
 });
+
+document.addEventListener("change", function (e) {
+    if (e.target.classList.contains("reg-input-error")) {
+        e.target.classList.remove("reg-input-error");
+        const errDiv = e.target.closest(".reg-field")?.querySelector(".reg-field-error");
+        if (errDiv) errDiv.remove();
+    }
+    if (e.target.type === "file") {
+        const parent = e.target.closest(".reg-field") || e.target.closest(".reg-upload-cell") || e.target.closest("td");
+        if (parent) { const err = parent.querySelector(".reg-file-error"); if (err) err.remove(); }
+    }
+});
+
+// ══════════════════════════════════════════════
+// COLLECT MISSING FIELDS (for review modal)
+// ══════════════════════════════════════════════
+function collectMissingFields() {
+    const missing = [];
+    const checkText = (sectionLabel, id, label) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (!el.value || !el.value.trim()) missing.push(sectionLabel + ": " + label);
+    };
+
+    const sectionSyllabi = document.getElementById("section-syllabi");
+    if (sectionSyllabi && sectionSyllabi.style.display !== "none") {
+        checkText("Syllabi", "syllabiCollege", "College");
+        checkText("Syllabi", "syllabiProgram", "Program");
+        checkText("Syllabi", "syllabiSemester", "Semester");
+        checkText("Syllabi", "syllabiSchoolYear", "School Year");
+        checkText("Syllabi", "syllabiDocNo", "Document No.");
+        checkText("Syllabi", "syllabiDocTitle", "Document Title");
+
+        document.querySelectorAll("#syllabiTableBody tr[data-is-first='true']").forEach(row => {
+            const courseInput = row.querySelector('.syllabi-merged-course');
+            const courseVal = courseInput ? courseInput.value.trim() : '';
+            const groupLabel = courseVal || ("Syllabi — Course " + (row.dataset.group || ''));
+            if (!courseVal) missing.push("Syllabi: Course Name (" + (row.dataset.group || 'unnamed') + ")");
+        });
+
+        document.querySelectorAll("#syllabiTableBody tr[data-uid]").forEach(row => {
+            const group = row.dataset.group;
+            const copyNo = row.dataset.copyNo || "1";
+            const courseInput = document.querySelector(`#syllabiTableBody tr[data-group="${group}"][data-is-first="true"] .syllabi-merged-course`);
+            const courseVal = courseInput && courseInput.value.trim() ? courseInput.value.trim() : ("Course " + group);
+            const rowLabel = courseVal + " (Copy " + copyNo + ")";
+            const dateReceived = row.querySelector('input[name="syllabiDateReceived[]"]');
+            if (!dateReceived || !dateReceived.value) missing.push(rowLabel + ": Date Received");
+            const timeReceived = row.querySelector('input[name="syllabiTimeReceived[]"]');
+            if (!timeReceived || !timeReceived.value) missing.push(rowLabel + ": Time Received");
+            const facultyHidden = document.getElementById('syllabiFacultyHidden_' + row.dataset.uid);
+            if (!facultyHidden || !facultyHidden.value.trim()) missing.push(rowLabel + ": Faculty");
+        });
+    }
+
+    if (sectionVisible("section-1")) {
+        checkText("DRF", "drfNo", "DRF No.");
+        checkText("DRF", "drfDate", "DRF Date");
+        checkText("DRF", "drfTitle", "Document Title");
+        if (!window.__sourceWidgets.drf || window.__sourceWidgets.drf.selected.length === 0) missing.push("DRF: Source Unit");
+    }
+
+    if (sectionVisible("section-2")) {
+        checkText("DCN", "dcnNumber", "DCN No.");
+        checkText("DCN", "noticeDate", "DCN Date");
+        checkText("DCN", "dcnSourceUnit", "Source Unit");
+    }
+
+    if (sectionVisible("section-3")) {
+        checkText("Masterlist", "masterlistDocNo", "Document No.");
+        checkText("Masterlist", "masterlistDocTitle", "Document Title");
+        checkText("Masterlist", "masterlistEffectivityDate", "Effectivity Date");
+        checkText("Masterlist", "masterlistNoOfPages", "No. of Pages");
+        checkText("Masterlist", "briefPurpose", "Brief Purpose");
+        if (!window.__sourceWidgets.masterlistOriginator || window.__sourceWidgets.masterlistOriginator.selected.length === 0) missing.push("Masterlist: Originator");
+        if (!window.__sourceWidgets.masterlist || window.__sourceWidgets.masterlist.selected.length === 0) missing.push("Masterlist: Source Unit");
+    }
+
+    if (sectionVisible("section-4")) {
+        checkText("Retrieval", "retrievalFormDate", "Form Date");
+        checkText("Retrieval", "retrievalDate", "Retrieval Date");
+        if (document.querySelectorAll("#retrievalBody input[type='hidden']").length === 0) missing.push("Retrieval: At least one office");
+    }
+
+    if (sectionVisible("section-5")) {
+        checkText("Distribution", "distributionFormDate", "Form Date");
+        checkText("Distribution", "distributionDate", "Distribution Date");
+        if (document.querySelectorAll("#distBody input[type='hidden']").length === 0) missing.push("Distribution: At least one office");
+    }
+
+    return missing;
+}
+
+function renderMissingFieldsWarning(container, missing) {
+    const confirmBtn = document.getElementById("btnConfirmSaveModal");
+    if (missing.length === 0) {
+        if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.style.opacity = ''; confirmBtn.style.cursor = ''; }
+        return;
+    }
+
+    const grouped = {};
+    missing.forEach(m => {
+        const idx = m.indexOf(":");
+        const section = idx > -1 ? m.slice(0, idx).trim() : "Other";
+        const field = idx > -1 ? m.slice(idx + 1).trim() : m;
+        if (!grouped[section]) grouped[section] = [];
+        grouped[section].push(field);
+    });
+
+    const groupsHtml = Object.entries(grouped).map(([section, fields]) => `
+        <div class="missing-group">
+            <div class="missing-group-title">${escapeHtml(section)}</div>
+            <div class="missing-group-chips">
+                ${fields.map(f => `<span class="missing-chip"><i class="fa-solid fa-circle-minus"></i>${escapeHtml(f)}</span>`).join('')}
+            </div>
+        </div>
+    `).join('');
+
+    const warn = document.createElement("div");
+    warn.className = "review-missing-warning";
+    warn.innerHTML = `
+        <div class="review-missing-header">
+            <div class="review-missing-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <div class="review-missing-heading">
+                <span class="review-missing-title">Missing Information</span>
+                <span class="review-missing-count">${missing.length} field${missing.length === 1 ? '' : 's'} left blank</span>
+            </div>
+        </div>
+        <div class="review-missing-body">${groupsHtml}</div>
+        <label class="review-missing-confirm">
+            <input type="checkbox" id="confirmSaveAnyway" onchange="handleConfirmSaveAnywayToggle(this)">
+            <span>I understand some information is missing, and I still want to save.</span>
+        </label>
+    `;
+    container.prepend(warn);
+
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.style.opacity = '0.5';
+        confirmBtn.style.cursor = 'not-allowed';
+    }
+}
+
+window.handleConfirmSaveAnywayToggle = function (checkbox) {
+    const confirmBtn = document.getElementById('btnConfirmSaveModal');
+    if (!confirmBtn) return;
+    confirmBtn.disabled = !checkbox.checked;
+    if (checkbox.checked) { confirmBtn.style.opacity = ''; confirmBtn.style.cursor = ''; }
+    else { confirmBtn.style.opacity = '0.5'; confirmBtn.style.cursor = 'not-allowed'; }
+};
 
 // ══════════════════════════════════════════════
 // CONFIRM SAVE / REVIEW
@@ -1172,6 +2852,11 @@ function addReviewList(container, title, items) {
 }
 
 window.confirmSave = function () {
+    if (docNoDuplicate) {
+        scrollToField('masterlistDocNo');
+        document.getElementById('masterlistDocNo')?.focus();
+        return;
+    }
     const errors = validateForm();
     if (errors.length > 0) { showValidationErrors(errors); return; }
     clearValidation();
@@ -1191,6 +2876,9 @@ window.confirmSave = function () {
     if (!reviewContent.children.length) {
         reviewContent.innerHTML = '<div class="review-empty">No data to review.</div>';
     }
+
+    const missing = collectMissingFields();
+    renderMissingFieldsWarning(reviewContent, missing);
 
     document.getElementById("confirmModal").style.display = "flex";
 };
@@ -1213,12 +2901,23 @@ function buildSyllabiInfoReview(reviewContent) {
 function buildSyllabiRowsReview(reviewContent) {
     const ss = document.getElementById("section-syllabi");
     if (!ss || ss.style.display === "none") return;
-    document.querySelectorAll("#syllabiTableBody tr[data-is-first='true']").forEach((r) => {
-        const course = r.querySelector('.syllabi-merged-course');
+    document.querySelectorAll("#syllabiTableBody tr[data-is-first='true']").forEach(r => {
+        const course = r.querySelector('textarea.syllabi-merged-course, .syllabi-merged-course');
         if (!course || !course.value.trim()) return;
+        const group = r.dataset.group;
+        const pages = r.querySelector('.syllabi-merged-pages');
+        const drfAvail = r.querySelector('.syllabi-merged-availability-hidden');
+        const facultyNames = [...document.querySelectorAll(`#syllabiTableBody tr[data-group="${group}"]`)]
+            .map(row => document.getElementById('syllabiFacultyHidden_' + row.dataset.uid)?.value)
+            .filter(Boolean)
+            .join('; ');
         const copies = r.querySelector('.syllabi-merged-copies');
+
         addReviewSection(reviewContent, "Syllabi — " + course.value.trim(), [
             { label: "No. of Copies", value: copies?.value || "1" },
+            { label: "No. of Pages", value: pages?.value || "" },
+            { label: "Faculty", value: facultyNames || null },
+            { label: "Availability", value: drfAvail?.value === 'available' ? 'Available' : 'Not Available' },
         ]);
     });
 }
@@ -1226,27 +2925,27 @@ function buildSyllabiRowsReview(reviewContent) {
 function buildDrfReview(reviewContent) {
     const s1 = document.getElementById("section-1");
     if (!s1 || s1.style.display === "none") return;
-    const f = document.getElementById("drfFile").files;
+    const f = document.getElementById("drfFile")?.files;
     addReviewSection(reviewContent, "Document Request Form", [
         { label: "DRF No.", value: getInputVal("drfNo") },
         { label: "DRF Date", value: formatInputDate("drfDate") },
         { label: "Receipt", value: formatInputDate("drfReceiptDate") + " " + getInputVal("drfTime") },
         { label: "Title", value: getInputVal("drfTitle") },
         { label: "Source Unit", value: window.__sourceWidgets.drf?.selected.length > 0 ? window.__sourceWidgets.drf.selected.map(o => o.label).join(', ') : null },
-        { label: "File", value: f.length > 0 ? f[0].name : null, isFile: true },
+        { label: "File", value: f && f.length > 0 ? f[0].name : null, isFile: true },
     ]);
 }
 
 function buildDcnReview(reviewContent) {
     const s2 = document.getElementById("section-2");
     if (!s2 || s2.style.display === "none") return;
-    const f = document.getElementById("dcnFile").files;
+    const f = document.getElementById("dcnFile")?.files;
     addReviewSection(reviewContent, "Document Change Notice", [
         { label: "DCN No.", value: getInputVal("dcnNumber") },
         { label: "DCN Date", value: formatInputDate("noticeDate") },
         { label: "Receipt", value: formatInputDate("receiptDate") + " " + getInputVal("receiptTime") },
         { label: "Source Unit", value: getSelectText("dcnSourceUnit") },
-        { label: "File", value: f.length > 0 ? f[0].name : null, isFile: true },
+        { label: "File", value: f && f.length > 0 ? f[0].name : null, isFile: true },
     ]);
     const rev = [];
     document.querySelectorAll("#revisionTableBody tr").forEach((r, i) => {
@@ -1259,14 +2958,14 @@ function buildDcnReview(reviewContent) {
 function buildMasterlistReview(reviewContent) {
     const s3 = document.getElementById("section-3");
     if (!s3 || s3.style.display === "none") return;
-    const f = document.getElementById("uploadScannedCopy").files;
+    const f = document.getElementById("uploadScannedCopy")?.files;
     addReviewSection(reviewContent, "Masterlist Registration", [
         { label: "Doc No.", value: getInputVal("masterlistDocNo") },
         { label: "Title", value: getInputVal("masterlistDocTitle") },
         { label: "Deadline", value: formatInputDate("deadlineOfSubmission") },
         { label: "Receipt", value: formatInputDate("masterlistReceiptDate") + " " + getInputVal("masterlistReceiptTime") },
         { label: "Registered", value: formatInputDate("masterlistRegisteredDate") + " " + getInputVal("masterlistRegisteredTime") },
-        { label: "Time Spent", value: document.getElementById("masterlistTimeSpentDisplay").value || null },
+        { label: "Time Spent", value: document.getElementById("masterlistTimeSpentDisplay")?.value || null },
         { label: "Effectivity", value: formatInputDate("masterlistEffectivityDate") },
         { label: "Revision No.", value: getInputVal("masterlistRevisionNo") },
         { label: "Pages", value: getInputVal("masterlistNoOfPages") },
@@ -1274,7 +2973,7 @@ function buildMasterlistReview(reviewContent) {
         { label: "Source Unit", value: window.__sourceWidgets.masterlist?.selected.length > 0 ? window.__sourceWidgets.masterlist.selected.map(i => i.label).join(', ') : null },
         { label: "Purpose", value: getInputVal("briefPurpose") },
         { label: "Related Docs", value: relatedDocsSelected.length > 0 ? relatedDocsSelected.map(d => d.doc_title).join(', ') : null },
-        { label: "File", value: f.length > 0 ? f[0].name : null, isFile: true },
+        { label: "File", value: f && f.length > 0 ? f[0].name : null, isFile: true },
     ]);
 }
 
@@ -1291,13 +2990,13 @@ function buildApprovalReview(reviewContent) {
 function buildRetrievalReview(reviewContent) {
     const s4 = document.getElementById("section-4");
     if (!s4 || s4.style.display === "none") return;
-    const f = document.getElementById("scannedRet").files;
+    const f = document.getElementById("scannedRet")?.files;
     addReviewSection(reviewContent, "Document Retrieval", [
         { label: "Form Date", value: formatInputDate("retrievalFormDate") + " " + getInputVal("retrievalFormTime") },
         { label: "Retrieval Date", value: formatInputDate("retrievalDate") + " " + getInputVal("retrievalTime") },
-        { label: "Time Spent", value: document.getElementById("retrievalTimeSpentDisplay").value || null },
+        { label: "Time Spent", value: document.getElementById("retrievalTimeSpentDisplay")?.value || null },
         { label: "Remarks", value: getInputVal("retrievalRemarks") },
-        { label: "File", value: f.length > 0 ? f[0].name : null, isFile: true },
+        { label: "File", value: f && f.length > 0 ? f[0].name : null, isFile: true },
     ]);
     const off = getOfficeList("retrievalBody");
     if (off.length) addReviewList(reviewContent, "Receiving Offices (Retrieval)", off);
@@ -1306,13 +3005,13 @@ function buildRetrievalReview(reviewContent) {
 function buildDistributionReview(reviewContent) {
     const s5 = document.getElementById("section-5");
     if (!s5 || s5.style.display === "none") return;
-    const f = document.getElementById("scanneddist").files;
+    const f = document.getElementById("scanneddist")?.files;
     addReviewSection(reviewContent, "Document Distribution", [
         { label: "Form Date", value: formatInputDate("distributionFormDate") + " " + getInputVal("distributionFormTime") },
         { label: "Distribution Date", value: formatInputDate("distributionDate") + " " + getInputVal("distributionTime") },
-        { label: "Time Spent", value: document.getElementById("distributionTimeSpentDisplay").value || null },
+        { label: "Time Spent", value: document.getElementById("distributionTimeSpentDisplay")?.value || null },
         { label: "Remarks", value: getInputVal("distributionRemarks") },
-        { label: "File", value: f.length > 0 ? f[0].name : null, isFile: true },
+        { label: "File", value: f && f.length > 0 ? f[0].name : null, isFile: true },
     ]);
     const off = getOfficeList("distBody");
     if (off.length) addReviewList(reviewContent, "Receiving Offices (Distribution)", off);
@@ -1320,6 +3019,7 @@ function buildDistributionReview(reviewContent) {
 
 window.closeConfirmModal = function () { document.getElementById("confirmModal").style.display = "none"; };
 window.submitForm = function () { document.getElementById("masterForm").submit(); };
+window.handleGenerateReport = function () { alert("Report generation coming soon."); };
 
 // ══════════════════════════════════════════════
 // REVISION TABLE
@@ -1334,476 +3034,22 @@ window.addRevisionRow = function () {
         <td><input type="text" name="revisionNo[]" placeholder="0"></td>
         <td><input type="file" name="scannedCopy[]" accept=".pdf,.docx"></td>
         <td><input type="text" name="revisionPurpose[]" placeholder="Purpose"></td>
-        <td><button type="button" class="reg-row-del" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash-can"></i></button></td>
+        <td><button type="button" class="reg-row-del" onclick="removeRevisionRow(this)"><i class="fa-solid fa-trash-can"></i></button></td>
     `;
     tbody.appendChild(tr);
-    tr.querySelector('input[type="file"]').addEventListener('change', function () { validateTableFile(this); });
-};
-
-// ══════════════════════════════════════════════
-// SYLLABI CONTEXT DROPDOWNS (College/Program/Semester/Year)
-// ══════════════════════════════════════════════
-async function loadSyllabiContextDropdowns() {
-    try {
-        const [colleges, semesters, schoolYears] = await Promise.all([
-            fetch("/api/colleges").then(r => r.json()),
-            fetch("/api/semesters").then(r => r.json()),
-            fetch("/api/school-years").then(r => r.json()),
-        ]);
-        const collegeSel = document.getElementById("syllabiCollege");
-        const semSel = document.getElementById("syllabiSemester");
-        const sySel = document.getElementById("syllabiSchoolYear");
-
-        if (collegeSel && collegeSel.dataset.loaded !== "true") {
-            colleges.forEach(c => collegeSel.add(new Option(c.college_name, c.college_id)));
-            collegeSel.dataset.loaded = "true";
-        }
-        if (semSel && semSel.dataset.loaded !== "true") {
-            semesters.forEach(s => semSel.add(new Option(s.semester_name, s.semester_id)));
-            semSel.dataset.loaded = "true";
-        }
-        if (sySel && sySel.dataset.loaded !== "true") {
-            schoolYears.forEach(y => sySel.add(new Option(y.school_year, y.school_year_id)));
-            sySel.dataset.loaded = "true";
-        }
-        return { colleges, semesters, schoolYears };
-    } catch (err) {
-        console.error("Failed to load syllabi context dropdowns:", err);
-        return { colleges: [], semesters: [], schoolYears: [] };
-    }
-}
-
-async function initSyllabiContextWiring() {
-    const collegeSel = document.getElementById("syllabiCollege");
-    const programSel = document.getElementById("syllabiProgram");
-    const semSel = document.getElementById("syllabiSemester");
-    const sySel = document.getElementById("syllabiSchoolYear");
-
-    if (collegeSel && !collegeSel.dataset.wired) {
-        collegeSel.dataset.wired = "true";
-        collegeSel.addEventListener("change", async function () {
-            programSel.innerHTML = '<option value="" selected disabled>Select program</option>';
-            programSel.disabled = true;
-            semSel.disabled = true;
-            sySel.disabled = true;
-            if (!this.value) return;
-            try {
-                const programs = await fetch("/api/programs/" + this.value).then(r => r.json());
-                programs.forEach(p => programSel.add(new Option(p.program_name, p.program_id)));
-                programSel.disabled = false;
-            } catch (err) { console.error("Failed to load programs:", err); }
-        });
-    }
-    if (programSel && !programSel.dataset.wired) {
-        programSel.dataset.wired = "true";
-        programSel.addEventListener("change", function () {
-            semSel.disabled = !this.value;
-            sySel.disabled = true;
-        });
-    }
-    if (semSel && !semSel.dataset.wired) {
-        semSel.dataset.wired = "true";
-        semSel.addEventListener("change", function () { sySel.disabled = !this.value; });
-    }
-}
-
-// ══════════════════════════════════════════════
-// SEED EXISTING SYLLABI GROUPS INTO THE WIZARD
-// ══════════════════════════════════════════════
-async function seedExistingSyllabiGroups() {
-    const groups = window.__existingSyllabiGroups || [];
-    initSyllabiContextWiring();
-    await loadSyllabiContextDropdowns();
-
-    const tbody = document.getElementById("syllabiTableBody");
-    if (!tbody) return;
-    tbody.innerHTML = "";
-    syllabiGroupCounter = 0;
-
-    if (groups.length === 0) {
-        addSyllabiRow();
-        setSyllabiStep(1);
-        return;
-    }
-
-    const first = groups[0];
-    const collegeSel = document.getElementById("syllabiCollege");
-    const programSel = document.getElementById("syllabiProgram");
-    const semSel = document.getElementById("syllabiSemester");
-    const sySel = document.getElementById("syllabiSchoolYear");
-
-    if (collegeSel && first.college_id) {
-        collegeSel.value = first.college_id;
-        if (programSel) {
-            try {
-                const programs = await fetch("/api/programs/" + first.college_id).then(r => r.json());
-                programs.forEach(p => programSel.add(new Option(p.program_name, p.program_id)));
-                programSel.disabled = false;
-                if (first.program_id) programSel.value = first.program_id;
-            } catch (e) { console.error(e); }
-        }
-    }
-    if (semSel && first.semester_id) { semSel.disabled = false; semSel.value = first.semester_id; }
-    if (sySel && first.school_year_id) { sySel.disabled = false; sySel.value = first.school_year_id; }
-
-    groups.forEach(group => {
-        syllabiGroupCounter++;
-        const groupId = "g" + syllabiGroupCounter;
-        const rowCount = Math.max(1, group.rows.length);
-        const firstRow = buildSyllabiGroupFirstRow(groupId, rowCount);
-        tbody.appendChild(firstRow);
-
-        // Set merged (visible) fields
-        const courseInput = firstRow.querySelector('.syllabi-merged-course');
-        const availCheckbox = firstRow.querySelector('.syllabi-merged-availability');
-        const copiesInput = firstRow.querySelector('.syllabi-merged-copies');
-        if (courseInput) courseInput.value = group.course_name || '';
-        if (availCheckbox) availCheckbox.checked = !!group.availability;
-        if (copiesInput) copiesInput.value = rowCount;
-
-        // Build continuation rows to match rowCount
-        let lastRow = firstRow;
-        for (let i = 2; i <= rowCount; i++) {
-            const contRow = buildSyllabiContinuationRow(groupId, i);
-            lastRow.after(contRow);
-            lastRow = contRow;
-        }
-
-        syncSyllabiMergedFields(groupId);
-
-        // Fill per-copy fields for every row in this group
-        const groupRows = [...document.querySelectorAll(`#syllabiTableBody tr[data-group="${groupId}"]`)]
-            .sort((a, b) => parseInt(a.dataset.copyNo) - parseInt(b.dataset.copyNo));
-
-        groupRows.forEach((tr, idx) => {
-            const data = group.rows[idx];
-            if (!data) return;
-            setVal(tr, 'syllabiOriginator[]', data.originator);
-            setVal(tr, 'syllabiNoPages[]', data.no_pages);
-            setVal(tr, 'syllabiDateReceived[]', data.date_received);
-            setVal(tr, 'syllabiTimeReceived[]', data.time_received);
-            setVal(tr, 'syllabiDrfNo[]', data.drf_no);
-            setVal(tr, 'syllabiDrfDate[]', data.drf_date);
-            setVal(tr, 'syllabiDrfReceived[]', data.drf_received_date);
-            setVal(tr, 'syllabiTimeSpent[]', data.time_spent);
-
-            const drfHidden = tr.querySelector('.syllabi-hidden-toggle[name="syllabiDrfAvailability[]"]');
-            const drfCheckbox = tr.querySelector('.syllabi-check-cell input[type="checkbox"]');
-            if (drfHidden && drfCheckbox) {
-                const checkboxes = tr.querySelectorAll('.syllabi-check-cell input[type="checkbox"]');
-                if (checkboxes[0]) {
-                    checkboxes[0].checked = !!data.drf_available;
-                    if (drfHidden) drfHidden.value = data.drf_available ? 'available' : 'not available';
-                }
-                if (checkboxes[1]) {
-                    checkboxes[1].checked = !!data.registered;
-                    toggleSyllabiRegFields(checkboxes[1]);
-                    setVal(tr, 'syllabiRegDate[]', data.date_of_registration);
-                    setVal(tr, 'syllabiRegTime[]', data.time_of_registration);
-                }
-            }
-
-            const display = tr.querySelector('.syllabi-time-spent-display');
-            if (display && data.time_spent) display.value = data.time_spent + ' min';
-
-            if (data.scanned_registration_name) {
-                const cell = tr.querySelector('.reg-upload-cell');
-                if (cell) {
-                    const span = cell.querySelector('span');
-                    const icon = cell.querySelector('i');
-                    if (span) span.textContent = data.scanned_registration_name;
-                    if (icon) icon.className = 'fa-solid fa-file-pdf';
-                    cell.classList.add('reg-upload-cell-success');
-                }
-            }
-        });
-    });
-
-    setSyllabiStep(1);
-    updateSyllabiTotalCopies();
-}
-
-function setVal(tr, name, value) {
-    if (value === null || value === undefined || value === '') return;
-    const el = tr.querySelector(`[name="${name}"]`);
-    if (el) el.value = value;
-}
-
-// ══════════════════════════════════════════════
-// SYLLABI WIZARD — STEP NAVIGATION
-// ══════════════════════════════════════════════
-function setSyllabiStep(step) {
-    syllabiCurrentStep = step;
-    const table = document.getElementById("syllabiWizardTable");
-    if (table) table.dataset.activeStep = step;
-
-    document.querySelectorAll("#syllabiStepIndicator .reg-wizard-step").forEach(el => {
-        const s = parseInt(el.dataset.step);
-        el.classList.toggle("is-active", s === step);
-        el.classList.toggle("is-done", s < step);
-    });
-
-    const backBtn = document.getElementById("syllabiBackBtn");
-    const nextBtn = document.getElementById("syllabiNextBtn");
-    if (backBtn) backBtn.style.display = step === 1 ? "none" : "";
-    if (nextBtn) {
-        nextBtn.innerHTML = step === 3
-            ? '<i class="fa-solid fa-check"></i> Review &amp; Confirm'
-            : 'Next <i class="fa-solid fa-arrow-right"></i>';
-    }
-}
-
-window.syllabiStepNext = function () {
-    if (syllabiCurrentStep < 3) setSyllabiStep(syllabiCurrentStep + 1);
-    else confirmSave();
-};
-window.syllabiStepBack = function () {
-    if (syllabiCurrentStep > 1) setSyllabiStep(syllabiCurrentStep - 1);
-};
-
-// ══════════════════════════════════════════════
-// SYLLABI ROW BUILDER (merged-cell groups — identical to register.js)
-// ══════════════════════════════════════════════
-function buildSyllabiPerRowCells(mirrorHiddenHTML = '') {
-    return `
-        <td class="col-step1">
-            ${mirrorHiddenHTML}
-            <input type="text" name="syllabiOriginator[]" placeholder="Originator">
-        </td>
-        <td class="col-step1"><input type="number" name="syllabiNoPages[]" min="0" placeholder="0"></td>
-        <td class="col-step1"><input type="date" name="syllabiDateReceived[]" oninput="calcSyllabiRowTimeSpent(this.closest('tr'))"></td>
-        <td class="col-step1"><input type="time" name="syllabiTimeReceived[]" oninput="calcSyllabiRowTimeSpent(this.closest('tr'))"></td>
-
-        <td class="col-step2 syllabi-check-cell">
-            <input type="hidden" name="syllabiDrfAvailability[]" value="not available" class="syllabi-hidden-toggle">
-            <input type="checkbox" onchange="this.previousElementSibling.value = this.checked ? 'available' : 'not available'">
-        </td>
-        <td class="col-step2"><input type="text" name="syllabiDrfNo[]" placeholder="DRF-001"></td>
-        <td class="col-step2"><input type="date" name="syllabiDrfDate[]" oninput="cascadeSyllabiField(this, 'syllabiDrfDate[]')"></td>
-        <td class="col-step2"><input type="date" name="syllabiDrfReceived[]" oninput="cascadeSyllabiField(this, 'syllabiDrfReceived[]')"></td>
-
-        <td class="col-step3 syllabi-check-cell">
-            <input type="hidden" name="syllabiIsRegistered[]" value="not registered" class="syllabi-hidden-toggle">
-            <input type="checkbox" onchange="toggleSyllabiRegFields(this)">
-        </td>
-        <td class="col-step3"><input type="date" name="syllabiRegDate[]" disabled oninput="calcSyllabiRowTimeSpent(this.closest('tr'))"></td>
-        <td class="col-step3"><input type="time" name="syllabiRegTime[]" disabled oninput="calcSyllabiRowTimeSpent(this.closest('tr'))"></td>
-        <td class="col-step3">
-            <input type="text" class="syllabi-time-spent-display" readonly placeholder="--" style="background:#f8fafc;text-align:center;">
-            <input type="hidden" name="syllabiTimeSpent[]">
-        </td>
-        <td class="col-step3">
-            <label class="reg-upload-cell">
-                <input type="file" name="syllabiScannedRegistration[]" accept=".pdf,.docx">
-                <i class="fa-solid fa-cloud-arrow-up"></i>
-                <span>No file chosen</span>
-            </label>
-        </td>
-    `;
-}
-
-window.cascadeSyllabiField = function (input, fieldName) {
-    const tbody = document.getElementById('syllabiTableBody');
-    if (!tbody) return;
-    const firstRow = tbody.querySelector('tr');
-    if (!firstRow || input.closest('tr') !== firstRow) return;
-    const val = input.value;
-    tbody.querySelectorAll('tr').forEach((tr, idx) => {
-        if (idx === 0) return;
-        const target = tr.querySelector(`input[name="${fieldName}"]`);
-        if (target) target.value = val;
-    });
-};
-
-function cascadeDrfToNewRow(newRow) {
-    const tbody = document.getElementById('syllabiTableBody');
-    if (!tbody) return;
-    const firstRow = tbody.querySelector('tr');
-    if (!firstRow || firstRow === newRow) return;
-    ['syllabiDrfDate[]', 'syllabiDrfReceived[]'].forEach(name => {
-        const source = firstRow.querySelector(`input[name="${name}"]`);
-        const target = newRow.querySelector(`input[name="${name}"]`);
-        if (source && target && source.value) target.value = source.value;
-    });
-}
-
-function updateSyllabiTotalCopies() {
-    let total = 0;
-    document.querySelectorAll('#syllabiTableBody .syllabi-merged-copies').forEach(inp => {
-        total += parseInt(inp.value) || 0;
-    });
-    const el = document.getElementById('totalSyllabiCopies');
-    if (el) el.textContent = total;
-}
-
-function bindSyllabiRowFileInputs(tr) {
-    tr.querySelectorAll('.reg-upload-cell input[type="file"]').forEach(fileInput => {
-        const cell = fileInput.closest('.reg-upload-cell');
-        fileInput.dataset.bound = "true";
-        fileInput.addEventListener('change', function () { processUploadCellFile(this, cell); });
-    });
-}
-
-function buildSyllabiGroupFirstRow(groupId, rowspan) {
-    const tr = document.createElement("tr");
-    tr.style.animation = "fadeSlideUp 0.25s ease";
-    tr.dataset.group = groupId;
-    tr.dataset.copyNo = 1;
-    tr.dataset.isFirst = "true";
-
-    tr.innerHTML = `
-        <td class="col-pinned" rowspan="${rowspan}">
-            <input type="text" name="syllabiCourseName[]" placeholder="Enter course name"
-                class="syllabi-merged-course" oninput="syncSyllabiMergedFields('${groupId}')">
-        </td>
-        <td class="col-step1" rowspan="${rowspan}">
-            <input type="hidden" name="syllabiAvailability[]" value="not available" class="syllabi-merged-availability-hidden">
-            <label class="reg-checkbox-wrap">
-                <input type="checkbox" class="syllabi-merged-availability" onchange="syncSyllabiMergedFields('${groupId}')">
-            </label>
-        </td>
-        <td class="col-step1" rowspan="${rowspan}">
-            <input type="number" name="syllabiCopies[]" min="1" value="${rowspan}"
-                class="syllabi-merged-copies" oninput="handleCopiesChange(this)">
-        </td>
-        ${buildSyllabiPerRowCells()}
-        <td class="col-pinned" rowspan="${rowspan}">
-            <button type="button" class="reg-row-del" onclick="removeSyllabiGroup('${groupId}')" title="Remove course">
-                <i class="fa-solid fa-trash-can"></i>
-            </button>
-        </td>
-    `;
-
-    bindSyllabiRowFileInputs(tr);
-    return tr;
-}
-
-function buildSyllabiContinuationRow(groupId, copyNo) {
-    const tr = document.createElement("tr");
-    tr.style.animation = "fadeSlideUp 0.25s ease";
-    tr.dataset.group = groupId;
-    tr.dataset.copyNo = copyNo;
-
-    const mirrors = `
-        <input type="hidden" name="syllabiCourseName[]" class="syllabi-mirror-course">
-        <input type="hidden" name="syllabiAvailability[]" value="0" class="syllabi-mirror-availability">
-        <input type="hidden" name="syllabiCopies[]" class="syllabi-mirror-copies">
-    `;
-
-    tr.innerHTML = buildSyllabiPerRowCells(mirrors);
-    bindSyllabiRowFileInputs(tr);
-    return tr;
-}
-
-window.syncSyllabiMergedFields = function (groupId) {
-    const firstRow = document.querySelector(`#syllabiTableBody tr[data-group="${groupId}"][data-is-first="true"]`);
-    if (!firstRow) return;
-
-    const courseVal = firstRow.querySelector('.syllabi-merged-course').value;
-    const availCheckbox = firstRow.querySelector('.syllabi-merged-availability');
-    const availHidden = firstRow.querySelector('.syllabi-merged-availability-hidden');
-    availHidden.value = availCheckbox.checked ? 'available' : 'not available';
-    const copiesVal = firstRow.querySelector('.syllabi-merged-copies').value;
-
-    document.querySelectorAll(`#syllabiTableBody tr[data-group="${groupId}"]:not([data-is-first="true"])`)
-        .forEach(row => {
-            const mc = row.querySelector('.syllabi-mirror-course');
-            const ma = row.querySelector('.syllabi-mirror-availability');
-            const mp = row.querySelector('.syllabi-mirror-copies');
-            if (mc) mc.value = courseVal;
-            if (ma) ma.value = availHidden.value;
-            if (mp) mp.value = copiesVal;
-        });
-};
-
-window.addSyllabiRow = function () {
-    const tbody = document.getElementById("syllabiTableBody");
-    if (!tbody) return;
-    syllabiGroupCounter++;
-    const newRow = buildSyllabiGroupFirstRow("g" + syllabiGroupCounter, 1);
-    tbody.appendChild(newRow);
-    cascadeDrfToNewRow(newRow);
-    updateSyllabiTotalCopies();
-};
-
-window.removeSyllabiGroup = function (groupId) {
-    document.querySelectorAll(`#syllabiTableBody tr[data-group="${groupId}"]`).forEach(r => r.remove());
-    updateSyllabiTotalCopies();
-};
-
-window.handleCopiesChange = function (input) {
-    const firstRow = input.closest("tr");
-    const group = firstRow.dataset.group;
-    const desired = Math.max(1, parseInt(input.value) || 1);
-    input.value = desired;
-
-    let groupRows = [...document.querySelectorAll(`#syllabiTableBody tr[data-group="${group}"]`)]
-        .sort((a, b) => parseInt(a.dataset.copyNo) - parseInt(b.dataset.copyNo));
-
-    if (desired > groupRows.length) {
-        let lastRow = groupRows[groupRows.length - 1];
-        for (let i = groupRows.length + 1; i <= desired; i++) {
-            const newRow = buildSyllabiContinuationRow(group, i);
-            lastRow.after(newRow);
-            cascadeDrfToNewRow(newRow);
-            lastRow = newRow;
-        }
-    } else if (desired < groupRows.length) {
-        for (let i = groupRows.length; i > desired; i--) {
-            groupRows[i - 1].remove();
-        }
-    }
-
-    firstRow.querySelectorAll('[rowspan]').forEach(td => td.setAttribute('rowspan', desired));
-    syncSyllabiMergedFields(group);
-    updateSyllabiTotalCopies();
-};
-
-window.toggleSyllabiRegFields = function (checkbox) {
-    const row = checkbox.closest("tr");
-    const regDate = row.querySelector('[name="syllabiRegDate[]"]');
-    const regTime = row.querySelector('[name="syllabiRegTime[]"]');
-    const hidden = checkbox.previousElementSibling;
-
-    hidden.value = checkbox.checked ? 'registered' : 'not registered';
-    regDate.disabled = !checkbox.checked;
-    regTime.disabled = !checkbox.checked;
-    if (!checkbox.checked) {
-        regDate.value = "";
-        regTime.value = "";
-        calcSyllabiRowTimeSpent(row);
-    }
-};
-
-window.calcSyllabiRowTimeSpent = function (row) {
-    const dR = row.querySelector('[name="syllabiDateReceived[]"]')?.value;
-    const tR = row.querySelector('[name="syllabiTimeReceived[]"]')?.value;
-    const dG = row.querySelector('[name="syllabiRegDate[]"]')?.value;
-    const tG = row.querySelector('[name="syllabiRegTime[]"]')?.value;
-    const display = row.querySelector('.syllabi-time-spent-display');
-    const hidden = row.querySelector('[name="syllabiTimeSpent[]"]');
-    if (!display || !hidden) return;
-
-    const result = computeDuration(dR, tR, dG, tG);
-    if (!result) { display.value = "--"; display.style.color = ""; hidden.value = ""; return; }
-    if (result.invalid) { display.value = "Invalid"; display.style.color = "var(--reg-error)"; hidden.value = ""; return; }
-    display.style.color = "";
-    display.value = result.totalMinutes + " min";
-    hidden.value = String(result.totalMinutes);
+    bindTableFileInput(tr.querySelector('input[type="file"]'));
+    bindRevisionRowSearch(tr);
 };
 
 // ══════════════════════════════════════════════
 // OFFICE SEARCH (Retrieval / Distribution)
 // ══════════════════════════════════════════════
 window.handleSearch = function (input, resultsId, bodyId, totalId) {
-    const query = input.value.trim().toLowerCase();
     const dropdown = document.getElementById(resultsId); if (!dropdown) return;
-    if (query.length < 1) { dropdown.style.display = "none"; return; }
-    const filtered = allOffices.filter(o => o.office_name.toLowerCase().includes(query));
-    if (filtered.length === 0) { dropdown.style.display = "none"; return; }
-
+    const filtered = filterOffices(input.value);
+    if (input.value.trim().length < 1 || filtered.length === 0) { dropdown.style.display = "none"; return; }
     dropdown.innerHTML = filtered.map(o =>
-        '<div onclick="addOffice(' + o.office_id + ", '" + escapeHtml(o.office_name).replace(/'/g, "&#39;") + "', '" + bodyId + "', '" + totalId + "', '" + resultsId + "')\">" + escapeHtml(o.office_name) + '</div>'
+        '<div onclick="addOffice(' + o.office_id + ", '" + o.office_name.replace(/'/g, "\\'") + "', '" + bodyId + "', '" + totalId + "', '" + resultsId + "')\">" + escapeHtml(o.office_name) + '</div>'
     ).join("");
     dropdown.style.display = "block";
 };
@@ -1840,7 +3086,7 @@ window.removeOffice = function (btn, totalId, bodyId) {
         tr.remove(); updateTotal(totalId, bodyId);
         const tbody = document.getElementById(bodyId);
         if (tbody && tbody.querySelectorAll("tr").length === 0) {
-            tbody.innerHTML = '<tr class="reg-empty-row"><td colspan="3"><div class="reg-empty-state"><i class="fa-solid fa-building-circle-xmark"></i><span>No offices added yet</span></div></td></tr>';
+            tbody.innerHTML = emptyOfficeRowHTML();
         }
     }, 200);
 };

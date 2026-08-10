@@ -520,6 +520,82 @@ function confirmDelete({ title = "Delete", message = "This action cannot be undo
     };
 
     // ══════════════════════════════════════════════
+    // FACULTIES
+    // ══════════════════════════════════════════════
+    window.openFacultyModal = function (id = null) {
+        const isEdit = !!id;
+        let currentName = "", currentCollegeId = "";
+        if (isEdit) {
+            const row = document.querySelector(`#facultiesTableBody tr[data-id="${id}"] .icon-btn[data-name]`);
+            currentName = row ? row.getAttribute("data-name") : "";
+            currentCollegeId = row ? row.getAttribute("data-college") : "";
+        }
+
+        // Scrape colleges from the DOM — same pattern as openProgramModal
+        const collegeRows = document.querySelectorAll("#collegesTableBody tr[data-id]");
+        let collegeOptions = '<option value="">— No College —</option>';
+        collegeRows.forEach(r => {
+            const cid = r.dataset.id;
+            const cname = r.querySelector("td:first-child")?.textContent?.trim() || "";
+            const selected = cid == currentCollegeId ? "selected" : "";
+            collegeOptions += `<option value="${cid}" ${selected}>${escapeHtml(cname)}</option>`;
+        });
+
+        openModal(`
+            <div class="st-modal">
+                <div class="st-modal-top">
+                    <div class="st-modal-icon"><i class="fa-solid fa-chalkboard-user"></i></div>
+                    <button class="st-modal-close" onclick="closeSettingsModal()"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="st-modal-title">${isEdit ? "Edit Faculty" : "Add Faculty"}</div>
+                <div class="st-field">
+                    <label class="st-label">College <span style="opacity:0.5;font-weight:normal;">(optional)</span></label>
+                    <select id="faculty_college_idInput" class="st-input">${collegeOptions}</select>
+                </div>
+                <div class="st-field">
+                    <label class="st-label">Faculty Name</label>
+                    <input type="text" id="faculty_nameInput" class="st-input" placeholder="e.g. Juan Dela Cruz" value="${escapeHtml(currentName)}">
+                </div>
+                <div class="st-actions-row">
+                    <button class="st-btn st-btn-ghost" onclick="closeSettingsModal()">Cancel</button>
+                    <button class="st-btn st-btn-primary" id="facultySubmitBtn" onclick="submitFaculty(${id ?? "null"})">
+                        <i class="fa-solid fa-check"></i> Save
+                    </button>
+                </div>
+            </div>
+        `);
+        setTimeout(() => document.getElementById("faculty_college_idInput")?.focus(), 50);
+    };
+
+    window.submitFaculty = async function (id) {
+        const selectEl = document.getElementById("faculty_college_idInput");
+        console.log("Select has options:", selectEl.options.length, "current value:", selectEl.value);
+        const collegeId = selectEl.value || null;
+        const name = document.getElementById("faculty_nameInput").value.trim();
+
+        console.log("Sending:", { faculty_name: name, college_id: collegeId }); // ← ADD THIS
+
+        if (!name) { showToast("Faculty name is required.", "error"); return; }
+
+        const isEdit = id !== null;
+        const url = isEdit ? `${BASE}/faculties/${id}` : `${BASE}/faculties`;
+        const method = isEdit ? "PUT" : "POST";
+
+        await handleSubmit("#facultySubmitBtn", url, method, {
+            faculty_name: name,
+            college_id: collegeId,
+        });
+    };
+
+    window.deleteFaculty = function (id) {
+        confirmDelete({
+            title: "Delete Faculty",
+            message: "This faculty member will be permanently removed.",
+            url: `${BASE}/faculties/${id}`,
+        });
+    };
+
+    // ══════════════════════════════════════════════
     // COLLEGES
     // ══════════════════════════════════════════════
     window.openCollegeModal = function (id = null) {
