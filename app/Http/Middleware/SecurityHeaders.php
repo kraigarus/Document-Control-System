@@ -12,7 +12,8 @@ class SecurityHeaders
         $response = $next($request);
 
         // These are safe in ALL environments
-        $response->headers->set('X-Frame-Options', 'DENY');
+        // SAMEORIGIN allows same-site report preview iframes; keep in sync with nginx (or nginx omits this header).
+        $response->headers->set('X-Frame-Options', 'SAMEORIGIN');
         $response->headers->set('X-Content-Type-Options', 'nosniff');
         $response->headers->set('X-XSS-Protection', '1; mode=block');
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');

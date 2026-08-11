@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class DocumentStamp extends Model
 {
+    protected $table = 'dcs_document_stamps';
+
     protected $fillable = [
         'document_request_id',
         'file_key',
@@ -27,7 +29,7 @@ class DocumentStamp extends Model
 
     public function document(): BelongsTo
     {
-        return $this->belongsTo(DocumentRequest::class, 'document_request_id', 'request_id');
+        return $this->belongsTo(DocumentRequest::class, 'document_request_id');
     }
 
     public function user(): BelongsTo

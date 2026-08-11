@@ -127,7 +127,7 @@
 </head>
 <body>
 
-    <div class="print-toolbar" id="toolbar">
+    <div class="print-toolbar{{ empty($embed) ? '' : ' rpt-embed-hidden' }}" id="toolbar">
         <button class="btn-pdf" type="button" id="btnPdf"><i class="fa-solid fa-file-pdf"></i> Save as PDF</button>
         <button class="btn-print" type="button" id="btnPrint"><i class="fa-solid fa-print"></i> Print</button>
         <button class="btn-close" type="button" id="btnClose">Close</button>
@@ -154,7 +154,26 @@
         {{-- TITLE --}}
         <div class="rpt-title"><h2>{{ $title ?? 'Document Masterlist' }}</h2></div>
 
-        {{-- CHECKBOXES --}}
+        @if(!empty($dateFrom) || !empty($dateTo) || !empty($asOf))
+            <div class="rpt-period" style="text-align:center;margin-bottom:12px;font-size:11px;color:#64748b;">
+                @if(!empty($periodLabel) && ($period ?? '') !== 'custom')
+                    <strong>{{ $periodLabel }}</strong> report
+                    @if(!empty($asOf))
+                        (as of {{ \Carbon\Carbon::parse($asOf)->format('M d, Y') }})
+                    @endif
+                    @if(!empty($dateFrom) && !empty($dateTo))
+                        — {{ \Carbon\Carbon::parse($dateFrom)->format('M d, Y') }} to {{ \Carbon\Carbon::parse($dateTo)->format('M d, Y') }}
+                    @endif
+                @elseif(!empty($dateFrom) || !empty($dateTo))
+                    Period: {{ $dateFrom ? \Carbon\Carbon::parse($dateFrom)->format('M d, Y') : '—' }}
+                    – {{ $dateTo ? \Carbon\Carbon::parse($dateTo)->format('M d, Y') : '—' }}
+                @elseif(!empty($asOf))
+                    As of {{ \Carbon\Carbon::parse($asOf)->format('M d, Y') }}
+                @endif
+            </div>
+        @endif
+
+        {{-- CHECKBOXES — doc type tabs --}}
         @php
             $checklists = [
                 'masterlist' => ['internal_docs'=>'Internal','external_docs'=>'External','internal_forms'=>'Internal Forms','forms'=>'Forms','logbooks'=>'Logbooks'],
@@ -171,6 +190,17 @@
                     <span class="rpt-fi">
                         <span class="rpt-cb">{!! ($activeSub === $key) ? '/' : '' !!}</span>
                         {{ $label }}
+                    </span>
+                @endforeach
+            </div>
+        @endif
+
+        @if(!empty($selectedSubTypeNames))
+            <div class="rpt-filters" style="margin-top:8px;">
+                @foreach($selectedSubTypeNames as $subName)
+                    <span class="rpt-fi">
+                        <span class="rpt-cb">/</span>
+                        {{ $subName }}
                     </span>
                 @endforeach
             </div>
@@ -216,9 +246,11 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             var t = document.getElementById('toolbar');
-            if (t) t.classList.add('visible');
-            document.getElementById('pageCounter').textContent = 'Page 1 of 1';
-            document.getElementById('btnPdf').addEventListener('click', function(e) {
+            if (t && !t.classList.contains('rpt-embed-hidden')) t.classList.add('visible');
+            var pc = document.getElementById('pageCounter');
+            if (pc) pc.textContent = 'Page 1 of 1';
+            var btnPdf = document.getElementById('btnPdf');
+            if (btnPdf) btnPdf.addEventListener('click', function(e) {
                 e.preventDefault();
                 var p = new URLSearchParams(window.location.search);
                 p.set('format', 'pdf');
@@ -229,8 +261,10 @@
                 document.body.appendChild(ifr);
                 setTimeout(function() { if (ifr.parentNode) ifr.parentNode.removeChild(ifr); }, 5000);
             });
-            document.getElementById('btnPrint').addEventListener('click', function() { window.print(); });
-            document.getElementById('btnClose').addEventListener('click', function() { window.close(); });
+            var btnPrint = document.getElementById('btnPrint');
+            if (btnPrint) btnPrint.addEventListener('click', function() { window.print(); });
+            var btnClose = document.getElementById('btnClose');
+            if (btnClose) btnClose.addEventListener('click', function() { window.close(); });
             if (new URLSearchParams(window.location.search).has('autoPrint')) {
                 setTimeout(function() { window.print(); }, 500);
             }

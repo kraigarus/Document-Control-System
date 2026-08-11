@@ -76,4 +76,9 @@ class DocumentRequest extends Model
     {
         return $this->hasMany(Syllabi::class, 'request_id');
     }
+
+    public function stamps()
+    {
+        return $this->hasMany(DocumentStamp::class, 'document_request_id');
+    }
 }

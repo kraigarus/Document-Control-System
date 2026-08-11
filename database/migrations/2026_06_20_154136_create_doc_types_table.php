@@ -34,6 +34,8 @@ return new class extends Migration
             ['id' => 13, 'parent_id' => 2,    'doc_type_name' => 'Preventive Maintenance Plan'],
             ['id' => 14, 'parent_id' => 2,    'doc_type_name' => 'Faculty Profile'],
         ]);
+
+        DB::statement("SELECT setval(pg_get_serial_sequence('dcs_doc_types', 'id'), (SELECT MAX(id) FROM dcs_doc_types))");
     }
 
     public function down(): void

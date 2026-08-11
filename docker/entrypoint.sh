@@ -40,6 +40,14 @@ echo "  Migrations OK."
 echo "[3/5] Creating storage symlink..."
 php artisan storage:link --force 2>/dev/null || true
 
+# ── Runtime PHP / Nginx config (bind-mount friendly) ─────────────────────────
+if [ -f docker/php/conf.d/99-custom.ini ]; then
+    cp docker/php/conf.d/99-custom.ini /usr/local/etc/php/conf.d/99-custom.ini
+fi
+if [ -f docker/nginx/default.conf ]; then
+    cp docker/nginx/default.conf /etc/nginx/http.d/default.conf
+fi
+
 # ── Cache ─────────────────────────────────────────────────────────────────────
 echo "[4/5] Caching config..."
 php artisan config:cache

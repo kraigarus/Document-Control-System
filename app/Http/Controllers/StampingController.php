@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\DocumentRequest;
 use App\Models\DocumentStamp;
 use App\Models\DocType;
+use App\Services\StampBackupService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
@@ -13,6 +14,9 @@ use setasign\Fpdi\Fpdi;
 
 class StampingController extends Controller
 {
+    /** @var array<string, array{x: float, y: float}> */
+    private array $autoPlacementCache = [];
+
     private const STAMPS = [
         'controlled' => [
             'label'     => 'Controlled',
@@ -139,13 +143,19 @@ class StampingController extends Controller
     }
 
     /**
-     * Find the emptiest spot on a page for the stamp using pixel-density analysis.
-     * Requires ext-imagick + Ghostscript. Falls back to bottom-right if unavailable
-     * or if the page is too dense to find a clean spot.
+     * Find a completely empty rectangle on the page for the stamp.
+     * The stamp box must contain zero text, lines, images, or watermarks.
+     * Prefers the bottom of the page when several empty spots exist.
      */
     private function findEmptyArea(string $pdfPath, int $pageNum, float $pageWmm, float $pageHmm, float $stampWmm, float $stampHmm): array
     {
-        $fallback = ['x' => $pageWmm - $stampWmm - 15, 'y' => $pageHmm - $stampHmm - 15];
+        $fallback = $this->clampToPage(
+            ['x' => $pageWmm - $stampWmm - 15, 'y' => $pageHmm - $stampHmm - 15],
+            $pageWmm,
+            $pageHmm,
+            $stampWmm,
+            $stampHmm
+        );
 
         if (!class_exists(\Imagick::class)) {
             Log::warning('Stamp: Imagick unavailable, using fallback for auto-placement');
@@ -153,117 +163,290 @@ class StampingController extends Controller
         }
 
         try {
-            $dpi = 100;
+            $dpi = 120;
             $img = new \Imagick();
             $img->setResolution($dpi, $dpi);
             $img->readImage($pdfPath . '[' . ($pageNum - 1) . ']');
             $img->setImageColorspace(\Imagick::COLORSPACE_GRAY);
 
+            // Do not downscale — thumbnail blurs scans and hides empty margins.
             $imgW = $img->getImageWidth();
             $imgH = $img->getImageHeight();
-            $pxPerMm = $dpi / 25.4;
+            $pxPerMm = $imgW / max(1, $pageWmm);
 
             $pixels = $img->exportImagePixels(0, 0, $imgW, $imgH, 'I', \Imagick::PIXEL_CHAR);
             $img->clear();
+            unset($img);
 
-            // ── Two integral images: one for sum (mean/variance), one for "non-white" count ──
-            // CHANGED: threshold raised from 200 -> 250. Catches faint gray watermarks,
-            // not just solid black text.
-            $NONWHITE_THRESHOLD = 250;
+            // Body text, rules, images, watermarks — anything clearly darker than paper.
+            $strongThreshold = 215;
 
-            $sumTable    = array_fill(0, $imgH + 1, null);
-            $sumSqTable  = array_fill(0, $imgH + 1, null); // NEW: for variance
-            $inkTable    = array_fill(0, $imgH + 1, null);
-            $sumTable[0]   = array_fill(0, $imgW + 1, 0);
-            $sumSqTable[0] = array_fill(0, $imgW + 1, 0);
-            $inkTable[0]   = array_fill(0, $imgW + 1, 0);
+            $strongTable = array_fill(0, $imgH + 1, null);
+            $strongTable[0] = array_fill(0, $imgW + 1, 0);
 
             for ($y = 0; $y < $imgH; $y++) {
-                $sumTable[$y + 1]   = [0];
-                $sumSqTable[$y + 1] = [0];
-                $inkTable[$y + 1]   = [0];
+                $strongTable[$y + 1] = [0];
                 for ($x = 0; $x < $imgW; $x++) {
                     $v = $pixels[$y * $imgW + $x];
-                    $ink = ($v < $NONWHITE_THRESHOLD) ? 1 : 0;
-                    $sumTable[$y + 1][$x + 1]   = $v       + $sumTable[$y][$x + 1]   + $sumTable[$y + 1][$x]   - $sumTable[$y][$x];
-                    $sumSqTable[$y + 1][$x + 1] = ($v * $v) + $sumSqTable[$y][$x + 1] + $sumSqTable[$y + 1][$x] - $sumSqTable[$y][$x];
-                    $inkTable[$y + 1][$x + 1]   = $ink      + $inkTable[$y][$x + 1]   + $inkTable[$y + 1][$x]   - $inkTable[$y][$x];
+                    $hit = ($v < $strongThreshold) ? 1 : 0;
+                    $strongTable[$y + 1][$x + 1] = $hit
+                        + $strongTable[$y][$x + 1]
+                        + $strongTable[$y + 1][$x]
+                        - $strongTable[$y][$x];
                 }
             }
 
-            $regionSum = function (array $table, int $x, int $y, int $w, int $h) {
+            $regionSum = function (array $table, int $x, int $y, int $w, int $h) use ($imgW, $imgH): int {
+                $x = max(0, $x);
+                $y = max(0, $y);
+                $w = min($w, $imgW - $x);
+                $h = min($h, $imgH - $y);
+                if ($w <= 0 || $h <= 0) {
+                    return 0;
+                }
+
                 return $table[$y + $h][$x + $w] - $table[$y][$x + $w] - $table[$y + $h][$x] + $table[$y][$x];
             };
 
             $stampWpx = (int) round($stampWmm * $pxPerMm);
             $stampHpx = (int) round($stampHmm * $pxPerMm);
-            $marginPx = (int) round(12 * $pxPerMm);
-            $step     = max(4, (int) round(3 * $pxPerMm));
-            $totalPx  = $stampWpx * $stampHpx;
+            $marginPx = (int) round(3 * $pxPerMm);
+            $coarseStep = max(2, (int) round($pxPerMm));
+            $fineStep   = max(1, (int) round($pxPerMm * 0.4));
 
-            // NEW: a region is only "clean" if BOTH conditions hold:
-            //  1. near-zero non-white pixels (catches solid text/lines)
-            //  2. low variance (catches faint/light watermark text that doesn't
-            //     individually cross the brightness threshold but still isn't flat white)
-            $isClean = function (int $x, int $y) use ($regionSum, $sumTable, $sumSqTable, $inkTable, $stampWpx, $stampHpx, $totalPx) {
-                $inkCount = $regionSum($inkTable, $x, $y, $stampWpx, $stampHpx);
-                if ($inkCount > $totalPx * 0.003) return [false, $inkCount, null];
-
-                $sum   = $regionSum($sumTable, $x, $y, $stampWpx, $stampHpx);
-                $sumSq = $regionSum($sumSqTable, $x, $y, $stampWpx, $stampHpx);
-                $mean  = $sum / $totalPx;
-                $variance = max(0, ($sumSq / $totalPx) - ($mean * $mean));
-
-                // Flat white paper has variance near 0. Faint diagonal watermark text
-                // pushes this well above ~15-20 even when no pixel is individually "dark".
-                $clean = $variance < 12 && $mean > 245;
-                return [$clean, $inkCount, $variance];
-            };
-
-            $preferredOrder = ['bottom-right', 'bottom-left', 'top-right', 'top-left', 'bottom-center', 'top-center'];
-            $anchorPoints = [
-                'bottom-right'  => [$imgW - $stampWpx - $marginPx, $imgH - $stampHpx - $marginPx],
-                'bottom-left'   => [$marginPx, $imgH - $stampHpx - $marginPx],
-                'top-right'     => [$imgW - $stampWpx - $marginPx, $marginPx],
-                'top-left'      => [$marginPx, $marginPx],
-                'bottom-center' => [(int) (($imgW - $stampWpx) / 2), $imgH - $stampHpx - $marginPx],
-                'top-center'    => [(int) (($imgW - $stampWpx) / 2), $marginPx],
-            ];
-
-            $best = null;
-            $found = false;
-
-            foreach ($preferredOrder as $key) {
-                [$x, $y] = $anchorPoints[$key];
-                if ($x < 0 || $y < 0 || $x + $stampWpx > $imgW || $y + $stampHpx > $imgH) continue;
-
-                [$clean] = $isClean($x, $y);
-                if ($clean) {
-                    $best = ['x' => $x / $pxPerMm, 'y' => $y / $pxPerMm];
-                    $found = true;
-                    break;
+            $isRectEmpty = function (int $x, int $y) use ($regionSum, $strongTable, $pixels, $imgW, $stampWpx, $stampHpx): bool {
+                if ($regionSum($strongTable, $x, $y, $stampWpx, $stampHpx) > 0) {
+                    return false;
                 }
-            }
 
-            if (!$found) {
-                for ($y = $marginPx; $y + $stampHpx <= $imgH - $marginPx && !$found; $y += $step) {
-                    for ($x = $marginPx; $x + $stampWpx <= $imgW - $marginPx; $x += $step) {
-                        [$clean] = $isClean($x, $y);
-                        if ($clean) {
-                            $best = ['x' => $x / $pxPerMm, 'y' => $y / $pxPerMm];
-                            $found = true;
-                            break;
+                $x2 = min($imgW, $x + $stampWpx);
+                $y2 = $y + $stampHpx;
+                for ($py = $y; $py < $y2; $py++) {
+                    for ($px = $x; $px < $x2; $px++) {
+                        if ($pixels[$py * $imgW + $px] < 250) {
+                            return false;
                         }
                     }
                 }
+
+                return true;
+            };
+
+            $scanForEmpty = function (int $yStart, int $yEnd, int $step) use (
+                $marginPx, $stampWpx, $stampHpx, $imgW, $imgH, $isRectEmpty
+            ): array {
+                $found = [];
+                $yStart = max($marginPx, $yStart);
+                $yEnd   = min($imgH - $stampHpx - $marginPx, $yEnd);
+
+                for ($y = $yStart; $y <= $yEnd; $y += $step) {
+                    for ($x = $marginPx; $x + $stampWpx <= $imgW - $marginPx; $x += $step) {
+                        if ($isRectEmpty($x, $y)) {
+                            $found[] = ['x' => $x, 'y' => $y];
+                        }
+                    }
+                }
+
+                return $found;
+            };
+
+            $pickPreferred = function (array $candidates) use ($imgH, $imgW, $pxPerMm, $stampWpx, $stampHpx): ?array {
+                if ($candidates === []) {
+                    return null;
+                }
+
+                $best = null;
+                $bestRank = -1.0;
+
+                foreach ($candidates as $c) {
+                    // Prefer lower on page (bottom), then side margins over centre.
+                    $yNorm = ($c['y'] + $stampHpx / 2) / $imgH;
+                    $xNorm = ($c['x'] + $stampWpx / 2) / $imgW;
+                    $centreDist = abs($xNorm - 0.5);
+                    $rank = ($yNorm * 1000) + ($centreDist * 120);
+
+                    if ($rank > $bestRank) {
+                        $bestRank = $rank;
+                        $best = $c;
+                    }
+                }
+
+                if ($best === null) {
+                    return null;
+                }
+
+                return [
+                    'x' => $best['x'] / $pxPerMm,
+                    'y' => $best['y'] / $pxPerMm,
+                    'y_pct' => round(($best['y'] / $imgH) * 100, 1),
+                ];
+            };
+
+            $refinePosition = function (int $x, int $y) use ($isRectEmpty, $fineStep, $marginPx, $imgW, $imgH, $stampWpx, $stampHpx): ?array {
+                $best = ['x' => $x, 'y' => $y];
+                $bestY = $y;
+
+                for ($dy = -$fineStep * 3; $dy <= $fineStep * 3; $dy += $fineStep) {
+                    for ($dx = -$fineStep * 3; $dx <= $fineStep * 3; $dx += $fineStep) {
+                        $tx = $x + $dx;
+                        $ty = $y + $dy;
+                        if ($tx < $marginPx || $ty < $marginPx) {
+                            continue;
+                        }
+                        if ($tx + $stampWpx > $imgW - $marginPx || $ty + $stampHpx > $imgH - $marginPx) {
+                            continue;
+                        }
+                        if (!$isRectEmpty($tx, $ty)) {
+                            continue;
+                        }
+                        if ($ty >= $bestY) {
+                            $bestY = $ty;
+                            $best = ['x' => $tx, 'y' => $ty];
+                        }
+                    }
+                }
+
+                return $best;
+            };
+
+            $bottomStart = (int) max($marginPx, $imgH * 0.55);
+
+            // Pass 1 — bottom half, coarse.
+            $candidates = $scanForEmpty($bottomStart, $imgH - $stampHpx - $marginPx, $coarseStep);
+
+            // Pass 2 — full page, coarse.
+            if ($candidates === []) {
+                $candidates = $scanForEmpty($marginPx, $imgH - $stampHpx - $marginPx, $coarseStep);
             }
 
-            if (!$found) {
-                Log::info('Stamp: no clean empty area found, using fallback', ['page' => $pageNum]);
-                return $this->clampToPage($fallback, $pageWmm, $pageHmm, $stampWmm, $stampHmm);
+            // Pass 3 — full page, fine.
+            if ($candidates === []) {
+                $candidates = $scanForEmpty($marginPx, $imgH - $stampHpx - $marginPx, $fineStep);
             }
 
-            return $best;
+            $best = $pickPreferred($candidates);
+
+            if ($best !== null) {
+                $rx = (int) round($best['x'] * $pxPerMm);
+                $ry = (int) round($best['y'] * $pxPerMm);
+                $refined = $refinePosition($rx, $ry);
+                if ($refined !== null) {
+                    $best['x'] = $refined['x'] / $pxPerMm;
+                    $best['y'] = $refined['y'] / $pxPerMm;
+                    $best['y_pct'] = round(($refined['y'] / $imgH) * 100, 1);
+                }
+
+                Log::info('Stamp: empty area found', [
+                    'page'  => $pageNum,
+                    'x'     => round($best['x'], 1),
+                    'y'     => round($best['y'], 1),
+                    'y_pct' => $best['y_pct'],
+                ]);
+
+                return $this->clampToPage(
+                    ['x' => $best['x'], 'y' => $best['y']],
+                    $pageWmm,
+                    $pageHmm,
+                    $stampWmm,
+                    $stampHmm
+                );
+            }
+
+            $totalStampPx = max(1, $stampWpx * $stampHpx);
+
+            $findLeastInk = function (int $step) use (
+                $marginPx, $stampWpx, $stampHpx, $imgW, $imgH, $regionSum, $strongTable, $isRectEmpty
+            ): ?array {
+                $best = null;
+                $minStrong = PHP_INT_MAX;
+                $yEnd = $imgH - $stampHpx - $marginPx;
+
+                for ($y = $marginPx; $y <= $yEnd; $y += $step) {
+                    for ($x = $marginPx; $x + $stampWpx <= $imgW - $marginPx; $x += $step) {
+                        $strong = $regionSum($strongTable, $x, $y, $stampWpx, $stampHpx);
+
+                        if ($strong === 0 && $isRectEmpty($x, $y)) {
+                            return ['x' => $x, 'y' => $y, 'strong' => 0];
+                        }
+
+                        if ($strong < $minStrong) {
+                            $minStrong = $strong;
+                            $best = ['x' => $x, 'y' => $y, 'strong' => $strong];
+                        } elseif ($strong === $minStrong && $y > ($best['y'] ?? -1)) {
+                            $best = ['x' => $x, 'y' => $y, 'strong' => $strong];
+                        }
+                    }
+                }
+
+                return $best;
+            };
+
+            $formatResult = function (array $spot, int $page) use ($pxPerMm, $imgH, $pageWmm, $pageHmm, $stampWmm, $stampHmm, $totalStampPx): array {
+                Log::info('Stamp: using least-ink placement', [
+                    'page'         => $page,
+                    'x'            => round($spot['x'] / $pxPerMm, 1),
+                    'y'            => round($spot['y'] / $pxPerMm, 1),
+                    'y_pct'        => round(($spot['y'] / $imgH) * 100, 1),
+                    'strong_px'    => $spot['strong'],
+                    'strong_ratio' => round($spot['strong'] / $totalStampPx, 4),
+                ]);
+
+                return $this->clampToPage(
+                    ['x' => $spot['x'] / $pxPerMm, 'y' => $spot['y'] / $pxPerMm],
+                    $pageWmm,
+                    $pageHmm,
+                    $stampWmm,
+                    $stampHmm
+                );
+            };
+            // Margin probes for verified empty slots.
+            $yBottom = $imgH - $stampHpx - $marginPx;
+            $xRight  = $imgW - $stampWpx - $marginPx;
+            $xLeft   = $marginPx;
+            $xCentre = (int) max($marginPx, ($imgW - $stampWpx) / 2);
+
+            for ($pct = 95; $pct >= 50; $pct -= 5) {
+                $probeSlots[] = ['x' => $xLeft,   'y' => (int) max($marginPx, ($imgH * $pct / 100) - $stampHpx)];
+                $probeSlots[] = ['x' => $xRight,  'y' => (int) max($marginPx, ($imgH * $pct / 100) - $stampHpx)];
+                $probeSlots[] = ['x' => $xCentre, 'y' => (int) max($marginPx, ($imgH * $pct / 100) - $stampHpx)];
+            }
+            $probeSlots[] = ['x' => $xLeft,  'y' => $yBottom];
+            $probeSlots[] = ['x' => $xRight, 'y' => $yBottom];
+
+            foreach ($probeSlots as $slot) {
+                if ($isRectEmpty($slot['x'], $slot['y'])) {
+                    Log::info('Stamp: empty area found via margin probe', [
+                        'page' => $pageNum,
+                        'x'    => round($slot['x'] / $pxPerMm, 1),
+                        'y'    => round($slot['y'] / $pxPerMm, 1),
+                    ]);
+
+                    return $this->clampToPage(
+                        ['x' => $slot['x'] / $pxPerMm, 'y' => $slot['y'] / $pxPerMm],
+                        $pageWmm,
+                        $pageHmm,
+                        $stampWmm,
+                        $stampHmm
+                    );
+                }
+            }
+
+            $least = $findLeastInk($fineStep);
+            if ($least === null) {
+                $least = $findLeastInk($coarseStep);
+            }
+
+            if ($least !== null) {
+                if ($least['strong'] === 0 && $isRectEmpty($least['x'], $least['y'])) {
+                    return $formatResult($least, $pageNum);
+                }
+
+                return $formatResult($least, $pageNum);
+            }
+
+            Log::warning('Stamp: could not analyse page for placement', ['page' => $pageNum]);
+
+            return $fallback;
 
         } catch (\Throwable $e) {
             Log::warning('Stamp: auto-placement detection failed', ['error' => $e->getMessage(), 'page' => $pageNum]);
@@ -271,68 +454,110 @@ class StampingController extends Controller
         }
     }
 
+    private function resolveStampPosition(string $pdfPath, int $pageNum, string $position, float $pageWmm, float $pageHmm, float $stampWmm, float $stampHmm): array
+    {
+        if ($position === 'auto') {
+            $cacheKey = md5($pdfPath . '|' . $pageNum . '|' . $stampWmm . '|' . $stampHmm);
+            if (isset($this->autoPlacementCache[$cacheKey])) {
+                return $this->autoPlacementCache[$cacheKey];
+            }
+
+            $pos = $this->findEmptyArea($pdfPath, $pageNum, $pageWmm, $pageHmm, $stampWmm, $stampHmm);
+            $this->autoPlacementCache[$cacheKey] = $pos;
+
+            return $pos;
+        }
+
+        return $this->calcPosition($position, $pageWmm, $pageHmm, $stampWmm, $stampHmm);
+    }
+
+    private function getPdfPageSize(string $pdfPath, int $pageNum = 1): array
+    {
+        $pdf = new Fpdi();
+        $pageCount = $pdf->setSourceFile($pdfPath);
+        $pageNum   = max(1, min($pageNum, $pageCount));
+        $tplId     = $pdf->importPage($pageNum);
+        $size      = $pdf->getTemplateSize($tplId);
+
+        return [
+            'page'       => $pageNum,
+            'page_count' => $pageCount,
+            'width'      => $size['width'],
+            'height'     => $size['height'],
+        ];
+    }
+
     // ──────────────────────────────────────────
-    // BACKUP MANAGEMENT
-    // Always stamp from the ORIGINAL file, not the already-stamped one
+    // BACKUP MANAGEMENT (via StampBackupService)
     // ──────────────────────────────────────────
 
-    private function getBackupDir(int $requestId): string
+    private function resolveStampSource(int $requestId, string $fileKey, string $fullPath, string $relativePath): string
     {
-        return storage_path('app/private/stamp_backups/' . $requestId);
+        return StampBackupService::resolveSource($requestId, $fileKey, $fullPath, $relativePath);
     }
 
-    private function getBackupPath(int $requestId, string $fileKey): string
+    // ──────────────────────────────────────────
+    // PREVIEW — detect empty area and return coordinates
+    // ──────────────────────────────────────────
+
+    public function preview(Request $request)
     {
-        return $this->getBackupDir($requestId) . '/' . $fileKey . '_original.pdf';
-    }
+        @ini_set('memory_limit', '256M');
+        $this->autoPlacementCache = [];
 
-    private function ensureBackup(int $requestId, string $fileKey, string $currentFilePath): string
-    {
-        $backupPath = $this->getBackupPath($requestId, $fileKey);
+        $validated = $this->validateStampPayload($request);
+        $page      = max(1, (int) $request->input('page', 1));
 
-        // Backup already exists — use it
-        if (file_exists($backupPath) && filesize($backupPath) > 0) {
-            Log::info('Stamp: using existing backup', ['backup' => $backupPath]);
-            return $backupPath;
+        $fullPath = $this->resolveFilePath($validated['file_path']);
+        if (!$fullPath) {
+            return response()->json(['success' => false, 'message' => 'File not found.'], 404);
         }
 
-        // Create backup from current file
-        $backupDir = $this->getBackupDir($requestId);
-        if (!is_dir($backupDir)) {
-            mkdir($backupDir, 0755, true);
+        try {
+            $sourcePath = $this->resolveStampSource(
+                $validated['request_id'],
+                $validated['file_key'],
+                $fullPath,
+                $validated['file_path']
+            );
+
+            $config = self::STAMPS[$validated['stamp_type']];
+            $size   = $this->getPdfPageSize($sourcePath, $page);
+
+            $pos = $this->resolveStampPosition(
+                $sourcePath,
+                $size['page'],
+                $validated['position'],
+                $size['width'],
+                $size['height'],
+                $config['width'],
+                $config['height']
+            );
+
+            return response()->json([
+                'success'          => true,
+                'page'             => $size['page'],
+                'page_count'       => $size['page_count'],
+                'page_width_mm'    => $size['width'],
+                'page_height_mm'   => $size['height'],
+                'stamp_width_mm'   => $config['width'],
+                'stamp_height_mm'  => $config['height'],
+                'x_mm'             => round($pos['x'], 2),
+                'y_mm'             => round($pos['y'], 2),
+                'x_pct'            => round(($pos['x'] / $size['width']) * 100, 2),
+                'y_pct'            => round(($pos['y'] / $size['height']) * 100, 2),
+                'width_pct'        => round(($config['width'] / $size['width']) * 100, 2),
+                'height_pct'       => round(($config['height'] / $size['height']) * 100, 2),
+                'auto_detected'    => $validated['position'] === 'auto',
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Stamp preview error: ' . $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Could not detect stamp placement.',
+            ], 500);
         }
-
-        if (!copy($currentFilePath, $backupPath)) {
-            throw new \RuntimeException('Failed to create backup of original file.');
-        }
-
-        Log::info('Stamp: created backup', [
-            'from' => $currentFilePath,
-            'to'   => $backupPath,
-            'size' => filesize($backupPath),
-        ]);
-
-        return $backupPath;
-    }
-
-    private function restoreFromBackup(int $requestId, string $fileKey, string $targetPath): bool
-    {
-        $backupPath = $this->getBackupPath($requestId, $fileKey);
-
-        if (!file_exists($backupPath)) {
-            Log::warning('Stamp: no backup found to restore', ['backup' => $backupPath]);
-            return false;
-        }
-
-        $restored = copy($backupPath, $targetPath);
-
-        Log::info('Stamp: restored from backup', [
-            'backup' => $backupPath,
-            'target' => $targetPath,
-            'success' => $restored,
-        ]);
-
-        return $restored;
     }
 
     // ──────────────────────────────────────────
@@ -341,6 +566,10 @@ class StampingController extends Controller
 
     public function apply(Request $request)
     {
+        @ini_set('memory_limit', '256M');
+        @set_time_limit(300);
+        $this->autoPlacementCache = [];
+
         $validated = $this->validateStampPayload($request);
 
         $fullPath = $this->resolveFilePath($validated['file_path']);
@@ -353,11 +582,11 @@ class StampingController extends Controller
         }
 
         try {
-            // Get or create backup of the ORIGINAL (unstamped) file
-            $sourcePath = $this->ensureBackup(
+            $sourcePath = $this->resolveStampSource(
                 $validated['request_id'],
                 $validated['file_key'],
-                $fullPath
+                $fullPath,
+                $validated['file_path']
             );
 
             Log::info('Stamp: applying to file', [
@@ -398,6 +627,13 @@ class StampingController extends Controller
                 'target' => $fullPath,
                 'newSize' => filesize($fullPath),
             ]);
+
+            StampBackupService::recordStamped(
+                $validated['request_id'],
+                $validated['file_key'],
+                $fullPath,
+                $validated['file_path']
+            );
 
             // Clean up temp file
             if (file_exists($outputPath)) {
@@ -487,14 +723,14 @@ class StampingController extends Controller
         $fullPath = $this->resolveFilePath($path);
 
         if ($fullPath) {
-            $this->restoreFromBackup(
+            StampBackupService::restoreTo(
                 $request->request_id,
                 $request->file_key,
                 $fullPath
             );
         }
 
-        $stamp->delete();
+        StampBackupService::invalidate($request->request_id, $request->file_key);
 
         Log::info('Stamp removed', [
             'request_id' => $request->request_id,
@@ -526,9 +762,12 @@ class StampingController extends Controller
         }
 
         try {
-            // Stamp from backup if available, otherwise from current file
-            $backupPath = $this->getBackupPath($validated['request_id'], $validated['file_key']);
-            $sourcePath = file_exists($backupPath) ? $backupPath : $fullPath;
+            $sourcePath = $this->resolveStampSource(
+                $validated['request_id'],
+                $validated['file_key'],
+                $fullPath,
+                $validated['file_path']
+            );
 
             $outputPath = $this->stampPdf(
                 $sourcePath,
@@ -640,6 +879,8 @@ class StampingController extends Controller
             'pages'  => $options['stamp_all_pages'] ? 'all' : 'first',
         ]);
 
+        $this->autoPlacementCache = [];
+
         $pdf = new Fpdi();
 
         // CRITICAL: prevent FPDI from silently inserting new blank pages when a
@@ -691,9 +932,7 @@ class StampingController extends Controller
     {
         $config = self::STAMPS[$type];
 
-        $pos = $position === 'auto'
-            ? $this->findEmptyArea($pdfPath, $pageNum, $pageW, $pageH, $config['width'], $config['height'])
-            : $this->calcPosition($position, $pageW, $pageH, $config['width'], $config['height']);
+        $pos = $this->resolveStampPosition($pdfPath, $pageNum, $position, $pageW, $pageH, $config['width'], $config['height']);
 
         if ($type === 'certified_true_copy') {
             $this->drawCertified($pdf, $pos['x'], $pos['y'], $config, $options);

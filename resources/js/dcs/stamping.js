@@ -56,6 +56,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const autoPlace   = document.getElementById('autoPlace');
     const manualWrap  = document.getElementById('manualPosWrap');
+    const autoBadge   = document.getElementById('autoBadge');
+    const prevPageBtn = document.getElementById('prevPage');
+    const nextPageBtn = document.getElementById('nextPage');
+    const pageIndicator = document.getElementById('pageIndicator');
 
     // ═══════════════════════════════════════════
     // STATE
@@ -68,11 +72,17 @@ document.addEventListener('DOMContentLoaded', function () {
         docNo: '',
         rev: '',
         stampType: null,
-        position: 'auto', 
+        position: 'auto',
         allPages: true,
         certBy: '',
         desig: '',
+        currentPage: 1,
+        pageCount: 1,
+        placement: null,
     };
+
+    let placementTimer = null;
+    let placementRequestId = 0;
 
     autoPlace.addEventListener('change', function () {
         if (this.checked) {
@@ -81,6 +91,7 @@ document.addEventListener('DOMContentLoaded', function () {
         } else {
             state.position = document.querySelector('.st-pos-dot.active')?.dataset.pos || 'bottom-right';
             manualWrap.style.display = 'block';
+            state.placement = null;
         }
         updateOverlay();
     });
@@ -164,7 +175,10 @@ document.addEventListener('DOMContentLoaded', function () {
         state.allPages    = true;
         state.certBy      = '';
         state.desig       = '';
-        state.position    = 'bottom-right';
+        state.currentPage = 1;
+        state.pageCount   = 1;
+        state.placement   = null;
+        state.position    = 'auto';
 
         // Find the first file — prefer unstamped, fallback to first stamped
         let defaultFile = files.find(f => !f.stamped) || files[0];
@@ -287,6 +301,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
         stampAllPages.checked = true;
         stampOverlay.style.display = 'none';
+        if (autoBadge) autoBadge.style.display = 'none';
+        state.currentPage = 1;
+        state.pageCount = 1;
+        state.placement = null;
+        updatePageNav();
 
         downloadBtn.disabled = true;
         applyBtn.disabled    = true;
@@ -306,7 +325,99 @@ document.addEventListener('DOMContentLoaded', function () {
         pdfPreview.src                = url;
         openPdfLink.href              = url;
 
+        state.currentPage = 1;
+        state.placement = null;
+        updatePageNav();
         updateOverlay();
+    }
+
+    function updatePageNav() {
+        if (!pageIndicator) return;
+        pageIndicator.textContent = 'Page ' + state.currentPage + ' / ' + Math.max(1, state.pageCount);
+        if (prevPageBtn) prevPageBtn.disabled = state.currentPage <= 1;
+        if (nextPageBtn) nextPageBtn.disabled = state.currentPage >= state.pageCount;
+    }
+
+    if (prevPageBtn) {
+        prevPageBtn.addEventListener('click', function () {
+            if (state.currentPage <= 1) return;
+            state.currentPage--;
+            state.placement = null;
+            updatePageNav();
+            updateOverlay();
+        });
+    }
+
+    if (nextPageBtn) {
+        nextPageBtn.addEventListener('click', function () {
+            if (state.currentPage >= state.pageCount) return;
+            state.currentPage++;
+            state.placement = null;
+            updatePageNav();
+            updateOverlay();
+        });
+    }
+
+    function fetchStampPlacement() {
+        if (!state.selectedFile || !state.stampType || state.position !== 'auto') return;
+
+        if (state.stampType === 'certified_true_copy' &&
+            (!state.certBy.trim() || !state.desig.trim())) {
+            return;
+        }
+
+        clearTimeout(placementTimer);
+        placementTimer = setTimeout(function () {
+            const reqId = ++placementRequestId;
+            const payload = Object.assign(buildPayload(), { page: state.currentPage });
+
+            fetch('/stamp/preview', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify(payload),
+            })
+            .then(function (res) {
+                return res.json().catch(function () {
+                    throw new Error(res.status === 419
+                        ? 'Session expired — refresh the page and try again.'
+                        : 'Could not detect stamp placement (server error).');
+                }).then(function (data) {
+                    if (!res.ok) throw new Error(data.message || 'Preview failed');
+                    return data;
+                });
+            })
+            .then(function (data) {
+                if (reqId !== placementRequestId) return;
+                if (!data.success) throw new Error(data.message || 'Preview failed');
+
+                state.placement = data;
+                state.pageCount = data.page_count || 1;
+                updatePageNav();
+                renderOverlayContent();
+                applyAutoPlacement(data);
+            })
+            .catch(function (err) {
+                if (reqId !== placementRequestId) return;
+                if (autoBadge) autoBadge.style.display = 'none';
+                showToast(err.message || 'Could not detect stamp placement.', 'error');
+            });
+        }, 250);
+    }
+
+    function applyAutoPlacement(data) {
+        if (!stampOverlay || !data) return;
+
+        stampOverlay.style.display = 'block';
+        stampOverlay.className = 'st-stamp-overlay pos-auto';
+        stampOverlay.style.left = data.x_pct + '%';
+        stampOverlay.style.top = data.y_pct + '%';
+        stampOverlay.style.width = data.width_pct + '%';
+
+        if (autoBadge) autoBadge.style.display = 'inline-flex';
     }
 
     // Show fallback on iframe error
@@ -399,28 +510,36 @@ document.addEventListener('DOMContentLoaded', function () {
     function updateOverlay() {
         if (!state.stampType) {
             stampOverlay.style.display = 'none';
+            if (autoBadge) autoBadge.style.display = 'none';
             return;
         }
+
+        renderOverlayContent();
 
         if (state.position === 'auto') {
-            // Show a floating badge instead of a fixed-position box —
-            // real placement is decided server-side when applied
-            stampOverlay.style.display = 'none';
-            overlayPages.textContent = 'Placed automatically';
-            // (you can render a small "Auto" pill near the toolbar here instead)
+            fetchStampPlacement();
             return;
         }
 
+        if (autoBadge) autoBadge.style.display = 'none';
         stampOverlay.style.display = 'block';
         stampOverlay.className = 'st-stamp-overlay pos-' + state.position;
+        stampOverlay.style.left = '';
+        stampOverlay.style.top = '';
+        stampOverlay.style.right = '';
+        stampOverlay.style.bottom = '';
+        stampOverlay.style.width = '';
+        stampOverlay.style.transform = '';
+    }
+
+    function renderOverlayContent() {
+        if (!state.stampType) return;
 
         var cfg = STAMP_STYLES[state.stampType] || STAMP_STYLES.controlled;
 
-        // Title
         overlayTitle.textContent = cfg.title;
         overlayTitle.style.color = cfg.color;
 
-        // Certified fields
         if (state.stampType === 'certified_true_copy') {
             overlayDivider.style.display = 'block';
             overlayDivider.style.color   = cfg.color;
@@ -432,13 +551,11 @@ document.addEventListener('DOMContentLoaded', function () {
             overlayFields.style.display  = 'none';
         }
 
-        // Date
         overlayDate.textContent = new Date().toLocaleDateString('en-US', {
             year: 'numeric', month: 'short', day: 'numeric'
         });
         overlayDate.style.color = cfg.color;
 
-        // Sub
         if (cfg.sub) {
             overlaySub.textContent    = cfg.sub;
             overlaySub.style.display  = 'block';
@@ -446,12 +563,14 @@ document.addEventListener('DOMContentLoaded', function () {
             overlaySub.style.display  = 'none';
         }
 
-        // Pages label
         overlayPages.textContent = state.allPages ? 'All pages' : 'First page only';
 
-        // Box colors
-        stampBox.style.borderColor                    = cfg.color;
+        stampBox.style.borderColor = cfg.color;
         stampBox.querySelector('.st-stamp-inner').style.borderColor = cfg.color;
+
+        if (state.position === 'auto' && state.placement) {
+            applyAutoPlacement(state.placement);
+        }
     }
 
     // ═══════════════════════════════════════════
@@ -593,16 +712,21 @@ document.addEventListener('DOMContentLoaded', function () {
             },
             body: JSON.stringify(buildPayload()),
         })
-        .then(function (res) { return res.json(); })
+        .then(function (res) {
+            return res.json().catch(function () {
+                throw new Error(res.status === 419
+                    ? 'Session expired — refresh the page and try again.'
+                    : 'Stamping failed (server error). Large PDFs may take up to a minute.');
+            }).then(function (data) {
+                if (!res.ok) throw new Error(data.message || 'Failed to apply stamp');
+                return data;
+            });
+        })
         .then(function (data) {
-            if (data.success) {
-                showToast('Stamp applied successfully!', 'success');
-                confirmModal.style.display = 'none';
-                hideStampModal();
-                setTimeout(function () { location.reload(); }, 1200);
-            } else {
-                throw new Error(data.message || 'Failed to apply stamp');
-            }
+            showToast('Stamp applied successfully!', 'success');
+            confirmModal.style.display = 'none';
+            hideStampModal();
+            setTimeout(function () { location.reload(); }, 1200);
         })
         .catch(function (err) {
             showToast(err.message || 'Failed to apply stamp.', 'error');

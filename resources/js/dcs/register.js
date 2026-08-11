@@ -216,6 +216,7 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     // ── Document No. live lookup (both modes) ──
     initDocNoLookup(revField);
+    wireSyllabiMasterlistSync();
 
     // ── Apply initial revision mode ──
     applyRevisionMode();
@@ -1635,6 +1636,7 @@ function handleDocTypeChange() {
     }
 
     resetSyllabiSection();
+    resetMasterlistNoOfPagesField();
     setSyllabiStep(1);
 
     disableApproval();
@@ -1665,6 +1667,14 @@ function bindTableFileInput(fileInput) {
 /** Clears every Syllabi/TOS-Rubrics field and table row. Shared by handleDocTypeChange()
  *  (doc type switch) and validateChecklistState() (sub-type switch, e.g. Syllabi → TOS/Rubrics),
  *  since either change can leave stale input behind otherwise. */
+function resetMasterlistNoOfPagesField() {
+    const mlPages = document.getElementById('masterlistNoOfPages');
+    if (!mlPages) return;
+    mlPages.readOnly = false;
+    mlPages.style.background = '';
+    mlPages.style.cursor = '';
+}
+
 function resetSyllabiSection() {
     const syllabiBody = document.getElementById('syllabiTableBody');
     if (syllabiBody) {
@@ -1722,13 +1732,17 @@ function validateChecklistState() {
 
     unlockChecklist();
 
-    if (!isSyllabiLike) return;
+    if (!isSyllabiLike) {
+        resetMasterlistNoOfPagesField();
+        return;
+    }
 
     if (!syllabiSection) return;
 
     applySyllabiSectionLabel();
     syllabiSection.style.display = "block";
     setSyllabiStep(1);
+    syncSyllabiToMasterlistFields();
     loadSyllabiContextDropdowns();
     if (document.getElementById("syllabiTableBody").children.length === 0) {
         addSyllabiRow();
@@ -2192,14 +2206,19 @@ function collectMissingFields() {
     }
 
     if (sectionVisible("section-3")) {
-        checkText("Masterlist", "masterlistDocNo", "Document No.");
-        checkText("Masterlist", "masterlistDocTitle", "Document Title");
-        checkText("Masterlist", "deadlineOfSubmission", "Deadline of Submission");
+        if (!window.__isSyllabiMode) {
+            checkText("Masterlist", "masterlistDocNo", "Document No.");
+            checkText("Masterlist", "masterlistDocTitle", "Document Title");
+            checkText("Masterlist", "deadlineOfSubmission", "Deadline of Submission");
+            checkText("Masterlist", "masterlistEffectivityDate", "Effectivity Date");
+        }
         checkText("Masterlist", "masterlistReceiptDate", "Document Receipt Date");
         checkText("Masterlist", "masterlistReceiptTime", "Document Receipt Time");
         checkText("Masterlist", "masterlistRegisteredDate", "Document Registered Date");
         checkText("Masterlist", "masterlistRegisteredTime", "Document Registered Time");
-        checkText("Masterlist", "masterlistEffectivityDate", "Effectivity Date");
+        if (!window.__isSyllabiMode) {
+            checkText("Masterlist", "masterlistEffectivityDate", "Effectivity Date");
+        }
         checkText("Masterlist", "masterlistNoOfPages", "No. of Pages");
         checkText("Masterlist", "briefPurpose", "Brief Purpose");
         if (!window.__sourceWidgets.masterlistOriginator || window.__sourceWidgets.masterlistOriginator.selected.length === 0) {
@@ -2370,8 +2389,9 @@ function addReviewList(container, title, items) {
 
 window.confirmSave = function () {
     if (docNoDuplicate) {
-        scrollToField('masterlistDocNo');
-        document.getElementById('masterlistDocNo').focus();
+        const fieldId = window.__isSyllabiMode ? 'syllabiDocNo' : 'masterlistDocNo';
+        scrollToField(fieldId);
+        document.getElementById(fieldId)?.focus();
         return;
     }
     const errors = validateForm();
@@ -2500,10 +2520,12 @@ function buildSyllabiRowsReview(reviewContent) {
     if (!ss || ss.style.display === "none") return;
 
     document.querySelectorAll("#syllabiTableBody tr[data-is-first='true']").forEach((r) => {
-        const course = r.querySelector('input[name="syllabiCourseName[]"]');
+        const course = r.querySelector('textarea.syllabi-merged-course, input[name="syllabiCourseName[]"]');
         if (!course || !course.value.trim()) return;
 
         const pages = r.querySelector('.syllabi-merged-pages');
+        const copies = r.querySelector('.syllabi-merged-copies');
+        const availHidden = r.querySelector('.syllabi-merged-availability-hidden');
         const drfAvail = r.querySelector('.syllabi-hidden-toggle[name="syllabiDrfAvailability[]"]');
         const drfNo = r.querySelector('input[name="syllabiDrfNo[]"]');
         const drfDate = r.querySelector('input[name="syllabiDrfDate[]"]');
@@ -2516,8 +2538,10 @@ function buildSyllabiRowsReview(reviewContent) {
             .join('; ');
 
         addReviewSection(reviewContent, "Syllabi — " + course.value.trim(), [
+            { label: "No. of Copies", value: copies?.value || "1" },
             { label: "No. of Pages", value: pages?.value || "" },
             { label: "Faculty", value: facultyNames || null },
+            { label: "Syllabi Availability", value: availHidden?.value === 'available' ? 'Available' : 'Not Available' },
             { label: "DRF Availability", value: drfAvail?.value === 'available' ? 'Available' : 'Not Available' },
             { label: "DRF No.", value: drfNo?.value?.trim() || "" },
             { label: "DRF Date", value: fmtDateValue(drfDate?.value) },
@@ -2708,9 +2732,52 @@ function updateSyllabiTitle() {
 
     titleInput.value = college + ' ' + label + ' for ' + program + ', ' + semester + ', ' + formatSchoolYearText(schoolYr);
 
-    // Keep Masterlist Doc Title mirrored — programmatic value changes don't fire 'input'
+    syncSyllabiToMasterlistFields();
+}
+
+/** Keep masterlist header fields in sync when in syllabi / TOS-Rubrics mode. */
+function syncSyllabiToMasterlistFields() {
+    if (!window.__isSyllabiMode) return;
+
+    const pairs = [
+        ['syllabiDocNo', 'masterlistDocNo'],
+        ['syllabiEffectivityDate', 'masterlistEffectivityDate'],
+        ['syllabiDeadline', 'deadlineOfSubmission'],
+    ];
+    pairs.forEach(([srcId, destId]) => {
+        const src = document.getElementById(srcId);
+        const dest = document.getElementById(destId);
+        if (src && dest) dest.value = src.value;
+    });
+
+    const titleInput = document.getElementById('syllabiDocTitle');
     const mlTitle = document.getElementById('masterlistDocTitle');
-    if (mlTitle) mlTitle.value = titleInput.value;
+    if (titleInput && mlTitle) mlTitle.value = titleInput.value;
+}
+
+function wireSyllabiMasterlistSync() {
+    const syllabiNo = document.getElementById('syllabiDocNo');
+    const masterNo = document.getElementById('masterlistDocNo');
+    if (syllabiNo && masterNo) {
+        syllabiNo.addEventListener('input', () => {
+            if (!window.__isSyllabiMode) return;
+            masterNo.value = syllabiNo.value;
+            masterNo.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+    }
+
+    ['syllabiEffectivityDate', 'syllabiDeadline'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', syncSyllabiToMasterlistFields);
+        if (el) el.addEventListener('change', syncSyllabiToMasterlistFields);
+    });
+
+    const titleInput = document.getElementById('syllabiDocTitle');
+    if (titleInput) {
+        titleInput.addEventListener('input', () => {
+            if (window.__isSyllabiMode) syncSyllabiToMasterlistFields();
+        });
+    }
 }
 
 // ══════════════════════════════════════════════
@@ -2899,6 +2966,7 @@ function setSyllabiStep(step) {
     const backBtn = document.getElementById("syllabiBackBtn");
     const nextBtn = document.getElementById("syllabiNextBtn");
     const addBtn = document.getElementById("btnAddSyllabiRow");
+    const step2Hint = document.getElementById("syllabiStep2Hint");
 
     if (backBtn) backBtn.style.display = step === 1 ? "none" : "";
     if (nextBtn) {
@@ -2908,6 +2976,7 @@ function setSyllabiStep(step) {
         nextBtn.innerHTML = 'Next <i class="fa-solid fa-arrow-right"></i>';
     }
     if (addBtn) addBtn.style.display = step === 1 ? "" : "none";
+    if (step2Hint) step2Hint.style.display = step === 2 ? "" : "none";
 }
 
 window.syllabiStepNext = function () {

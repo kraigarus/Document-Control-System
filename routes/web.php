@@ -1,7 +1,6 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\RegisterController;
 use App\Http\Controllers\ReportController;
@@ -9,6 +8,8 @@ use App\Http\Controllers\StampingController;
 use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\ProfileController;
+use App\Models\DocumentRequest;
+use App\Services\DocumentVisibilityService;
 
 // Public — portal (no auth)
 Route::get('/', fn () => view('pages.portal.portal'));
@@ -34,35 +35,16 @@ Route::middleware(['auth', 'active'])->group(function () {
 
     // Dashboard
     Route::get('/dashboard', fn () => view('pages.dcs.dashboard'))->name('dashboard');
-    Route::get('/api/dashboard-stats', function () {
-        $latestIds = DB::table('masterlist_registration as m1')
-            ->leftJoin('masterlist_registration as m2', function ($join) {
-                $join->on('m1.doc_no', '=', 'm2.doc_no')
-                    ->whereRaw('CAST(m1.revise_no AS UNSIGNED) < CAST(m2.revise_no AS UNSIGNED)');
-            })
-            ->whereNull('m2.request_id')
-            ->whereNotNull('m1.doc_no')
-            ->where('m1.doc_no', '!=', '')
-            ->pluck('m1.request_id');
+    Route::get('/api/dashboard-stats', function (DocumentVisibilityService $visibility) {
+        $visibleIds = $visibility->getVisibleRequestIds();
 
-        $noMlIds = \App\Models\DocumentRequest::whereDoesntHave('masterlistRegistration')
-            ->orWhereHas('masterlistRegistration', function ($q) {
-                $q->whereNull('doc_no')->orWhere('doc_no', '');
-            })
-            ->pluck('request_id');
-
-        $visibleIds = $latestIds->merge($noMlIds)->unique();
-
-        $base = fn () => \App\Models\DocumentRequest::whereIn('request_id', $visibleIds)
+        $base = fn () => DocumentRequest::whereIn('id', $visibleIds)
             ->where('approval_status', '!=', 'obsolete');
-
-        $internalIds = [1, 6, 7, 8, 9, 10];
-        $internalFormIds = [2, 11, 12, 13, 14];
 
         return response()->json([
             'totalDocuments'    => $base()->count(),
-            'internalCount'     => $base()->whereIn('doc_type_id', $internalIds)->count(),
-            'internalFormsCount'=> $base()->whereIn('doc_type_id', $internalFormIds)->count(),
+            'internalCount'     => $base()->where('doc_type_id', 1)->count(),
+            'internalFormsCount'=> $base()->where('doc_type_id', 2)->count(),
             'externalCount'     => $base()->where('doc_type_id', 3)->count(),
             'formsCount'        => $base()->where('doc_type_id', 4)->count(),
             'logbooksCount'     => $base()->where('doc_type_id', 5)->count(),

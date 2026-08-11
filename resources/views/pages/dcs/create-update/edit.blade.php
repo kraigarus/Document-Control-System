@@ -14,48 +14,95 @@
     ])
 
     @php
+        if (!function_exists('fmtDate')) {
+            function fmtDate($val) {
+                if (!$val) return '';
+                return \Carbon\Carbon::parse($val)->format('Y-m-d');
+            }
+        }
+        if (!function_exists('fmtTime')) {
+            function fmtTime($val) {
+                if (!$val) return '';
+                return \Carbon\Carbon::parse($val)->format('H:i');
+            }
+        }
+
+        $isSyllabiLikeEdit = in_array((int) ($docRequest->sub_type_id ?? 0), [11, 12], true);
+        $syllabiContextSeed = ($syllabi ?? collect())->first();
+
         // ── Seed data for the chip-style source/originator widgets ──
         $drfOfficesSeed = collect($drfOffices ?? [])->map(fn($o) => [
-            'id'    => $o->office->office_id ?? $o->office_id,
+            'id'    => $o->office->id ?? $o->office_id,
             'label' => $o->office->office_name ?? 'Unknown',
         ])->values();
 
         $masterlistSourceSeed = collect($sourceOffices ?? [])->map(fn($o) => [
-            'id'    => $o->office->office_id ?? ('name_' . $o->masterlist_source_id),
-            'label' => $o->office->office_name ?? $o->source_name ?? 'Unknown',
+            'id'    => $o->office->id ?? $o->office_id,
+            'label' => $o->office->office_name ?? 'Unknown',
         ])->values();
 
         $masterlistOriginatorSeed = ($masterlist && $masterlist->originator_name)
             ? [['label' => $masterlist->originator_name]]
             : [];
 
-        // ── Group flat Syllabi rows back into wizard "course groups" ──
-        $syllabiGroupsSeed = collect($syllabi ?? [])->groupBy('course_name')->map(function ($rows, $courseName) {
-            $first = $rows->first();
-            return [
-                'course_name'    => $courseName,
-                'availability'   => $first->syllabi_availability === 'available',
-                'college_id'     => $first->college_id,
-                'program_id'     => $first->program_id,
-                'semester_id'    => $first->semester_id,
-                'school_year_id' => $first->school_year_id,
-                'rows' => $rows->values()->map(function ($r) {
-                    return [
-                        'originator'             => $r->originator,
-                        'no_pages'               => $r->no_pages,
-                        'date_received'          => fmtDate($r->date_received),
-                        'time_received'          => fmtTime($r->time_received),
-                        'drf_available'          => $r->drf_availability === 'available',
-                        'drf_no'                 => $r->drf_no,
-                        'drf_date'               => fmtDate($r->drf_date),
-                        'drf_received_date'      => fmtDate($r->drf_received_date),
-                        'registered'             => $r->registered === 'registered',
-                        'date_of_registration'   => fmtDate($r->date_of_registration),
-                        'time_of_registration'   => fmtTime($r->time_of_registration),
-                        'time_spent'             => $r->time_spent,
-                        'scanned_registration_name' => $r->scanned_registration ? basename($r->scanned_registration) : null,
+        // ── Rebuild syllabi wizard groups from dcs_syllabi + dcs_syllabi_drf ──
+        $syllabiGroupsSeed = collect($syllabi ?? [])->map(function ($syl) {
+            $drfs = $syl->drfs->sortBy('id')->values();
+            $copies = max(1, (int) $syl->no_copies);
+            $rows = [];
+
+            if ($copies === 1) {
+                $firstDrf = $drfs->first();
+                $rows[] = [
+                    'faculty'           => $drfs->pluck('faculty_name')->filter()->implode(', '),
+                    'date_received'     => fmtDate($syl->date_received),
+                    'time_received'     => fmtTime($syl->time_received),
+                    'drf_available'     => (bool) ($firstDrf?->is_drf_available),
+                    'drf_no'            => $firstDrf?->drf_no,
+                    'drf_date'          => fmtDate($firstDrf?->drf_date),
+                    'drf_received_date' => fmtDate($firstDrf?->drf_received_date),
+                    'scanned_drf'       => $firstDrf?->scanned_drf,
+                    'scanned_drf_name'  => $firstDrf?->scanned_drf ? basename($firstDrf->scanned_drf) : null,
+                ];
+            } else {
+                foreach ($drfs->take($copies) as $drf) {
+                    $rows[] = [
+                        'faculty'           => $drf->faculty_name,
+                        'date_received'     => fmtDate($syl->date_received),
+                        'time_received'     => fmtTime($syl->time_received),
+                        'drf_available'     => (bool) $drf->is_drf_available,
+                        'drf_no'            => $drf->drf_no,
+                        'drf_date'          => fmtDate($drf->drf_date),
+                        'drf_received_date' => fmtDate($drf->drf_received_date),
+                        'scanned_drf'       => $drf->scanned_drf,
+                        'scanned_drf_name'  => $drf->scanned_drf ? basename($drf->scanned_drf) : null,
                     ];
-                })->values(),
+                }
+                while (count($rows) < $copies) {
+                    $rows[] = [
+                        'faculty'           => '',
+                        'date_received'     => fmtDate($syl->date_received),
+                        'time_received'     => fmtTime($syl->time_received),
+                        'drf_available'     => false,
+                        'drf_no'            => '',
+                        'drf_date'          => '',
+                        'drf_received_date' => '',
+                        'scanned_drf'       => null,
+                        'scanned_drf_name'  => null,
+                    ];
+                }
+            }
+
+            return [
+                'course_name'    => $syl->course->course_name ?? '',
+                'availability'   => (bool) $syl->is_available,
+                'no_pages'       => $syl->no_pages,
+                'copies'         => $copies,
+                'college_id'     => $syl->college_id,
+                'program_id'     => $syl->program_id,
+                'semester_id'    => $syl->semester_id,
+                'school_year_id' => $syl->school_year_id,
+                'rows'           => $rows,
             ];
         })->values();
 
@@ -82,22 +129,12 @@
         window.__existingMasterlistSource = {!! $masterlistSourceSeed->toJson() !!};
         window.__existingMasterlistOriginator = {!! json_encode($masterlistOriginatorSeed) !!};
         window.__existingSyllabiGroups = {!! $syllabiGroupsSeed->toJson() !!};
+        window.__syllabiEditLocked = true;
     </script>
 
 </head>
 
 <body>
-
-@php
-    function fmtDate($val) {
-        if (!$val) return '';
-        return \Carbon\Carbon::parse($val)->format('Y-m-d');
-    }
-    function fmtTime($val) {
-        if (!$val) return '';
-        return \Carbon\Carbon::parse($val)->format('H:i');
-    }
-@endphp
 
 @include('partials.header')
 @include('partials.sidebar')
@@ -196,8 +233,8 @@
                 </div>
             </div>
 
-            <!-- ═══ SYLLABI (full wizard — mirrors register.blade.php) ═══ -->
-            <section class="reg-card" id="section-syllabi" style="display: {{ $syllabi->count() > 0 ? 'block' : 'none' }};">
+            <!-- ═══ SYLLABI / TOS-Rubrics (mirrors register — context locked on edit) ═══ -->
+            <section class="reg-card" id="section-syllabi" style="display: {{ $isSyllabiLikeEdit ? 'block' : 'none' }};">
                 <div class="reg-card-header">
                     <span>Syllabi</span>
                 </div>
@@ -206,38 +243,45 @@
                     <div class="reg-grid-4">
                         <div class="reg-field">
                             <label>College</label>
-                            <select id="syllabiCollege" name="college_id">
+                            <select id="syllabiCollege" disabled>
                                 <option value="" selected disabled>Select college</option>
                             </select>
                         </div>
                         <div class="reg-field">
                             <label>Program</label>
-                            <select id="syllabiProgram" name="program_id" disabled>
+                            <select id="syllabiProgram" disabled>
                                 <option value="" selected disabled>Select program</option>
                             </select>
                         </div>
                         <div class="reg-field">
                             <label>Semester</label>
-                            <select id="syllabiSemester" name="semester_id" disabled>
+                            <select id="syllabiSemester" disabled>
                                 <option value="" selected disabled>Select semester</option>
                             </select>
                         </div>
                         <div class="reg-field">
                             <label>School Year</label>
-                            <select id="syllabiSchoolYear" name="school_year_id" disabled>
+                            <select id="syllabiSchoolYear" disabled>
                                 <option value="" selected disabled>Select school year</option>
                             </select>
                         </div>
                     </div>
+                    @if($syllabiContextSeed)
+                        <input type="hidden" name="college_id" id="syllabiCollegeHidden" value="{{ $syllabiContextSeed->college_id }}">
+                        <input type="hidden" name="program_id" id="syllabiProgramHidden" value="{{ $syllabiContextSeed->program_id }}">
+                        <input type="hidden" name="semester_id" id="syllabiSemesterHidden" value="{{ $syllabiContextSeed->semester_id }}">
+                        <input type="hidden" name="school_year_id" id="syllabiSchoolYearHidden" value="{{ $syllabiContextSeed->school_year_id }}">
+                    @else
+                        <input type="hidden" name="college_id" id="syllabiCollegeHidden" value="">
+                        <input type="hidden" name="program_id" id="syllabiProgramHidden" value="">
+                        <input type="hidden" name="semester_id" id="syllabiSemesterHidden" value="">
+                        <input type="hidden" name="school_year_id" id="syllabiSchoolYearHidden" value="">
+                    @endif
 
-                    <div class="reg-grid-4">
+                    <div class="reg-grid-3">
                         <div class="reg-field">
                             <label>Document No.</label>
                             <input type="text" id="syllabiDocNo" name="syllabiDocNo" placeholder="Enter Document No." value="{{ $masterlist->doc_no ?? '' }}">
-                        </div>
-                        <div class="reg-field">
-                            <label>Document Title</label>
-                            <input type="text" id="syllabiDocTitle" name="syllabiDocTitle" placeholder="Enter Document Title" value="{{ $masterlist->doc_title ?? '' }}">
                         </div>
                         <div class="reg-field">
                             <label>Effectivity Date</label>
@@ -248,11 +292,14 @@
                             <input type="date" id="syllabiDeadline" name="syllabiDeadline" value="{{ fmtDate($masterlist->deadline ?? '') }}">
                         </div>
                     </div>
+                    <div class="reg-field" style="margin-bottom: 16px;">
+                        <label>Document Title</label>
+                        <input type="text" id="syllabiDocTitle" name="syllabiDocTitle" placeholder="Enter Document Title" value="{{ $masterlist->doc_title ?? '' }}">
+                    </div>
 
                     <div class="reg-wizard-steps" id="syllabiStepIndicator">
                         <div class="reg-wizard-step is-active" data-step="1"><span>1</span> Course Info</div>
                         <div class="reg-wizard-step" data-step="2"><span>2</span> DRF</div>
-                        <div class="reg-wizard-step" data-step="3"><span>3</span>Masterlist  Registration</div>
                     </div>
 
                     <div class="reg-field">
@@ -263,7 +310,7 @@
                                         <th class="col-pinned">Course Name</th>
                                         <th class="col-step1">Syllabi Availability</th>
                                         <th class="col-step1">No. Copies</th>
-                                        <th class="col-step1">Originator</th>
+                                        <th class="col-shared">Faculty</th>
                                         <th class="col-step1">No. Pages</th>
                                         <th class="col-step1">Date Received</th>
                                         <th class="col-step1">Time Received</th>
@@ -272,12 +319,7 @@
                                         <th class="col-step2">DRF No.</th>
                                         <th class="col-step2">DRF Date</th>
                                         <th class="col-step2">DRF Received Date</th>
-
-                                        <th class="col-step3">Registered</th>
-                                        <th class="col-step3">Date of Registration</th>
-                                        <th class="col-step3">Time of Registration</th>
-                                        <th class="col-step3">Time Spent</th>
-                                        <th class="col-step3">Scanned DRF</th>
+                                        <th class="col-step2">Scanned DRF</th>
 
                                         <th class="col-pinned"></th>
                                     </tr>
@@ -290,6 +332,8 @@
                         </button>
                         <div class="reg-syllabi-copies-total">
                             Total No. of Copies: <span id="totalSyllabiCopies">0</span>
+                            &nbsp;·&nbsp;
+                            Total No. of Pages: <span id="totalSyllabiPages">0</span>
                         </div>
                     </div>
 
@@ -300,6 +344,9 @@
                         <button type="button" class="reg-btn reg-btn-save" id="syllabiNextBtn" onclick="syllabiStepNext()">
                             Next <i class="fa-solid fa-arrow-right"></i>
                         </button>
+                        <span id="syllabiStep2Hint" style="display:none;color:#64748b;font-size:13px;">
+                            Scroll down and click <strong>Save Document</strong> to submit.
+                        </span>
                     </div>
                 </div>
             </section>

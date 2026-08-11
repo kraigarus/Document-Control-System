@@ -16,8 +16,8 @@ return new class extends Migration
         });
 
         DB::table('dcs_version_type')->insert([
-            ['id' => 1, 'version_name' => 'New'],
-            ['id' => 2, 'version_name' => 'Revised'],
+            ['version_name' => 'New'],
+            ['version_name' => 'Revised'],
         ]);
     }
 

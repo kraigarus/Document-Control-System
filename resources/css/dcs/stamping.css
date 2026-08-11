@@ -1070,11 +1070,30 @@ body {
     pointer-events: none;
 }
 
-.st-stamp-overlay.pos-top-left     { top: 4%; left: 4%; }
-.st-stamp-overlay.pos-top-right    { top: 4%; right: 4%; }
-.st-stamp-overlay.pos-center       { top: 50%; left: 50%; transform: translate(-50%, -50%); }
-.st-stamp-overlay.pos-bottom-left  { bottom: 4%; left: 4%; }
-.st-stamp-overlay.pos-bottom-right { bottom: 4%; right: 4%; }
+.st-stamp-overlay.pos-top-left     { top: 4%; left: 4%; right: auto; bottom: auto; transform: none; }
+.st-stamp-overlay.pos-top-right    { top: 4%; right: 4%; left: auto; bottom: auto; transform: none; }
+.st-stamp-overlay.pos-center       { top: 50%; left: 50%; right: auto; bottom: auto; transform: translate(-50%, -50%); }
+.st-stamp-overlay.pos-bottom-left  { bottom: 4%; left: 4%; top: auto; right: auto; transform: none; }
+.st-stamp-overlay.pos-bottom-right { bottom: 4%; right: 4%; top: auto; left: auto; transform: none; }
+.st-stamp-overlay.pos-auto {
+    top: auto;
+    right: auto;
+    bottom: auto;
+    transform: none;
+}
+
+.st-auto-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(13, 42, 122, 0.08);
+    color: var(--st-accent);
+    font-size: 0.72rem;
+    font-weight: 600;
+}
 
 .st-stamp-box {
     border: 2.5px solid;

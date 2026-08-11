@@ -15,6 +15,7 @@ use App\Models\DocumentDistribution;
 use App\Models\DistributionOffice;
 use App\Models\ApprovalRecord;
 use App\Models\Syllabi;
+use App\Services\StampBackupService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -162,36 +163,9 @@ class RegisterController extends Controller
             . '", not the selected Document Type.';
     }
 
-    /**
-     * Return the request_ids (dcs_document_requests.id values) of the latest
-     * revision for each doc_no.
-     */
     private function getLatestRevisionIds(): \Illuminate\Support\Collection
     {
-        $latestIds = DB::select("
-            SELECT request_id FROM (
-                SELECT
-                    ml.request_id,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY ml.doc_no, dr.doc_type_id, COALESCE(dr.sub_type_id, 0)
-                        ORDER BY ml.revise_no DESC
-                    ) AS rn
-                FROM dcs_masterlist_registration ml
-                JOIN dcs_document_requests dr ON ml.request_id = dr.id
-                WHERE ml.doc_no IS NOT NULL AND ml.doc_no != ''
-            ) ranked
-            WHERE rn = 1
-        ");
-
-        $latestIds = collect($latestIds)->pluck('request_id');
-
-        $noMlIds = DocumentRequest::whereDoesntHave('masterlistRegistration')
-            ->orWhereHas('masterlistRegistration', function ($q) {
-                $q->whereNull('doc_no')->orWhere('doc_no', '');
-            })
-            ->pluck('id');
-
-        return $latestIds->merge($noMlIds)->unique();
+        return app(\App\Services\DocumentVisibilityService::class)->getVisibleRequestIds();
     }
 
     /**
@@ -211,6 +185,96 @@ class RegisterController extends Controller
     {
         if (!$subType) return false;
         return in_array((int) $subType->id, self::SYLLABI_LIKE_SUBTYPE_IDS, true);
+    }
+
+    /**
+     * Shared syllabi / TOS-Rubrics validation for store and update.
+     *
+     * @return \Illuminate\Http\RedirectResponse|null
+     */
+    private function validateSyllabiLikeRequest(Request $request)
+    {
+        $subType   = \App\Models\DocType::find($request->sub_type_id);
+        $isSyllabi = $this->isSyllabiLikeSubType($subType);
+
+        if (!$isSyllabi) {
+            return null;
+        }
+
+        if ($request->has('syllabiCourseName')) {
+            $courseNames = $request->syllabiCourseName;
+            $copiesArr   = $request->syllabiCopies ?? [];
+            $total       = count($courseNames);
+            $i           = 0;
+
+            while ($i < $total) {
+                $courseName = $courseNames[$i];
+                $copies     = max(1, (int) ($copiesArr[$i] ?? 1));
+                $courseLabel = $courseName ?: ('Course group starting row ' . ($i + 1));
+
+                if (empty($courseName)) {
+                    $i += $copies;
+                    continue;
+                }
+
+                if (empty($request->syllabiNoPages[$i]) || $request->syllabiNoPages[$i] <= 0) {
+                    return back()->withInput()->with('error', "Syllabi \"{$courseLabel}\": No. of Pages must be greater than 0.");
+                }
+
+                for ($c = 0; $c < $copies; $c++) {
+                    $rowIdx  = $i + $c;
+                    if ($rowIdx >= $total) {
+                        break;
+                    }
+                    $copyNum  = $c + 1;
+                    $rowLabel = "Syllabi \"{$courseLabel}\" (Copy {$copyNum})";
+
+                    if (empty($request->syllabiDrfNo[$rowIdx])) {
+                        return back()->withInput()->with('error', "{$rowLabel}: DRF No. is required.");
+                    }
+                    if (empty($request->syllabiDrfDate[$rowIdx])) {
+                        return back()->withInput()->with('error', "{$rowLabel}: DRF Date is required.");
+                    }
+                    if (empty($request->syllabiDrfReceived[$rowIdx])) {
+                        return back()->withInput()->with('error', "{$rowLabel}: DRF Received Date is required.");
+                    }
+
+                    if ($copies > 1) {
+                        $facultyCount = count(array_filter(array_map('trim', explode(',', $request->syllabiFaculty[$rowIdx] ?? ''))));
+                        if ($facultyCount > 1) {
+                            return back()->withInput()->with('error',
+                                "{$rowLabel}: Only one faculty per row is allowed when copies are split across rows.");
+                        }
+                    }
+
+                    if ($request->hasFile('syllabiScannedDrf') && isset($request->file('syllabiScannedDrf')[$rowIdx])) {
+                        $file = $request->file('syllabiScannedDrf')[$rowIdx];
+                        $ext = strtolower($file->getClientOriginalExtension());
+                        if (!in_array($ext, ['pdf', 'docx'])) {
+                            return back()->withInput()->with('error', "{$rowLabel}: Scanned DRF — only .pdf and .docx files are accepted.");
+                        }
+                        if ($file->getSize() > 10 * 1024 * 1024) {
+                            return back()->withInput()->with('error', "{$rowLabel}: Scanned DRF — file size must not exceed 10MB.");
+                        }
+                    }
+                }
+
+                $i += $copies;
+            }
+        }
+
+        $request->validate([
+            'college_id'             => 'required|integer|exists:dcs_colleges,id',
+            'program_id'             => 'required|integer|exists:dcs_programs,id',
+            'semester_id'            => 'required|integer|exists:dcs_semesters,id',
+            'school_year_id'         => 'required|integer|exists:dcs_school_years,id',
+            'syllabiDocNo'           => 'required|string',
+            'syllabiDocTitle'        => 'required|string',
+            'syllabiEffectivityDate' => 'required|date',
+            'syllabiDeadline'        => 'required|date',
+        ]);
+
+        return null;
     }
 
     // ──────────────────────────────────────────────────────────
@@ -285,20 +349,6 @@ class RegisterController extends Controller
                 'masterlistRevisionNo' => 'nullable|integer|min:0',
             ]);
 
-            // ── Prevent duplicate registration ──
-            $docNo     = $request->input('masterlistDocNo');
-            $docTypeId = $request->input('doc_type_id');
-            $subTypeId = $request->input('sub_type_id');
-
-            if ($docNo) {
-                $result = $this->findMatchingRegistration($docNo, $docTypeId, $subTypeId);
-
-                if ($result['found']) {
-                    $existing = $result['latest'];
-                    return back()->withInput()
-                        ->with('error', 'Document "' . $docNo . '" is already registered (Rev ' . $existing->revise_no . '). Please use Revised Registration to create a new revision.');
-                }
-            }
         }
 
         // ── Common validation ──
@@ -316,59 +366,25 @@ class RegisterController extends Controller
         $subType   = \App\Models\DocType::find($request->sub_type_id);
         $isSyllabi = $this->isSyllabiLikeSubType($subType);
 
-        if ($isSyllabi && $request->has('syllabiCourseName')) {
-            foreach ($request->syllabiCourseName as $i => $courseName) {
-                $rowNum = $i + 1;
-
-                if (empty($courseName)) {
-                    return back()->withInput()->with('error', "Syllabi Row {$rowNum}: Course Name is required.");
-                }
-                if (empty($request->syllabiNoPages[$i]) || $request->syllabiNoPages[$i] <= 0) {
-                    return back()->withInput()->with('error', "Syllabi Row {$rowNum}: No. of Pages must be greater than 0.");
-                }
-                if (empty($request->syllabiDrfNo[$i])) {
-                    return back()->withInput()->with('error', "Syllabi Row {$rowNum}: DRF No. is required.");
-                }
-                if (empty($request->syllabiDrfDate[$i])) {
-                    return back()->withInput()->with('error', "Syllabi Row {$rowNum}: DRF Date is required.");
-                }
-                if (empty($request->syllabiDrfReceived[$i])) {
-                    return back()->withInput()->with('error', "Syllabi Row {$rowNum}: DRF Received Date is required.");
-                }
-
-                 $copies = (int) ($request->syllabiCopies[$i] ?? 1);
-                $facultyCount = count(array_filter(array_map('trim', explode(',', $request->syllabiFaculty[$i] ?? ''))));
-
-                if ($copies > 1 && $facultyCount > 1) {
-                    return back()->withInput()->with('error',
-                        "Syllabi Row {$rowNum}: Only one faculty per row is allowed when copies are split across rows.");
-                }
-
-                // File validation — no DB::rollBack() needed (no active transaction yet)
-                if ($request->hasFile('syllabiScannedDrf') && isset($request->file('syllabiScannedDrf')[$i])) {
-                    $file = $request->file('syllabiScannedDrf')[$i];
-                    $ext = strtolower($file->getClientOriginalExtension());
-                    if (!in_array($ext, ['pdf', 'docx'])) {
-                        return back()->withInput()->with('error', "Syllabi Row {$rowNum}: Registration copy — only .pdf and .docx files are accepted.");
-                    }
-                    if ($file->getSize() > 10 * 1024 * 1024) {
-                        return back()->withInput()->with('error', "Syllabi Row {$rowNum}: Registration copy — file size must not exceed 10MB.");
-                    }
-                }
-            }
+        if ($redirect = $this->validateSyllabiLikeRequest($request)) {
+            return $redirect;
         }
 
-        if ($isSyllabi) {
-            $request->validate([
-                'college_id'     => 'required|integer|exists:dcs_colleges,id',
-                'program_id'     => 'required|integer|exists:dcs_programs,id',
-                'semester_id'    => 'required|integer|exists:dcs_semesters,id',
-                'school_year_id' => 'required|integer|exists:dcs_school_years,id',
-                'syllabiDocNo'   => 'required|string',
-                'syllabiDocTitle'=> 'required|string',
-                'syllabiEffectivityDate' => 'required|date',
-                'syllabiDeadline'        => 'required|date',
-            ]);
+        // ── Prevent duplicate registration (new mode only) ──
+        if ($mode === 'new') {
+            $docNo     = $isSyllabi ? $request->input('syllabiDocNo') : $request->input('masterlistDocNo');
+            $docTypeId = (int) $request->input('doc_type_id');
+            $subTypeId = $request->input('sub_type_id');
+
+            if ($docNo) {
+                $result = $this->findMatchingRegistration($docNo, $docTypeId, $subTypeId);
+
+                if ($result['found']) {
+                    $existing = $result['latest'];
+                    return back()->withInput()
+                        ->with('error', 'Document "' . $docNo . '" is already registered (Rev ' . $existing->revise_no . '). Please use Revised Registration to create a new revision.');
+                }
+            }
         }
 
         DB::beginTransaction();
@@ -1174,6 +1190,7 @@ class RegisterController extends Controller
         $drfNoArr     = $request->syllabiDrfNo ?? [];
         $drfDateArr   = $request->syllabiDrfDate ?? [];
         $drfRecvArr   = $request->syllabiDrfReceived ?? [];
+        $existingScanned = $request->input('syllabiExistingScannedDrf', []);
 
         $total = count($courseNames);
         $i = 0;
@@ -1218,7 +1235,12 @@ class RegisterController extends Controller
                     $request, 'syllabiScannedDrf', $rowIdx, 'scans/syllabi-drf',
                     "Syllabi \"{$courseName}\" copy " . ($c + 1) . ": Scanned DRF"
                 );
-                if ($scannedDrf) $uploadedFiles[] = $scannedDrf;
+                if (!$scannedDrf && !empty($existingScanned[$rowIdx])) {
+                    $scannedDrf = $existingScanned[$rowIdx];
+                }
+                if ($scannedDrf && $request->hasFile('syllabiScannedDrf') && isset($request->file('syllabiScannedDrf')[$rowIdx])) {
+                    $uploadedFiles[] = $scannedDrf;
+                }
 
                 $facultyNames = array_filter(array_map('trim', explode(',', $facultyArr[$rowIdx] ?? '')));
                 if (empty($facultyNames)) $facultyNames = [''];
@@ -1245,6 +1267,36 @@ class RegisterController extends Controller
 
             $i += $copies;
         }
+    }
+
+    /**
+     * Replace all syllabi rows on update — deletes stale rows/files, then re-saves from the form.
+     */
+    private function replaceSyllabiRows(
+        int $requestId,
+        int $versionId,
+        int $docTypeId,
+        Request $request,
+        array &$uploadedFiles,
+        array &$filesToDelete
+    ): void {
+        if (!$request->has('syllabiCourseName')) {
+            return;
+        }
+
+        $keepPaths = array_values(array_filter($request->input('syllabiExistingScannedDrf', [])));
+
+        $oldSyllabi = Syllabi::with('drfs')->where('request_id', $requestId)->get();
+        foreach ($oldSyllabi as $old) {
+            foreach ($old->drfs as $sd) {
+                if ($sd->scanned_drf && !in_array($sd->scanned_drf, $keepPaths, true)) {
+                    $filesToDelete[] = $sd->scanned_drf;
+                }
+            }
+        }
+        $oldSyllabi->each->delete();
+
+        $this->saveSyllabiRows($requestId, $versionId, $docTypeId, $request, $uploadedFiles);
     }
 
     /**
@@ -1299,6 +1351,10 @@ class RegisterController extends Controller
     // ──────────────────────────────────────────────────────────
     public function updateDoc(Request $request, $id)
     {
+        if ($redirect = $this->validateSyllabiLikeRequest($request)) {
+            return $redirect;
+        }
+
         DB::beginTransaction();
         $uploadedFiles = [];
         $filesToDelete = []; // Defer deletion until after commit
@@ -1399,6 +1455,7 @@ class RegisterController extends Controller
                 $drfFile = $drf ? $drf->scanned_drf : null;
 
                 if ($request->hasFile('drfFile')) {
+                    StampBackupService::invalidate($requestId, 'drf');
                     if ($drfFile) $filesToDelete[] = $drfFile;
                     $drfFile = $request->file('drfFile')->store('scans/drf', 'public');
                     $uploadedFiles[] = $drfFile;
@@ -1443,6 +1500,7 @@ class RegisterController extends Controller
                 $dcnFile = $dcn ? $dcn->scanned_dcn : null;
 
                 if ($request->hasFile('dcnFile')) {
+                    StampBackupService::invalidate($requestId, 'dcn');
                     if ($dcnFile) $filesToDelete[] = $dcnFile;
                     $dcnFile = $request->file('dcnFile')->store('scans/dcn', 'public');
                     $uploadedFiles[] = $dcnFile;
@@ -1505,6 +1563,7 @@ class RegisterController extends Controller
                 $masterlistFile = $masterlist ? $masterlist->scanned_masterlist : null;
 
                 if ($request->hasFile('uploadScannedCopy')) {
+                    StampBackupService::invalidate($requestId, 'masterlist');
                     if ($masterlistFile) $filesToDelete[] = $masterlistFile;
                     $masterlistFile = $request->file('uploadScannedCopy')->store('scans/masterlist', 'public');
                     $uploadedFiles[] = $masterlistFile;
@@ -1582,6 +1641,7 @@ class RegisterController extends Controller
                 $masterlistFile = $masterlist ? $masterlist->scanned_masterlist : null;
 
                 if ($request->hasFile('uploadScannedCopy')) {
+                    StampBackupService::invalidate($requestId, 'masterlist');
                     if ($masterlistFile) $filesToDelete[] = $masterlistFile;
                     $masterlistFile = $request->file('uploadScannedCopy')->store('scans/masterlist', 'public');
                     $uploadedFiles[] = $masterlistFile;
@@ -1631,7 +1691,7 @@ class RegisterController extends Controller
                 $relatedIds = array_filter(array_map('intval', $request->input('relatedDocumentIds', [])));
                 $this->saveRelatedDocuments($masterlist, $relatedIds);
 
-                $this->saveSyllabiRows($requestId, $versionId, $docTypeId, $request, $uploadedFiles);
+                $this->replaceSyllabiRows($requestId, $versionId, $docTypeId, $request, $uploadedFiles, $filesToDelete);
             }
 
             // ── 5. Retrieval ──
@@ -1640,6 +1700,7 @@ class RegisterController extends Controller
                 $retrievalFile = $retrieval ? $retrieval->scanned_retrieval : null;
 
                 if ($request->hasFile('scannedRet')) {
+                    StampBackupService::invalidate($requestId, 'retrieval');
                     if ($retrievalFile) $filesToDelete[] = $retrievalFile;
                     $retrievalFile = $request->file('scannedRet')->store('scans/retrieval', 'public');
                     $uploadedFiles[] = $retrievalFile;
@@ -1691,6 +1752,7 @@ class RegisterController extends Controller
                 $distFile     = $distribution ? $distribution->scanned_distribution : null;
 
                 if ($request->hasFile('scanneddist')) {
+                    StampBackupService::invalidate($requestId, 'distribution');
                     if ($distFile) $filesToDelete[] = $distFile;
                     $distFile = $request->file('scanneddist')->store('scans/distribution', 'public');
                     $uploadedFiles[] = $distFile;

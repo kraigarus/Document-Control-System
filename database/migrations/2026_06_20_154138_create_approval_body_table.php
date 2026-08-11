@@ -16,10 +16,10 @@ return new class extends Migration
         });
 
         DB::table('dcs_approval_body')->insert([
-            ['id' => 1, 'approval_name' => 'Board of Trustees'],
-            ['id' => 2, 'approval_name' => 'Admin Council'],
-            ['id' => 3, 'approval_name' => 'Acad Council'],
-            ['id' => 4, 'approval_name' => 'RIC Council'],
+            ['approval_name' => 'Board of Trustees'],
+            ['approval_name' => 'Admin Council'],
+            ['approval_name' => 'Acad Council'],
+            ['approval_name' => 'RIC Council'],
         ]);
     }
 

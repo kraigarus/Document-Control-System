@@ -51,6 +51,7 @@ WORKDIR /var/www/html
 
 # ── Nginx & Supervisor Configs ────────────────────────────────────────────────
 COPY docker/nginx/default.conf /etc/nginx/http.d/default.conf
+COPY docker/php/conf.d/99-custom.ini /usr/local/etc/php/conf.d/99-custom.ini
 COPY docker/supervisord.conf /etc/supervisord.conf
 
 # ── Startup script ────────────────────────────────────────────────────────────

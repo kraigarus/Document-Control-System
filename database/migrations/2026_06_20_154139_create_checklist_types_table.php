@@ -16,11 +16,11 @@ return new class extends Migration
         });
 
         DB::table('dcs_checklist_types')->insert([
-            ['id' => 1, 'checklist_name' => 'Document Request Form'],
-            ['id' => 2, 'checklist_name' => 'Document Change Notice'],
-            ['id' => 3, 'checklist_name' => 'Masterlist Registration'],
-            ['id' => 4, 'checklist_name' => 'Document Retrieval'],
-            ['id' => 5, 'checklist_name' => 'Document Distribution'],
+            ['checklist_name' => 'Document Request Form'],
+            ['checklist_name' => 'Document Change Notice'],
+            ['checklist_name' => 'Masterlist Registration'],
+            ['checklist_name' => 'Document Retrieval'],
+            ['checklist_name' => 'Document Distribution'],
         ]);
     }
 

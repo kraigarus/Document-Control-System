@@ -5,18 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="icon" href="/images/logo.png" type="image/png">
-    <title>CSPC - Document Control System</title>
+    <title>CSPC - Document Control System - OPCR Targets</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    {{-- was resources/js/dcs/opcr.js — now reuses the shared generic script.
-         NOTE: if opcr.js had extra logic for editable rating (Q/E/T/A) cells
-         and calling saveOpcrRatings, that behavior is not in reports.js —
-         see the note at the bottom of this file. --}}
-    @vite(['resources/css/dcs/reports.css',
-    'resources/css/dcs/sidebar.css',
-    'resources/js/dcs/sidebar.js',
-    'resources/js/dcs/reports.js'])
+    @vite(['resources/css/dcs/reports.css', 'resources/css/dcs/sidebar.css', 'resources/js/dcs/sidebar.js', 'resources/js/dcs/reports.js'])
+    <script>
+        window.REPORT_CATEGORY = 'opcr';
+        window.REPORT_DOC_TYPES = @json($allDocTypes ?? []);
+    </script>
 </head>
 <body>
 
@@ -24,7 +21,6 @@
 @include('partials.sidebar')
 @include('partials.inactivity-modal')
 
-@include('partials.filter-panel')
 <main class="rpt-page" id="rptPage">
 
     <header class="rpt-hdr">
@@ -34,9 +30,8 @@
         </div>
     </header>
 
-    {{-- Sub-tabs — ID renamed opcrSubTabs -> subTabs --}}
-    <nav class="rpt-subs visible" id="subTabs">
-        <button class="rpt-sub active" data-sub="update_masterlist" type="button">Updating of Masterlist</button>
+    <nav class="rpt-subs visible" id="subTabs" aria-label="OPCR categories">
+        <button class="rpt-sub" data-sub="update_masterlist" type="button">Updating of Masterlist</button>
         <button class="rpt-sub" data-sub="issuance_internal" type="button">Issuance of Internal</button>
         <button class="rpt-sub" data-sub="issuance_external" type="button">Issuance of External</button>
         <button class="rpt-sub" data-sub="control_forms" type="button">Controlling of Forms</button>
@@ -44,51 +39,9 @@
         <button class="rpt-sub" data-sub="control_internal_forms" type="button">Controlling of Internal Forms</button>
     </nav>
 
-    {{-- Results — IDs renamed: opcrResults -> resultsPanel, opcrTitle -> resultsTitle,
-         opcrCount -> resultsCount, opcrTable -> reportTable, opcrHead -> reportHead,
-         opcrBody -> reportBody --}}
-    <section class="rpt-results visible" id="resultsPanel">
-        <div class="rpt-results-head">
-            <div class="rpt-results-meta">
-                <h3 id="resultsTitle">Loading...</h3>
-                <span class="rpt-results-count" id="resultsCount"></span>
-            </div>
-            <div class="rpt-results-actions">
-                <button class="rpt-btn rpt-btn-outline" id="openFilterBtn" type="button">
-                    <i class="fa-solid fa-filter"></i> Filters
-                </button>
-                <div class="rpt-export-wrap" id="exportDropdown">
-                    <button class="rpt-btn rpt-btn-outline" id="exportBtn" type="button">
-                        <i class="fa-solid fa-download"></i> Export
-                        <i class="fa-solid fa-chevron-down rpt-chevron"></i>
-                    </button>
-                    <div class="rpt-export-menu" id="exportMenu">
-                        <button type="button" data-format="pdf"><i class="fa-solid fa-file-pdf"></i> Download as PDF</button>
-                        <button type="button" data-format="xlsx"><i class="fa-solid fa-file-excel"></i> Download as Excel (.csv)</button>
-                        <div class="rpt-export-sep"></div>
-                        <button type="button" data-format="print"><i class="fa-solid fa-print"></i> Print Report</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="rpt-table-scroll">
-            <table class="rpt-table" id="reportTable">
-                <thead id="reportHead"></thead>
-                <tbody id="reportBody">
-                    <tr><td colspan="20"><div class="rpt-state">
-                        <div class="rpt-state-spinner"></div>
-                        <h4 style="margin-top:18px;">Loading report...</h4>
-                    </div></td></tr>
-                </tbody>
-            </table>
-        </div>
-    </section>
+    @include('partials.report-filters-inline')
+    @include('partials.report-preview-panel')
 
 </main>
-
-<script>
-    window.REPORT_CATEGORY = 'opcr';
-</script>
-
 </body>
 </html>

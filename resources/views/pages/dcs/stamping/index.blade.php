@@ -311,6 +311,9 @@
                                 </div>
                             </div>
                             <span class="st-stamp-pages" id="overlayPages">All pages</span>
+                            <span class="st-auto-badge" id="autoBadge" style="display:none;">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i> Empty area detected
+                            </span>
                         </div>
 
                         <div class="st-preview-fallback" id="previewFallback" style="display:none;">
@@ -321,7 +324,7 @@
                     </div>
                     <p class="st-preview-note">
                         <i class="fa-solid fa-eye"></i>
-                        Preview shows stamp position on first page
+                        Preview shows stamp on the detected empty area of the scanned page
                     </p>
                 </div>
 
@@ -369,7 +372,7 @@
                         <label class="st-checkbox-wrap" style="margin-bottom:10px;">
                             <input type="checkbox" id="autoPlace" checked>
                             <span class="st-checkbox-custom"></span>
-                            <span>Auto-place in empty area <small style="color:var(--st-text-subtle);font-weight:400;">(recommended)</small></span>
+                            <span>Auto-place in empty area <small style="color:var(--st-text-subtle);font-weight:400;">(prefers bottom margin)</small></span>
                         </label>
 
                         <div id="manualPosWrap" style="display:none;">

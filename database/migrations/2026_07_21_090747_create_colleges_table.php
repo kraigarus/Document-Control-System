@@ -29,6 +29,8 @@ return new class extends Migration
             ['id' => 5, 'office_id' => 31, 'college_code' => 'CTHBM', 'college_name' => 'College of Tourism, Hospitality and Business Management', 'created_at' => now(), 'updated_at' => now()],
             ['id' => 6, 'office_id' => 26, 'college_code' => 'CAS',   'college_name' => 'College of Arts and Sciences', 'created_at' => now(), 'updated_at' => now()],
         ]);
+
+        DB::statement("SELECT setval(pg_get_serial_sequence('dcs_colleges', 'id'), (SELECT MAX(id) FROM dcs_colleges))");
     }
 
     public function down(): void
