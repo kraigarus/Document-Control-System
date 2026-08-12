@@ -69,18 +69,6 @@ class ReportController extends Controller
         ];
     }
 
-    // Map subcategories to doc_type names in the database
-    private function getDocTypeMapping(): array
-    {
-        return [
-            'internal_docs'  => ['Internal'],
-            'external_docs'  => ['External'],
-            'internal_forms' => ['Internal Forms'],
-            'forms'          => ['Forms'],
-            'logbooks'       => ['Logbooks'],
-        ];
-    }
-
     /** Report sub-tab → parent doc type ID (dcs_doc_types). */
     private function getDocTypeParentMap(): array
     {
@@ -540,7 +528,7 @@ class ReportController extends Controller
 
             // Source
             $source = $ml && $ml->sourceOffices->count() > 0
-                ? $ml->sourceOffices->map(fn($o) => $o->office ? $o->office->office_name : $o->source_name)
+                ? $ml->sourceOffices->map(fn($o) => $o->office?->office_name)
                     ->filter()->implode(', ')
                 : null;
 
@@ -558,8 +546,8 @@ class ReportController extends Controller
                 ? \Carbon\Carbon::parse($ml->doc_registered_date)->format('m/d/Y') : null;
 
             // Masterlist registration time
-            $mlRegTime = $ml && $ml->doc_registered_date
-                ? \Carbon\Carbon::parse($ml->doc_registered_date)->format('h:i A') : null;
+            $mlRegTime = $ml && $ml->doc_registered_time
+                ? $this->formatTime($ml->doc_registered_time) : null;
 
             // Time spent 1 (mins) — receipt to registration
             $timeSpent1 = null;
@@ -732,8 +720,8 @@ class ReportController extends Controller
                 ? \Carbon\Carbon::parse($ml->doc_registered_date)->format('m/d/Y') : null;
 
             // Registered to masterlist - time
-            $timeRegistered = $ml && $ml->doc_registered_date
-                ? \Carbon\Carbon::parse($ml->doc_registered_date)->format('h:i A') : null;
+            $timeRegistered = $ml && $ml->doc_registered_time
+                ? $this->formatTime($ml->doc_registered_time) : null;
 
             // Minutes spent (between receipt and registration)
             $minsSpent = null;
@@ -749,7 +737,7 @@ class ReportController extends Controller
 
             // Source (originator)
             $source = $ml && $ml->sourceOffices->count() > 0
-                ? $ml->sourceOffices->map(fn($o) => $o->office ? $o->office->office_name : $o->source_name)
+                ? $ml->sourceOffices->map(fn($o) => $o->office?->office_name)
                     ->filter()->implode(', ')
                 : null;
 
@@ -915,10 +903,10 @@ class ReportController extends Controller
             $query->where('dcn_date', '<=', $dateTo);
         }
 
-        $dcns = $query->orderBy('dcn_date', 'desc')->get();
+        $dcns = $query->with('revisions')->orderBy('dcn_date', 'desc')->get();
 
         $rows = $dcns->map(function ($dcn, $index) {
-            $revisions = DocRevision::where('dcn_id', $dcn->dcn_id)->get();
+            $revisions = $dcn->revisions;
             $purpose = $revisions->first()?->brief_purpose;
 
             return [
@@ -1167,7 +1155,7 @@ class ReportController extends Controller
             $dcn = $doc->documentChangeNotice;
 
             $originator = $ml && $ml->sourceOffices->count() > 0
-                ? $ml->sourceOffices->map(fn($o) => $o->office ? $o->office->office_name : $o->source_name)
+                ? $ml->sourceOffices->map(fn($o) => $o->office?->office_name)
                     ->filter()->implode(', ')
                 : null;
 

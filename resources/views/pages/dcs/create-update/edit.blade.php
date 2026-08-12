@@ -36,10 +36,11 @@
             'label' => $o->office->office_name ?? 'Unknown',
         ])->values();
 
-        $masterlistSourceSeed = collect($sourceOffices ?? [])->map(fn($o) => [
+        $masterlistSourceSeed = collect($sourceOffices ?? [])->map(fn ($o) => [
+            'type'  => 'office',
             'id'    => $o->office->id ?? $o->office_id,
             'label' => $o->office->office_name ?? 'Unknown',
-        ])->values();
+        ])->filter(fn ($o) => $o['id'])->values();
 
         $masterlistOriginatorSeed = ($masterlist && $masterlist->originator_name)
             ? [['label' => $masterlist->originator_name]]

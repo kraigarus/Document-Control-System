@@ -51,8 +51,6 @@ Route::middleware(['auth', 'active'])->group(function () {
         ]);
     });
 
-    Route::get('/api/registered-documents', [RegisterController::class, 'getRegisteredDocuments']);
-
     // API endpoints
     Route::get('/api/offices', fn () => \App\Models\Office::where('status', 'active')
         ->orderBy('office_name')
@@ -101,7 +99,6 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::get('/api/semesters', [RegisterController::class, 'apiSemesters']);
     Route::get('/api/school-years', [RegisterController::class, 'apiSchoolYears']);
     Route::get('/api/documents/search', [RegisterController::class, 'apiSearchDocuments']);
-    Route::get('/api/originators', [RegisterController::class, 'apiOriginators']);
     Route::get('/api/originators', [RegisterController::class, 'apiOriginators']);
     Route::get('/api/faculties', [RegisterController::class, 'apiFaculties']);
     Route::get('/api/program-courses/{programId}/{semesterId}', [RegisterController::class, 'apiProgramCourses']);

@@ -311,6 +311,38 @@ class StampingController extends Controller
 
             $bottomStart = (int) max($marginPx, $imgH * 0.55);
 
+            $yBottom = $imgH - $stampHpx - $marginPx;
+            $xRight  = $imgW - $stampWpx - $marginPx;
+            $xLeft   = $marginPx;
+            $xCentre = (int) max($marginPx, ($imgW - $stampWpx) / 2);
+
+            $probeSlots = [];
+            for ($pct = 95; $pct >= 50; $pct -= 5) {
+                $probeSlots[] = ['x' => $xLeft,   'y' => (int) max($marginPx, ($imgH * $pct / 100) - $stampHpx)];
+                $probeSlots[] = ['x' => $xRight,  'y' => (int) max($marginPx, ($imgH * $pct / 100) - $stampHpx)];
+                $probeSlots[] = ['x' => $xCentre, 'y' => (int) max($marginPx, ($imgH * $pct / 100) - $stampHpx)];
+            }
+            $probeSlots[] = ['x' => $xLeft,  'y' => $yBottom];
+            $probeSlots[] = ['x' => $xRight, 'y' => $yBottom];
+
+            foreach ($probeSlots as $slot) {
+                if ($isRectEmpty($slot['x'], $slot['y'])) {
+                    Log::info('Stamp: empty area found via margin probe', [
+                        'page' => $pageNum,
+                        'x'    => round($slot['x'] / $pxPerMm, 1),
+                        'y'    => round($slot['y'] / $pxPerMm, 1),
+                    ]);
+
+                    return $this->clampToPage(
+                        ['x' => $slot['x'] / $pxPerMm, 'y' => $slot['y'] / $pxPerMm],
+                        $pageWmm,
+                        $pageHmm,
+                        $stampWmm,
+                        $stampHmm
+                    );
+                }
+            }
+
             // Pass 1 — bottom half, coarse.
             $candidates = $scanForEmpty($bottomStart, $imgH - $stampHpx - $marginPx, $coarseStep);
 
@@ -399,41 +431,9 @@ class StampingController extends Controller
                     $stampHmm
                 );
             };
-            // Margin probes for verified empty slots.
-            $yBottom = $imgH - $stampHpx - $marginPx;
-            $xRight  = $imgW - $stampWpx - $marginPx;
-            $xLeft   = $marginPx;
-            $xCentre = (int) max($marginPx, ($imgW - $stampWpx) / 2);
-
-            for ($pct = 95; $pct >= 50; $pct -= 5) {
-                $probeSlots[] = ['x' => $xLeft,   'y' => (int) max($marginPx, ($imgH * $pct / 100) - $stampHpx)];
-                $probeSlots[] = ['x' => $xRight,  'y' => (int) max($marginPx, ($imgH * $pct / 100) - $stampHpx)];
-                $probeSlots[] = ['x' => $xCentre, 'y' => (int) max($marginPx, ($imgH * $pct / 100) - $stampHpx)];
-            }
-            $probeSlots[] = ['x' => $xLeft,  'y' => $yBottom];
-            $probeSlots[] = ['x' => $xRight, 'y' => $yBottom];
-
-            foreach ($probeSlots as $slot) {
-                if ($isRectEmpty($slot['x'], $slot['y'])) {
-                    Log::info('Stamp: empty area found via margin probe', [
-                        'page' => $pageNum,
-                        'x'    => round($slot['x'] / $pxPerMm, 1),
-                        'y'    => round($slot['y'] / $pxPerMm, 1),
-                    ]);
-
-                    return $this->clampToPage(
-                        ['x' => $slot['x'] / $pxPerMm, 'y' => $slot['y'] / $pxPerMm],
-                        $pageWmm,
-                        $pageHmm,
-                        $stampWmm,
-                        $stampHmm
-                    );
-                }
-            }
-
-            $least = $findLeastInk($fineStep);
+            $least = $findLeastInk($coarseStep);
             if ($least === null) {
-                $least = $findLeastInk($coarseStep);
+                $least = $findLeastInk(max($coarseStep * 2, $fineStep * 2));
             }
 
             if ($least !== null) {
@@ -457,7 +457,11 @@ class StampingController extends Controller
     private function resolveStampPosition(string $pdfPath, int $pageNum, string $position, float $pageWmm, float $pageHmm, float $stampWmm, float $stampHmm): array
     {
         if ($position === 'auto') {
-            $cacheKey = md5($pdfPath . '|' . $pageNum . '|' . $stampWmm . '|' . $stampHmm);
+            // One raster scan per page size — reuse on every page (critical for 100+ page PDFs).
+            $cacheKey = md5($pdfPath . '|'
+                . round($pageWmm, 1) . 'x' . round($pageHmm, 1) . '|'
+                . round($stampWmm, 1) . 'x' . round($stampHmm, 1));
+
             if (isset($this->autoPlacementCache[$cacheKey])) {
                 return $this->autoPlacementCache[$cacheKey];
             }
@@ -502,7 +506,8 @@ class StampingController extends Controller
 
     public function preview(Request $request)
     {
-        @ini_set('memory_limit', '256M');
+        @ini_set('memory_limit', '512M');
+        @set_time_limit(600);
         $this->autoPlacementCache = [];
 
         $validated = $this->validateStampPayload($request);
@@ -566,8 +571,8 @@ class StampingController extends Controller
 
     public function apply(Request $request)
     {
-        @ini_set('memory_limit', '256M');
-        @set_time_limit(300);
+        @ini_set('memory_limit', '512M');
+        @set_time_limit(600);
         $this->autoPlacementCache = [];
 
         $validated = $this->validateStampPayload($request);
@@ -622,6 +627,8 @@ class StampingController extends Controller
             if (!copy($outputPath, $fullPath)) {
                 throw new \RuntimeException('Failed to write stamped file to destination.');
             }
+
+            clearstatcache(true, $fullPath);
 
             Log::info('Stamp: file overwritten', [
                 'target' => $fullPath,
@@ -732,6 +739,8 @@ class StampingController extends Controller
 
         StampBackupService::invalidate($request->request_id, $request->file_key);
 
+        $stamp->delete();
+
         Log::info('Stamp removed', [
             'request_id' => $request->request_id,
             'file_key'   => $request->file_key,
@@ -750,6 +759,10 @@ class StampingController extends Controller
 
     public function download(Request $request)
     {
+        @ini_set('memory_limit', '512M');
+        @set_time_limit(600);
+        $this->autoPlacementCache = [];
+
         $validated = $this->validateStampPayload($request);
 
         $fullPath = $this->resolveFilePath($validated['file_path']);
@@ -910,6 +923,10 @@ class StampingController extends Controller
 
             if ($stampAll || $page === 1) {
                 $this->renderStamp($pdf, $stampType, $position, $size['width'], $size['height'], $options, $inputPath, $page);
+            }
+
+            if ($pageCount > 50 && $page % 50 === 0) {
+                Log::info('Stamp: progress', ['page' => $page, 'total' => $pageCount]);
             }
         }
 

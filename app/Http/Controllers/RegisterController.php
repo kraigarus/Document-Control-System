@@ -28,20 +28,12 @@ class RegisterController extends Controller
     // SHARED HELPERS
     // ──────────────────────────────────────────────────────────
     /**
-     * Parse a time value and return a clean display string.
+     * Safely delete a file from the public disk.
      */
-    private function formatTime($value)
+    private function deleteFile(?string $path): void
     {
-        if (!$value) return null;
-
-        if (is_string($value) && !str_contains($value, 'T') && !str_contains($value, '-')) {
-            return $value;
-        }
-
-        try {
-            return \Carbon\Carbon::parse($value)->format('h:i A');
-        } catch (\Exception $e) {
-            return $value;
+        if ($path) {
+            Storage::disk('public')->delete($path);
         }
     }
 
@@ -94,6 +86,10 @@ class RegisterController extends Controller
         }
 
         $existingDr = $relatedDocRequests->first();
+
+        if (!$existingDr) {
+            return ['found' => false, 'reason' => 'not_registered'];
+        }
 
         if ($hasSubType && (int) $existingDr->doc_type_id === (int) $docTypeId) {
             return [
@@ -168,16 +164,6 @@ class RegisterController extends Controller
         return app(\App\Services\DocumentVisibilityService::class)->getVisibleRequestIds();
     }
 
-    /**
-     * Safely delete a file from the public disk.
-     */
-    private function deleteFile(?string $path): void
-    {
-        if ($path) {
-            Storage::disk('public')->delete($path);
-        }
-    }
-
     /** IDs from the doc_types seeder: 11 = Syllabi, 12 = TOS/Rubrics — both share the same wizard/table. */
     private const SYLLABI_LIKE_SUBTYPE_IDS = [11, 12];
 
@@ -229,14 +215,19 @@ class RegisterController extends Controller
                     $copyNum  = $c + 1;
                     $rowLabel = "Syllabi \"{$courseLabel}\" (Copy {$copyNum})";
 
-                    if (empty($request->syllabiDrfNo[$rowIdx])) {
-                        return back()->withInput()->with('error', "{$rowLabel}: DRF No. is required.");
-                    }
-                    if (empty($request->syllabiDrfDate[$rowIdx])) {
-                        return back()->withInput()->with('error', "{$rowLabel}: DRF Date is required.");
-                    }
-                    if (empty($request->syllabiDrfReceived[$rowIdx])) {
-                        return back()->withInput()->with('error', "{$rowLabel}: DRF Received Date is required.");
+                    $drfAvailArr = $request->syllabiDrfAvailability ?? [];
+                    $isDrfAvailable = ($drfAvailArr[$rowIdx] ?? 'not available') === 'available';
+
+                    if ($isDrfAvailable) {
+                        if (empty($request->syllabiDrfNo[$rowIdx])) {
+                            return back()->withInput()->with('error', "{$rowLabel}: DRF No. is required.");
+                        }
+                        if (empty($request->syllabiDrfDate[$rowIdx])) {
+                            return back()->withInput()->with('error', "{$rowLabel}: DRF Date is required.");
+                        }
+                        if (empty($request->syllabiDrfReceived[$rowIdx])) {
+                            return back()->withInput()->with('error', "{$rowLabel}: DRF Received Date is required.");
+                        }
                     }
 
                     if ($copies > 1) {
@@ -301,7 +292,11 @@ class RegisterController extends Controller
 
         // ── Revised mode validation ──
         if ($mode === 'revised') {
-            $docNo     = $request->input('masterlistDocNo');
+            $subType   = \App\Models\DocType::find($request->input('sub_type_id'));
+            $isSyllabi = $this->isSyllabiLikeSubType($subType);
+            $docNo     = $isSyllabi
+                ? $request->input('syllabiDocNo')
+                : $request->input('masterlistDocNo');
             $docTypeId = $request->input('doc_type_id');
             $subTypeId = $request->input('sub_type_id');
 
@@ -323,7 +318,6 @@ class RegisterController extends Controller
             }
 
             $existing    = $result['latest'];
-            $nextRev     = (int) $existing->revise_no + 1;
             $requestedRev = (int) $request->input('masterlistRevisionNo');
 
             // Allow any revision number (including lower than latest) as long as it
@@ -390,6 +384,7 @@ class RegisterController extends Controller
         DB::beginTransaction();
 
         $uploadedFiles = [];
+        $filesToDelete = [];
 
         try {
             // ── 1. Create the master Document Request ──
@@ -522,8 +517,7 @@ class RegisterController extends Controller
                 // ── Origins (offices only — see saveOriginsFromArrays note) ──
                 $this->saveOriginsFromArrays(
                     $masterlist,
-                    $request->input('masterlistOfficeIds', []),
-                    $request->input('masterlistOriginatorNames', [])
+                    $request->input('masterlistOfficeIds', [])
                 );
 
                 $relatedIds = array_filter(array_map('intval', $request->input('relatedDocumentIds', [])));
@@ -585,8 +579,7 @@ class RegisterController extends Controller
                 MasterlistSourceOffice::where('masterlist_id', $masterlist->id)->delete();
                 $this->saveOriginsFromArrays(
                     $masterlist,
-                    $request->input('masterlistOfficeIds', []),
-                    $request->input('masterlistOriginatorNames', [])
+                    $request->input('masterlistOfficeIds', [])
                 );
 
                 $relatedIds = array_filter(array_map('intval', $request->input('relatedDocumentIds', [])));
@@ -688,6 +681,10 @@ class RegisterController extends Controller
 
             DB::commit();
 
+            foreach ($filesToDelete as $file) {
+                $this->deleteFile($file);
+            }
+
             return redirect()->route('register.create')
                 ->with('success', 'Document registered successfully!');
 
@@ -705,22 +702,12 @@ class RegisterController extends Controller
         }
     }
 
-    /**
-     * Save Source Unit origins for a Masterlist registration.
-     *
-     * NOTE: dcs_masterlist_source_offices no longer has a free-text "source_name"
-     * column (see the updated migration/model — only masterlist_id + office_id).
-     * Freeform names typed into the Source Unit widget can therefore no longer be
-     * persisted here; only picked offices are saved. The $names parameter is kept
-     * for backward-compatible call sites but is intentionally ignored. (The
-     * "Originator" field is unaffected — that's the plain originator_name string
-     * column on dcs_masterlist_registration itself.)
-     */
-    private function saveOriginsFromArrays(MasterlistRegistration $masterlist, array $officeIds, array $names = []): void
+    /** Save Source Unit origins for a Masterlist registration (defined offices only). */
+    private function saveOriginsFromArrays(MasterlistRegistration $masterlist, array $officeIds): void
     {
         foreach ($officeIds as $officeId) {
             $id = (int) trim((string) $officeId);
-            if ($id <= 0) continue;  // ← rejects 0, negatives, and whitespace-only
+            if ($id <= 0) continue;
             MasterlistSourceOffice::create([
                 'masterlist_id' => $masterlist->id,
                 'office_id'     => $id,
@@ -782,10 +769,16 @@ class RegisterController extends Controller
         );
     }
 
-    public function apiFaculties()
+    public function apiFaculties(Request $request)
     {
+        $query = \App\Models\Faculty::orderBy('faculty_name');
+
+        if ($request->filled('college_id')) {
+            $query->where('college_id', (int) $request->input('college_id'));
+        }
+
         return response()->json(
-            \App\Models\Faculty::orderBy('faculty_name')->get(['id', 'faculty_name'])
+            $query->get(['id', 'faculty_name', 'college_id'])
         );
     }
 
@@ -1123,7 +1116,8 @@ class RegisterController extends Controller
         $masterlistSourceUnit = '';
         if ($masterlist) {
             $sourceOffices = MasterlistSourceOffice::where('masterlist_id', $masterlist->id)->with('office')->get();
-            $masterlistSourceUnit = $sourceOffices->map(fn ($o) => $o->office->office_name ?? null)
+            $masterlistSourceUnit = $sourceOffices
+                ->map(fn ($o) => $o->office?->office_name)
                 ->filter()
                 ->implode(', ');
                     }
@@ -1558,7 +1552,7 @@ class RegisterController extends Controller
             }
 
             // ── 4. Masterlist ──
-            if ($request->filled('masterlistDocNo')) {
+            if (in_array(3, $checkedChecklists, true) && $request->filled('masterlistDocNo')) {
                 $masterlist     = MasterlistRegistration::where('request_id', $requestId)->first();
                 $masterlistFile = $masterlist ? $masterlist->scanned_masterlist : null;
 
@@ -1606,8 +1600,7 @@ class RegisterController extends Controller
                 MasterlistSourceOffice::where('masterlist_id', $masterlist->id)->delete();
                 $this->saveOriginsFromArrays(
                     $masterlist,
-                    $request->input('masterlistOfficeIds', []),
-                    $request->input('masterlistOriginatorNames', [])
+                    $request->input('masterlistOfficeIds', [])
                 );
 
                 $relatedIds = array_filter(array_map('intval', $request->input('relatedDocumentIds', [])));
@@ -1629,7 +1622,7 @@ class RegisterController extends Controller
                 $oldSyllabi->each->delete();
             }
 
-            if ($isSyllabi) {
+            if ($isSyllabi && in_array(3, $checkedChecklists, true)) {
                 $totalPages = 0;
                 if ($request->has('syllabiNoPages')) {
                     $totalPages = array_sum(
@@ -1684,8 +1677,7 @@ class RegisterController extends Controller
                 MasterlistSourceOffice::where('masterlist_id', $masterlist->id)->delete();
                 $this->saveOriginsFromArrays(
                     $masterlist,
-                    $request->input('masterlistOfficeIds', []),
-                    $request->input('masterlistOriginatorNames', [])
+                    $request->input('masterlistOfficeIds', [])
                 );
 
                 $relatedIds = array_filter(array_map('intval', $request->input('relatedDocumentIds', [])));
@@ -1903,7 +1895,9 @@ class RegisterController extends Controller
             if ($masterlist) {
                 if ($masterlist->scanned_masterlist) $filesToDelete[] = $masterlist->scanned_masterlist;
                 MasterlistSourceOffice::where('masterlist_id', $masterlist->id)->delete();
-                $masterlist->relatedDocuments()->detach();
+                \App\Models\MasterlistRelatedDoc::where('masterlist_id', $masterlist->id)
+                    ->orWhere('related_doc_id', $masterlist->id)
+                    ->delete();
                 $masterlist->delete();
             }
 

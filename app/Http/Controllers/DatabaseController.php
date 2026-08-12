@@ -37,6 +37,7 @@ class DatabaseController extends Controller
                 'documentRetrieval.offices.office',
                 'documentDistribution',
                 'documentDistribution.offices.office',
+                'syllabi',
                 'syllabi.course',
             ]);
 
@@ -138,7 +139,7 @@ class DatabaseController extends Controller
                 $sourceUnitName = null;
                 if ($ml && $ml->sourceOffices->count() > 0) {
                     $sourceUnitName = $ml->sourceOffices
-                        ->map(fn ($o) => $o->office ? $o->office->office_name : null)
+                        ->map(fn ($o) => $o->office?->office_name)
                         ->filter()->implode(', ') ?: null;
                 }
 
@@ -238,7 +239,22 @@ class DatabaseController extends Controller
                 if ($wantLatest) {
                     $groups = $groups->map(fn ($g) => [...$g, 'children' => collect()])->values();
                 } else {
-                    $groups = $groups->filter(fn ($g) => $g['has_revisions'])->values();
+                    $groups = $groups
+                        ->filter(fn ($g) => $g['has_revisions'])
+                        ->flatMap(function ($g) {
+                            return $g['children']->map(function ($child) use ($g) {
+                                $child['status'] = 'Obsolete';
+
+                                return [
+                                    'doc_no'         => $g['doc_no'],
+                                    'parent'         => $child,
+                                    'children'       => collect(),
+                                    'has_revisions'  => false,
+                                    'revision_count' => $g['revision_count'],
+                                ];
+                            });
+                        })
+                        ->values();
                 }
             }
 

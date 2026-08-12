@@ -64,34 +64,76 @@ class StampBackupService
         $absolutePath = realpath($absolutePath) ?: $absolutePath;
         $relativePath = ltrim(str_replace('\\', '/', $relativePath), '/');
 
-        $backupPath = self::backupPath($requestId, $fileKey);
-        $meta       = self::readMeta($requestId, $fileKey);
+        $backupPath  = self::backupPath($requestId, $fileKey);
+        $meta        = self::readMeta($requestId, $fileKey);
         $currentHash = is_readable($absolutePath) ? md5_file($absolutePath) : '';
 
-        if (file_exists($backupPath) && filesize($backupPath) > 0 && $meta) {
-            $knownRelative = (string) ($meta['relative_path'] ?? '');
-            $stampedHash   = (string) ($meta['stamped_hash'] ?? '');
-            $originalHash  = (string) ($meta['original_hash'] ?? '');
+        $hasStamp = DocumentStamp::where('document_request_id', $requestId)
+            ->where('file_key', $fileKey)
+            ->exists();
 
-            $pathChanged = $knownRelative !== '' && $knownRelative !== $relativePath;
+        $knownRelative = (string) ($meta['relative_path'] ?? '');
+        $pathChanged   = $knownRelative !== '' && $knownRelative !== $relativePath;
 
-            if (!$pathChanged && $stampedHash !== '' && hash_equals($stampedHash, $currentHash)) {
-                return $backupPath;
-            }
-
-            if (!$pathChanged && $originalHash !== '' && hash_equals($originalHash, $currentHash)) {
-                return $backupPath;
-            }
-
-            Log::info('Stamp: live file no longer matches backup — creating fresh backup', [
-                'request_id'    => $requestId,
-                'file_key'      => $fileKey,
-                'path_changed'  => $pathChanged,
-                'known_path'    => $knownRelative,
-                'current_path'  => $relativePath,
+        if ($pathChanged) {
+            Log::info('Stamp: file path changed — resetting backup', [
+                'request_id'   => $requestId,
+                'file_key'     => $fileKey,
+                'known_path'   => $knownRelative,
+                'current_path' => $relativePath,
             ]);
-
             self::invalidate($requestId, $fileKey);
+            $hasStamp = false;
+            $meta     = null;
+        }
+
+        if (file_exists($backupPath) && filesize($backupPath) > 0) {
+            $backupHash = md5_file($backupPath);
+
+            // Backup was overwritten with a stamped copy — cannot re-stamp cleanly.
+            if ($hasStamp && $currentHash !== '' && hash_equals($backupHash, $currentHash)) {
+                throw new \RuntimeException(
+                    'The unstamped original backup was lost. Remove the current stamp first, then apply the new stamp.'
+                );
+            }
+
+            // Changing stamp type: always restamp from the preserved original, not the live file.
+            if ($hasStamp) {
+                Log::info('Stamp: re-stamping from preserved original backup', [
+                    'request_id' => $requestId,
+                    'file_key'   => $fileKey,
+                ]);
+
+                return realpath($backupPath) ?: $backupPath;
+            }
+
+            if ($meta) {
+                $stampedHash  = (string) ($meta['stamped_hash'] ?? '');
+                $originalHash = (string) ($meta['original_hash'] ?? '');
+
+                if ($stampedHash !== '' && hash_equals($stampedHash, $currentHash)) {
+                    return realpath($backupPath) ?: $backupPath;
+                }
+
+                if ($originalHash !== '' && hash_equals($originalHash, $currentHash)) {
+                    return realpath($backupPath) ?: $backupPath;
+                }
+
+                // Live file changed outside edit flow — only reset when there is no active stamp.
+                Log::info('Stamp: live file no longer matches backup metadata — resetting', [
+                    'request_id' => $requestId,
+                    'file_key'   => $fileKey,
+                ]);
+                self::invalidate($requestId, $fileKey);
+            } else {
+                // Backup exists but meta is missing — keep the original backup file.
+                Log::warning('Stamp: backup exists without metadata — reusing backup file', [
+                    'request_id' => $requestId,
+                    'file_key'   => $fileKey,
+                ]);
+
+                return realpath($backupPath) ?: $backupPath;
+            }
         }
 
         return self::createBackup($requestId, $fileKey, $absolutePath, $relativePath);
@@ -138,6 +180,13 @@ class StampBackupService
             mkdir($dir, 0755, true);
         }
 
+        // Never overwrite an existing original backup (prevents baking stamps into the backup).
+        if (file_exists($backupPath) && filesize($backupPath) > 0) {
+            Log::info('Stamp: reusing existing backup', ['path' => $backupPath]);
+
+            return realpath($backupPath) ?: $backupPath;
+        }
+
         if (!copy($absolutePath, $backupPath)) {
             throw new \RuntimeException('Failed to create backup of original file.');
         }
@@ -156,7 +205,7 @@ class StampBackupService
             'to'   => $backupPath,
         ]);
 
-        return $backupPath;
+        return realpath($backupPath) ?: $backupPath;
     }
 
     /** @return array<string, mixed>|null */

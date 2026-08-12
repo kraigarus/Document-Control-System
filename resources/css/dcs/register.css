@@ -1448,22 +1448,63 @@ body {
     line-height: 1.4;
 }
 
-.syllabi-faculty-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    margin-top: 4px;
+.syllabi-faculty-wrap {
+    position: relative;
+    overflow: visible;
 }
 
-.syllabi-faculty-chips .reg-inline-chip span {
-    white-space: normal;
-    overflow-wrap: break-word;
-    max-width: 160px;
+#syllabiWizardTable tbody td.col-shared {
+    overflow: visible;
+    vertical-align: top;
+}
+
+.syllabi-faculty-input {
+    width: 100%;
+    border: 1px solid var(--reg-border);
+    border-radius: var(--reg-radius-sm);
+    padding: 6px 8px;
+    font-size: 0.82rem;
+    background: #fff;
+}
+
+/* Appended to document.body — avoids clipping inside .reg-table-wrap */
+.syllabi-faculty-dropdown {
+    position: fixed;
+    z-index: 10050;
+    min-width: 180px;
+    max-height: 220px;
+    overflow-y: auto;
+    background: var(--reg-surface, #fff);
+    border: 1px solid var(--reg-border, #e2e8f0);
+    border-radius: var(--reg-radius-sm, 6px);
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
+}
+
+.syllabi-faculty-dropdown div {
+    padding: 9px 14px;
+    font-size: 0.82rem;
+    color: var(--reg-text, #1e293b);
+    cursor: pointer;
+}
+
+.syllabi-faculty-dropdown div:hover {
+    background: #f1f5f9;
+}
+
+.syllabi-faculty-dropdown .reg-reldocs-noresult {
+    padding: 9px 14px;
+    font-size: 0.78rem;
+    color: #64748b;
+    cursor: default;
+}
+
+.syllabi-faculty-input:read-only {
+    background: #f8fafc;
+    cursor: default;
 }
 
 #syllabiWizardTable[data-active-step="2"] .syllabi-merged-course,
-#syllabiWizardTable[data-active-step="2"] .syllabi-faculty-input,
-#syllabiWizardTable[data-active-step="2"] .syllabi-faculty-chips button {
+#syllabiWizardTable[data-active-step="2"] .syllabi-faculty-input {
     pointer-events: none;
     cursor: default;
 }

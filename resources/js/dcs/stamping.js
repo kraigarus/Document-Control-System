@@ -315,10 +315,17 @@ document.addEventListener('DOMContentLoaded', function () {
     // LOAD PREVIEW
     // ═══════════════════════════════════════════
 
-    function loadPreview() {
+    function storagePdfUrl(path, bust) {
+        var base = '/storage/' + path;
+        if (!bust) return base;
+        return base + (base.indexOf('?') >= 0 ? '&' : '?') + 'v=' + bust;
+    }
+
+    function loadPreview(cacheBust) {
         if (!state.selectedFile) return;
 
-        const url = '/storage/' + state.selectedFile.path;
+        const bust = cacheBust || Date.now();
+        const url  = storagePdfUrl(state.selectedFile.path, bust);
 
         previewFallback.style.display = 'none';
         pdfPreview.style.display      = 'block';
@@ -714,9 +721,13 @@ document.addEventListener('DOMContentLoaded', function () {
         })
         .then(function (res) {
             return res.json().catch(function () {
-                throw new Error(res.status === 419
-                    ? 'Session expired — refresh the page and try again.'
-                    : 'Stamping failed (server error). Large PDFs may take up to a minute.');
+                var msg = 'Stamping failed (server error).';
+                if (res.status === 419) {
+                    msg = 'Session expired — refresh the page and try again.';
+                } else if (res.status === 504) {
+                    msg = 'Stamping timed out. Large PDFs (400+ pages) can take several minutes — please wait and try again.';
+                }
+                throw new Error(msg);
             }).then(function (data) {
                 if (!res.ok) throw new Error(data.message || 'Failed to apply stamp');
                 return data;
@@ -725,7 +736,11 @@ document.addEventListener('DOMContentLoaded', function () {
         .then(function (data) {
             showToast('Stamp applied successfully!', 'success');
             confirmModal.style.display = 'none';
-            hideStampModal();
+            if (state.selectedFile) {
+                state.selectedFile.stamped    = true;
+                state.selectedFile.stamp_type   = state.stampType;
+            }
+            loadPreview(Date.now());
             setTimeout(function () { location.reload(); }, 1200);
         })
         .catch(function (err) {

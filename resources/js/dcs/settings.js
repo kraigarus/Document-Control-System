@@ -569,11 +569,8 @@ function confirmDelete({ title = "Delete", message = "This action cannot be undo
 
     window.submitFaculty = async function (id) {
         const selectEl = document.getElementById("faculty_college_idInput");
-        console.log("Select has options:", selectEl.options.length, "current value:", selectEl.value);
         const collegeId = selectEl.value || null;
         const name = document.getElementById("faculty_nameInput").value.trim();
-
-        console.log("Sending:", { faculty_name: name, college_id: collegeId }); // ← ADD THIS
 
         if (!name) { showToast("Faculty name is required.", "error"); return; }
 
