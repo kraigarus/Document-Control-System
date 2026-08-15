@@ -727,10 +727,9 @@
         </section>
 
     </form>
-</main>
 
-<!-- ═══ CONFIRMATION MODAL ═══ -->
-<div class="reg-modal-overlay" id="confirmModal" style="display: none;">
+    <!-- ═══ CONFIRMATION MODAL ═══ -->
+    <div class="reg-modal-overlay" id="confirmModal" aria-hidden="true">
     <div class="reg-modal">
         <div class="reg-modal-header">
             <i class="fa-solid fa-clipboard-check"></i>
@@ -752,6 +751,7 @@
         </div>
     </div>
 </div>
+</main>
 
 
 @push('styles')

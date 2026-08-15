@@ -207,8 +207,8 @@ body {
    ══════════════════════════════════════════════ */
 .reg-container {
     position: fixed;
-    top: 70px;
-    left: 280px;
+    top: var(--nav-top, 70px);
+    left: var(--nav-width, 272px);
     right: 0;
     bottom: 0;
     padding: 28px 32px;
@@ -1960,12 +1960,23 @@ select.reg-field-locked:disabled {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 9999;
-    animation: fadeIn 0.2s ease;
-    padding: 20px;
+    z-index: 20000;
+    padding: 24px;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.32s ease, visibility 0.32s ease;
+}
+
+.reg-modal-overlay.is-open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
 }
 
 .reg-modal {
+    position: relative;
+    z-index: 1;
     background: var(--reg-surface);
     border-radius: var(--reg-radius);
     width: 100%;
@@ -1973,9 +1984,18 @@ select.reg-field-locked:disabled {
     max-height: 80vh;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
-    animation: scaleIn 0.2s ease;
+    box-shadow: 0 24px 64px rgba(15, 23, 42, 0.35);
     overflow: hidden;
+    opacity: 0;
+    transform: translateY(20px) scale(0.96);
+    transition:
+        transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+        opacity 0.32s ease;
+}
+
+.reg-modal-overlay.is-open .reg-modal {
+    opacity: 1;
+    transform: translateY(0) scale(1);
 }
 
 .reg-modal-header {

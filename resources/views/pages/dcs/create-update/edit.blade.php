@@ -940,10 +940,9 @@
                 </div>
             </div>
         </form>
-    </div>
 
     <!-- ═══ CONFIRM MODAL ═══ -->
-    <div class="reg-modal-overlay" id="confirmModal" style="display: none;">
+    <div class="reg-modal-overlay" id="confirmModal" aria-hidden="true">
         <div class="reg-modal">
             <div class="reg-modal-header">
                 <i class="fa-solid fa-clipboard-check"></i>
@@ -964,6 +963,7 @@
                 </button>
             </div>
         </div>
+    </div>
     </div>
 
 </body>

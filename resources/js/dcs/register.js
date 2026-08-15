@@ -2500,7 +2500,14 @@ window.confirmSave = function () {
     const missing = collectMissingFields();
     renderMissingFieldsWarning(reviewContent, missing);
 
-    document.getElementById("confirmModal").style.display = "flex";
+    const modal = document.getElementById("confirmModal");
+    if (modal) {
+        if (modal.parentElement !== document.body) {
+            document.body.appendChild(modal);
+        }
+        modal.classList.add("is-open");
+        modal.setAttribute("aria-hidden", "false");
+    }
 };
 
 /** Shows a redesigned warning card + a required "save anyway" checkbox when fields are blank.
@@ -2733,8 +2740,20 @@ function buildDistributionReview(reviewContent) {
 }
 
 window.closeConfirmModal = function () {
-    document.getElementById("confirmModal").style.display = "none";
+    const modal = document.getElementById("confirmModal");
+    if (!modal) return;
+    modal.classList.remove("is-open");
+    modal.setAttribute("aria-hidden", "true");
 };
+
+document.getElementById("confirmModal")?.addEventListener("click", function (e) {
+    if (e.target === this) closeConfirmModal();
+});
+document.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape") return;
+    const modal = document.getElementById("confirmModal");
+    if (modal?.classList.contains("is-open")) closeConfirmModal();
+});
 
 window.submitForm = function () {
     document.getElementById("masterForm").submit();
