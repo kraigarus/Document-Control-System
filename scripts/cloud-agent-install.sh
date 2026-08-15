@@ -37,11 +37,7 @@ if ! command -v composer >/dev/null 2>&1; then
 fi
 
 echo "==> Starting MySQL and provisioning databases/user"
-sudo service mysql start || true
-for _ in $(seq 1 30); do
-    sudo mysqladmin ping >/dev/null 2>&1 && break
-    sleep 1
-done
+bash "$(dirname "$0")/cloud-agent-start.sh"
 sudo mysql <<'SQL'
 CREATE DATABASE IF NOT EXISTS document_control_system CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE IF NOT EXISTS testing CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

@@ -7,6 +7,11 @@
 # queue worker) start. Safe to run on every boot.
 set -euo pipefail
 
+# The socket/PID directory lives on tmpfs and is not recreated when a pod boots
+# from a snapshot, so ensure it exists (owned by the mysql user) before start.
+echo "==> Ensuring MySQL runtime directory"
+sudo install -d -o mysql -g mysql -m 0755 /var/run/mysqld
+
 echo "==> Starting MySQL"
 sudo service mysql start || true
 
@@ -19,5 +24,6 @@ for _ in $(seq 1 60); do
     sleep 1
 done
 
-echo "MySQL did not become ready in time" >&2
+echo "MySQL did not become ready in time; recent error log:" >&2
+sudo tail -n 80 /var/log/mysql/error.log 2>/dev/null >&2 || true
 exit 1
