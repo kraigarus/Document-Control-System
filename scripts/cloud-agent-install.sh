@@ -36,6 +36,17 @@ if ! command -v composer >/dev/null 2>&1; then
     rm -f /tmp/composer-setup.php
 fi
 
+echo "==> Configuring MySQL for container/overlay filesystems"
+# Pods that boot from an environment-build snapshot run on overlayfs, which does
+# not support O_DIRECT or Linux native AIO. Without these overrides InnoDB
+# aborts during file I/O / redo-log recovery with "OS error 22 (Invalid
+# argument)". Writing the drop-in here bakes it into the build snapshot.
+sudo tee /etc/mysql/mysql.conf.d/zz-cloud-agent.cnf >/dev/null <<'CNF'
+[mysqld]
+innodb_flush_method = fsync
+innodb_use_native_aio = 0
+CNF
+
 echo "==> Starting MySQL and provisioning databases/user"
 bash "$(dirname "$0")/cloud-agent-start.sh"
 sudo mysql <<'SQL'
@@ -77,5 +88,11 @@ npm run build
 
 echo "==> Clearing cached configuration"
 php artisan config:clear
+
+# Shut MySQL down cleanly so that a snapshot taken right after install (for an
+# environment build) captures a consistent InnoDB data directory. The start
+# phase brings MySQL back up on the next boot.
+echo "==> Stopping MySQL for a consistent data directory"
+sudo mysqladmin shutdown 2>/dev/null || true
 
 echo "==> Install phase complete"
