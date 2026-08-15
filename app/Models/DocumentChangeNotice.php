@@ -53,6 +53,11 @@ class DocumentChangeNotice extends Model
         return $this->belongsTo(Office::class, 'office_id');
     }
 
+    public function sourceOffices()
+    {
+        return $this->hasMany(DcnOffice::class, 'dcn_id');
+    }
+
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');

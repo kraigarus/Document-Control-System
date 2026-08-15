@@ -26,6 +26,13 @@ class Syllabi extends Model
         'time_received',
     ];
 
+    protected function casts(): array
+    {
+        return [
+            'is_available' => 'boolean',
+        ];
+    }
+
     public function request()
     {
         return $this->belongsTo(DocumentRequest::class, 'request_id');

@@ -75,15 +75,4 @@
             </a>
         </li>
     </ul>
-
-    <div class="nav-footer">
-        <div class="nav-divider"></div>
-        <div class="nav-item footer-item">
-            <a href="/profile">
-                <i class="fa-regular fa-circle-user"></i>
-                <span>My Profile</span>
-                <span class="tooltip">My Profile</span>
-            </a>
-        </div>
-    </div>
 </nav>

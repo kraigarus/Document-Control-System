@@ -49,7 +49,7 @@
                 <select name="source_unit" id="filterOffice">
                     <option value="">All Offices</option>
                     @foreach($offices as $o)
-                        <option value="{{ $o->office_id }}">{{ $o->office_name }}</option>
+                        <option value="{{ $o->id }}">{{ $o->office_name }}</option>
                     @endforeach
                 </select>
             </div>

@@ -72,8 +72,10 @@ class StampingController extends Controller
     // INDEX
     // ──────────────────────────────────────────
 
-    public function index()
+    public function index(\App\Services\DocumentVisibilityService $visibility)
     {
+        $visibleIds = $visibility->getVisibleRequestIds();
+
         $documents = DocumentRequest::with([
             'masterlistRegistration',
             'documentRequestForm',
@@ -82,7 +84,10 @@ class StampingController extends Controller
             'documentRetrieval',
             'docType',
             'stamps',
+            'syllabi.drfs',
+            'syllabi.course',
         ])
+        ->whereIn('id', $visibleIds)
         ->where(function ($q) {
             $q->whereHas('masterlistRegistration', fn ($q2) =>
                 $q2->whereNotNull('scanned_masterlist')->where('scanned_masterlist', '!=', ''))
@@ -93,7 +98,9 @@ class StampingController extends Controller
               ->orWhereHas('documentDistribution', fn ($q2) =>
                 $q2->whereNotNull('scanned_distribution')->where('scanned_distribution', '!=', ''))
               ->orWhereHas('documentRetrieval', fn ($q2) =>
-                $q2->whereNotNull('scanned_retrieval')->where('scanned_retrieval', '!=', ''));
+                $q2->whereNotNull('scanned_retrieval')->where('scanned_retrieval', '!=', ''))
+              ->orWhereHas('syllabi.drfs', fn ($q2) =>
+                $q2->whereNotNull('scanned_drf')->where('scanned_drf', '!=', ''));
         })
         ->orderBy('id', 'desc')
         ->paginate(15);
@@ -111,7 +118,7 @@ class StampingController extends Controller
     {
         $validated = $request->validate([
             'file_path'    => 'required|string|max:500',
-            'file_key'     => 'required|string|in:masterlist,drf,dcn,distribution,retrieval',
+            'file_key'     => ['required', 'string', 'max:50', 'regex:/^(masterlist|drf|dcn|distribution|retrieval|syllabi_drf_\d+)$/'],
             'request_id'   => 'required|integer|exists:dcs_document_requests,id',
             'doc_no'       => 'nullable|string|max:100',
             'doc_title'    => 'nullable|string|max:500',
@@ -144,13 +151,13 @@ class StampingController extends Controller
 
     /**
      * Find a completely empty rectangle on the page for the stamp.
-     * The stamp box must contain zero text, lines, images, or watermarks.
-     * Prefers the bottom of the page when several empty spots exist.
+     * Scans the whole page (not only top/bottom). Prefers empty space at
+     * mid-left, mid-right, or center when those regions are clear.
      */
     private function findEmptyArea(string $pdfPath, int $pageNum, float $pageWmm, float $pageHmm, float $stampWmm, float $stampHmm): array
     {
         $fallback = $this->clampToPage(
-            ['x' => $pageWmm - $stampWmm - 15, 'y' => $pageHmm - $stampHmm - 15],
+            ['x' => $pageWmm - $stampWmm - 15, 'y' => ($pageHmm - $stampHmm) / 2],
             $pageWmm,
             $pageHmm,
             $stampWmm,
@@ -250,7 +257,20 @@ class StampingController extends Controller
                 return $found;
             };
 
-            $pickPreferred = function (array $candidates) use ($imgH, $imgW, $pxPerMm, $stampWpx, $stampHpx): ?array {
+            $scoreSpot = function (int $x, int $y) use ($imgW, $imgH, $stampWpx, $stampHpx): float {
+                $cx = ($x + $stampWpx / 2) / max(1, $imgW);
+                $cy = ($y + $stampHpx / 2) / max(1, $imgH);
+
+                // Prefer the vertical middle; penalize hugging the top or bottom.
+                $yScore = 1.0 - min(1.0, abs($cy - 0.5) * 1.7);
+
+                // Prefer left, right, or true center columns.
+                $xScore = 1.0 - min(abs($cx - 0.18), abs($cx - 0.82), abs($cx - 0.50)) * 2.4;
+
+                return ($yScore * 2.2) + $xScore;
+            };
+
+            $pickPreferred = function (array $candidates) use ($scoreSpot, $pxPerMm, $imgH): ?array {
                 if ($candidates === []) {
                     return null;
                 }
@@ -259,12 +279,7 @@ class StampingController extends Controller
                 $bestRank = -1.0;
 
                 foreach ($candidates as $c) {
-                    // Prefer lower on page (bottom), then side margins over centre.
-                    $yNorm = ($c['y'] + $stampHpx / 2) / $imgH;
-                    $xNorm = ($c['x'] + $stampWpx / 2) / $imgW;
-                    $centreDist = abs($xNorm - 0.5);
-                    $rank = ($yNorm * 1000) + ($centreDist * 120);
-
+                    $rank = $scoreSpot((int) $c['x'], (int) $c['y']);
                     if ($rank > $bestRank) {
                         $bestRank = $rank;
                         $best = $c;
@@ -282,12 +297,14 @@ class StampingController extends Controller
                 ];
             };
 
-            $refinePosition = function (int $x, int $y) use ($isRectEmpty, $fineStep, $marginPx, $imgW, $imgH, $stampWpx, $stampHpx): ?array {
+            $refinePosition = function (int $x, int $y) use (
+                $isRectEmpty, $scoreSpot, $fineStep, $marginPx, $imgW, $imgH, $stampWpx, $stampHpx
+            ): ?array {
                 $best = ['x' => $x, 'y' => $y];
-                $bestY = $y;
+                $bestScore = $scoreSpot($x, $y);
 
-                for ($dy = -$fineStep * 3; $dy <= $fineStep * 3; $dy += $fineStep) {
-                    for ($dx = -$fineStep * 3; $dx <= $fineStep * 3; $dx += $fineStep) {
+                for ($dy = -$fineStep * 4; $dy <= $fineStep * 4; $dy += $fineStep) {
+                    for ($dx = -$fineStep * 4; $dx <= $fineStep * 4; $dx += $fineStep) {
                         $tx = $x + $dx;
                         $ty = $y + $dy;
                         if ($tx < $marginPx || $ty < $marginPx) {
@@ -299,8 +316,9 @@ class StampingController extends Controller
                         if (!$isRectEmpty($tx, $ty)) {
                             continue;
                         }
-                        if ($ty >= $bestY) {
-                            $bestY = $ty;
+                        $score = $scoreSpot($tx, $ty);
+                        if ($score > $bestScore) {
+                            $bestScore = $score;
                             $best = ['x' => $tx, 'y' => $ty];
                         }
                     }
@@ -309,49 +327,51 @@ class StampingController extends Controller
                 return $best;
             };
 
-            $bottomStart = (int) max($marginPx, $imgH * 0.55);
-
-            $yBottom = $imgH - $stampHpx - $marginPx;
             $xRight  = $imgW - $stampWpx - $marginPx;
             $xLeft   = $marginPx;
             $xCentre = (int) max($marginPx, ($imgW - $stampWpx) / 2);
 
             $probeSlots = [];
-            for ($pct = 95; $pct >= 50; $pct -= 5) {
-                $probeSlots[] = ['x' => $xLeft,   'y' => (int) max($marginPx, ($imgH * $pct / 100) - $stampHpx)];
-                $probeSlots[] = ['x' => $xRight,  'y' => (int) max($marginPx, ($imgH * $pct / 100) - $stampHpx)];
-                $probeSlots[] = ['x' => $xCentre, 'y' => (int) max($marginPx, ($imgH * $pct / 100) - $stampHpx)];
+            foreach ([0.18, 0.32, 0.50, 0.68, 0.82] as $yFrac) {
+                $py = (int) max($marginPx, ($imgH * $yFrac) - ($stampHpx / 2));
+                $py = min($py, $imgH - $stampHpx - $marginPx);
+                $probeSlots[] = ['x' => $xLeft,   'y' => $py];
+                $probeSlots[] = ['x' => $xRight,  'y' => $py];
+                $probeSlots[] = ['x' => $xCentre, 'y' => $py];
             }
-            $probeSlots[] = ['x' => $xLeft,  'y' => $yBottom];
-            $probeSlots[] = ['x' => $xRight, 'y' => $yBottom];
 
+            $probeBest = null;
+            $probeBestScore = -1.0;
             foreach ($probeSlots as $slot) {
-                if ($isRectEmpty($slot['x'], $slot['y'])) {
-                    Log::info('Stamp: empty area found via margin probe', [
-                        'page' => $pageNum,
-                        'x'    => round($slot['x'] / $pxPerMm, 1),
-                        'y'    => round($slot['y'] / $pxPerMm, 1),
-                    ]);
-
-                    return $this->clampToPage(
-                        ['x' => $slot['x'] / $pxPerMm, 'y' => $slot['y'] / $pxPerMm],
-                        $pageWmm,
-                        $pageHmm,
-                        $stampWmm,
-                        $stampHmm
-                    );
+                if (!$isRectEmpty($slot['x'], $slot['y'])) {
+                    continue;
+                }
+                $score = $scoreSpot($slot['x'], $slot['y']);
+                if ($score > $probeBestScore) {
+                    $probeBestScore = $score;
+                    $probeBest = $slot;
                 }
             }
 
-            // Pass 1 — bottom half, coarse.
-            $candidates = $scanForEmpty($bottomStart, $imgH - $stampHpx - $marginPx, $coarseStep);
+            if ($probeBest !== null && $probeBestScore >= 2.4) {
+                Log::info('Stamp: empty area found via full-page probe', [
+                    'page'  => $pageNum,
+                    'x'     => round($probeBest['x'] / $pxPerMm, 1),
+                    'y'     => round($probeBest['y'] / $pxPerMm, 1),
+                    'score' => round($probeBestScore, 3),
+                ]);
 
-            // Pass 2 — full page, coarse.
-            if ($candidates === []) {
-                $candidates = $scanForEmpty($marginPx, $imgH - $stampHpx - $marginPx, $coarseStep);
+                return $this->clampToPage(
+                    ['x' => $probeBest['x'] / $pxPerMm, 'y' => $probeBest['y'] / $pxPerMm],
+                    $pageWmm,
+                    $pageHmm,
+                    $stampWmm,
+                    $stampHmm
+                );
             }
 
-            // Pass 3 — full page, fine.
+            $candidates = $scanForEmpty($marginPx, $imgH - $stampHpx - $marginPx, $coarseStep);
+
             if ($candidates === []) {
                 $candidates = $scanForEmpty($marginPx, $imgH - $stampHpx - $marginPx, $fineStep);
             }
@@ -387,10 +407,12 @@ class StampingController extends Controller
             $totalStampPx = max(1, $stampWpx * $stampHpx);
 
             $findLeastInk = function (int $step) use (
-                $marginPx, $stampWpx, $stampHpx, $imgW, $imgH, $regionSum, $strongTable, $isRectEmpty
+                $marginPx, $stampWpx, $stampHpx, $imgW, $imgH, $regionSum, $strongTable, $isRectEmpty, $scoreSpot
             ): ?array {
                 $best = null;
                 $minStrong = PHP_INT_MAX;
+                $bestEmpty = null;
+                $bestEmptyScore = -1.0;
                 $yEnd = $imgH - $stampHpx - $marginPx;
 
                 for ($y = $marginPx; $y <= $yEnd; $y += $step) {
@@ -398,19 +420,26 @@ class StampingController extends Controller
                         $strong = $regionSum($strongTable, $x, $y, $stampWpx, $stampHpx);
 
                         if ($strong === 0 && $isRectEmpty($x, $y)) {
-                            return ['x' => $x, 'y' => $y, 'strong' => 0];
+                            $score = $scoreSpot($x, $y);
+                            if ($score > $bestEmptyScore) {
+                                $bestEmptyScore = $score;
+                                $bestEmpty = ['x' => $x, 'y' => $y, 'strong' => 0];
+                            }
+                            continue;
                         }
 
                         if ($strong < $minStrong) {
                             $minStrong = $strong;
                             $best = ['x' => $x, 'y' => $y, 'strong' => $strong];
-                        } elseif ($strong === $minStrong && $y > ($best['y'] ?? -1)) {
-                            $best = ['x' => $x, 'y' => $y, 'strong' => $strong];
+                        } elseif ($strong === $minStrong && $best !== null) {
+                            if ($scoreSpot($x, $y) > $scoreSpot($best['x'], $best['y'])) {
+                                $best = ['x' => $x, 'y' => $y, 'strong' => $strong];
+                            }
                         }
                     }
                 }
 
-                return $best;
+                return $bestEmpty ?? $best;
             };
 
             $formatResult = function (array $spot, int $page) use ($pxPerMm, $imgH, $pageWmm, $pageHmm, $stampWmm, $stampHmm, $totalStampPx): array {
@@ -457,8 +486,8 @@ class StampingController extends Controller
     private function resolveStampPosition(string $pdfPath, int $pageNum, string $position, float $pageWmm, float $pageHmm, float $stampWmm, float $stampHmm): array
     {
         if ($position === 'auto') {
-            // One raster scan per page size — reuse on every page (critical for 100+ page PDFs).
-            $cacheKey = md5($pdfPath . '|'
+            // Scan each page independently — empty space differs page to page.
+            $cacheKey = md5($pdfPath . '|p' . $pageNum . '|'
                 . round($pageWmm, 1) . 'x' . round($pageHmm, 1) . '|'
                 . round($stampWmm, 1) . 'x' . round($stampHmm, 1));
 
@@ -711,7 +740,7 @@ class StampingController extends Controller
     {
         $request->validate([
             'request_id' => 'required|integer|exists:dcs_document_requests,id',
-            'file_key'   => 'required|string|in:masterlist,drf,dcn,distribution,retrieval',
+            'file_key'   => ['required', 'string', 'max:50', 'regex:/^(masterlist|drf|dcn|distribution|retrieval|syllabi_drf_\d+)$/'],
             'file_path'  => 'required|string',
         ]);
 

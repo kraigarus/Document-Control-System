@@ -31,6 +31,17 @@
         $syllabiContextSeed = ($syllabi ?? collect())->first();
 
         // ── Seed data for the chip-style source/originator widgets ──
+        $dcnOfficesSeed = collect($dcnOffices ?? [])->map(fn($o) => [
+            'id'    => $o->office->id ?? $o->office_id,
+            'label' => $o->office->office_name ?? 'Unknown',
+        ])->values();
+        if ($dcnOfficesSeed->isEmpty() && isset($dcn) && $dcn && $dcn->office_id) {
+            $dcnOfficesSeed = collect([[
+                'id'    => $dcn->office_id,
+                'label' => optional($dcn->office)->office_name ?? 'Unknown',
+            ]]);
+        }
+
         $drfOfficesSeed = collect($drfOffices ?? [])->map(fn($o) => [
             'id'    => $o->office->id ?? $o->office_id,
             'label' => $o->office->office_name ?? 'Unknown',
@@ -109,7 +120,7 @@
 
         $relatedDocsData = $masterlist
             ? $masterlist->allRelatedDocuments()->map(fn($m) => [
-                'masterlist_id' => $m->masterlist_id,
+                'masterlist_id' => $m->id,
                 'doc_no' => $m->doc_no,
                 'doc_title' => $m->doc_title,
                 'label' => $m->doc_title . ($m->doc_no ? ' ('.$m->doc_no.')' : ''),
@@ -122,11 +133,11 @@
             CURRENT_VERSION_ID: {{ isset($docRequest) ? $docRequest->version_id : 'null' }},
             CURRENT_DOC_TYPE_ID: {{ isset($docRequest) ? $docRequest->doc_type_id : 'null' }},
             CURRENT_SUB_TYPE_ID: {{ isset($docRequest) && $docRequest->sub_type_id ? $docRequest->sub_type_id : 'null' }},
-            CURRENT_DCN_SOURCE: '{{ isset($dcn) && $dcn ? $dcn->office_id : "" }}',
             CURRENT_APPROVAL_BODY: '{{ isset($approval) && $approval ? $approval->approval_body_id : "" }}',
         };
         window.__existingRelatedDocs = {!! $relatedDocsData->toJson() !!};
         window.__existingDrfOffices = {!! $drfOfficesSeed->toJson() !!};
+        window.__existingDcnOffices = {!! $dcnOfficesSeed->toJson() !!};
         window.__existingMasterlistSource = {!! $masterlistSourceSeed->toJson() !!};
         window.__existingMasterlistOriginator = {!! json_encode($masterlistOriginatorSeed) !!};
         window.__existingSyllabiGroups = {!! $syllabiGroupsSeed->toJson() !!};
@@ -147,7 +158,7 @@
             <div>
                 <div class="reg-breadcrumb">Document Control System / Update / Edit</div>
                 <div style="display:flex; align-items:center; gap:12px;">
-                    <div class="reg-title">Edit Document #{{ $docRequest->request_id }}</div>
+                    <div class="reg-title">Edit Document #{{ $docRequest->id }}</div>
                     <span class="edit-badge"><i class="fa-solid fa-pen"></i> Editing</span>
                 </div>
             </div>
@@ -180,7 +191,7 @@
         @endif
 
         <form id="masterForm" method="POST" action="{{ route('register.updateDoc', $docRequest->id) }}" enctype="multipart/form-data">
-            <input type="hidden" id="requestId" value="{{ $docRequest->request_id }}">
+            <input type="hidden" id="requestId" value="{{ $docRequest->id }}">
             @csrf
             @method('PUT')
 
@@ -392,9 +403,17 @@
                         </div>
                         <div class="reg-field">
                             <label>Source Unit</label>
-                            <select id="dcnSourceUnit" name="dcnSourceUnit" autocomplete="off">
-                                <option value="" selected disabled>Select office</option>
-                            </select>
+                            <div class="reg-reldocs" id="dcnSourceUnitWidget">
+                                <div class="reg-reldocs-inputwrap">
+                                    <input type="text" id="dcnSourceUnitSearch" class="reg-reldocs-input"
+                                        placeholder="Type to search offices..." autocomplete="off">
+                                    <button type="button" class="reg-reldocs-arrow-btn" id="dcnSourceArrowBtn">
+                                        <i class="fa-solid fa-chevron-down"></i>
+                                    </button>
+                                </div>
+                                <div id="dcnSourceResults" class="reg-reldocs-dropdown" style="display:none;"></div>
+                                <div id="dcnSourceInlineChips" class="reg-reldocs-dropdown reg-reldocs-selected-panel" style="display:none;"></div>
+                            </div>
                         </div>
                     </div>
 
@@ -404,54 +423,51 @@
                             <table class="reg-table">
                                 <thead>
                                     <tr>
-                                        <th>Document Title</th>
                                         <th>Document No.</th>
+                                        <th>Document Title</th>
                                         <th>Effectivity Date</th>
                                         <th>Revision No.</th>
                                         <th>Scanned Copy</th>
-                                        <th>Purpose</th>
+                                        <th>Brief Purpose</th>
                                         <th></th>
                                     </tr>
                                 </thead>
                                 <tbody id="revisionTableBody">
                                     @forelse($revisions as $rev)
-                                    <tr>
-                                        <td><input type="text" name="documentTitle[]" placeholder="Title" value="{{ $rev->title }}"></td>
-                                        <td><input type="text" name="documentNo[]" placeholder="Doc No." value="{{ $rev->document_no }}"></td>
-                                        <td><input type="date" name="effectiveDate[]" value="{{ fmtDate($rev->effectivity_date) }}"></td>
-                                        <td><input type="number" name="revisionNo[]" placeholder="0" value="{{ $rev->revision_no }}"></td>
+                                    <tr data-linked="true">
                                         <td>
+                                            <input type="text" name="documentNo[]" placeholder="Search or enter document no." value="{{ $rev->document_no }}" readonly class="reg-revrow-locked">
+                                            <input type="hidden" name="revisionScannedPath[]" value="{{ $rev->scanned_copy }}">
+                                        </td>
+                                        <td><input type="text" name="documentTitle[]" placeholder="Search or enter document title" value="{{ $rev->title }}" readonly class="reg-revrow-locked"></td>
+                                        <td><input type="date" name="effectiveDate[]" value="{{ fmtDate($rev->effectivity_date) }}" readonly class="reg-revrow-locked" tabindex="-1"></td>
+                                        <td><input type="number" name="revisionNo[]" placeholder="—" value="{{ $rev->revision_no }}" readonly class="reg-revrow-locked" tabindex="-1"></td>
+                                        <td class="reg-rev-scan-cell" style="text-align:center;">
                                             @if($rev->scanned_copy)
-                                                <div class="reg-current-file" style="margin:0;">
+                                                <a href="{{ asset('storage/' . $rev->scanned_copy) }}" target="_blank" class="reg-revrow-viewfile" title="View scanned copy">
                                                     <i class="fa-solid fa-file-pdf"></i>
-                                                    <span>{{ basename($rev->scanned_copy) }}</span>
-                                                    <a href="{{ asset('storage/' . $rev->scanned_copy) }}" target="_blank">View</a>
+                                                </a>
+                                            @else
+                                                <div class="reg-file-error" style="margin:0;">
+                                                    <i class="fa-solid fa-circle-exclamation"></i> No scanned copy on file
                                                 </div>
                                             @endif
-                                            <label class="reg-upload-cell">
-                                                <input type="file" name="scannedCopy[]" accept=".pdf,.docx">
-                                                <i class="fa-solid fa-cloud-arrow-up"></i>
-                                                <span>{{ $rev->scanned_copy ? 'Replace file' : 'No file chosen' }}</span>
-                                            </label>
                                         </td>
-                                        <td><input type="text" name="revisionPurpose[]" placeholder="Purpose" value="{{ $rev->brief_purpose }}"></td>
-                                        <td><button type="button" class="reg-row-del" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash-can"></i></button></td>
+                                        <td><input type="text" name="revisionPurpose[]" placeholder="—" value="{{ $rev->brief_purpose }}" readonly class="reg-revrow-locked" tabindex="-1"></td>
+                                        <td><button type="button" class="reg-row-del" onclick="removeRevisionRow(this)"><i class="fa-solid fa-trash-can"></i></button></td>
                                     </tr>
                                     @empty
                                     <tr>
-                                        <td><input type="text" name="documentTitle[]" placeholder="Title"></td>
-                                        <td><input type="text" name="documentNo[]" placeholder="Doc No."></td>
-                                        <td><input type="date" name="effectiveDate[]"></td>
-                                        <td><input type="number" name="revisionNo[]" placeholder="0"></td>
                                         <td>
-                                            <label class="reg-upload-cell">
-                                                <input type="file" name="scannedCopy[]" accept=".pdf,.docx">
-                                                <i class="fa-solid fa-cloud-arrow-up"></i>
-                                                <span>No file chosen</span>
-                                            </label>
+                                            <input type="text" name="documentNo[]" placeholder="Search or enter document no." autocomplete="off">
+                                            <input type="hidden" name="revisionScannedPath[]" value="">
                                         </td>
-                                        <td><input type="text" name="revisionPurpose[]" placeholder="Purpose"></td>
-                                        <td><button type="button" class="reg-row-del" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash-can"></i></button></td>
+                                        <td><input type="text" name="documentTitle[]" placeholder="Search or enter document title" autocomplete="off"></td>
+                                        <td><input type="date" name="effectiveDate[]" readonly class="reg-revrow-locked" tabindex="-1"></td>
+                                        <td><input type="number" name="revisionNo[]" placeholder="—" readonly class="reg-revrow-locked" tabindex="-1"></td>
+                                        <td class="reg-rev-scan-cell" style="text-align:center;color:#94a3b8;">—</td>
+                                        <td><input type="text" name="revisionPurpose[]" placeholder="—" readonly class="reg-revrow-locked" tabindex="-1"></td>
+                                        <td><button type="button" class="reg-row-del" onclick="removeRevisionRow(this)"><i class="fa-solid fa-trash-can"></i></button></td>
                                     </tr>
                                     @endforelse
                                 </tbody>

@@ -171,6 +171,10 @@ function showPreviewError(msg) {
 
 function refreshPreviewFrame(params) {
     if (!previewFrame) return;
+    if (previewShell) {
+        previewShell.classList.add('rpt-preview-shell--frame');
+        previewShell.classList.remove('rpt-preview-shell--table');
+    }
     const previewParams = new URLSearchParams(params.toString());
     previewParams.set('format', 'html');
     previewParams.set('embed', '1');
@@ -214,6 +218,10 @@ function renderOpcrTable(json) {
     previewFrame.hidden = true;
     if (previewPlaceholder) previewPlaceholder.hidden = true;
     opcrTableHost.hidden = false;
+    if (previewShell) {
+        previewShell.classList.add('rpt-preview-shell--table');
+        previewShell.classList.remove('rpt-preview-shell--frame');
+    }
 
     const cols = json.columns;
     const colKeys = Object.keys(cols);
@@ -274,9 +282,10 @@ function renderCell(key, val, row) {
     }
     if (key === 'days_diff') {
         if (val === null || val === undefined) return '<td class="rpt-na">&mdash;</td>';
-        return row.days_type === 'advanced'
-            ? '<td class="opcr-days-advanced">+' + esc(String(val)) + '</td>'
-            : '<td class="opcr-days-delayed">-' + esc(String(val)) + '</td>';
+        const n = Number(val);
+        if (n > 0) return '<td class="opcr-days-advanced">+' + esc(String(n)) + '</td>';
+        if (n < 0) return '<td class="opcr-days-delayed">' + esc(String(n)) + '</td>';
+        return '<td class="opcr-days-zero">0</td>';
     }
     if (key === 'pdf_path' && val) {
         return '<td><a href="' + esc(val) + '" target="_blank"><i class="fa-solid fa-file-pdf"></i> View</a></td>';

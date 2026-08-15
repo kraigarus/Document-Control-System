@@ -144,19 +144,4 @@
             </a>
         </li>
     </ul>
-
-    <div class="nav-footer">
-        <div class="nav-divider"></div>
-        <div class="nav-item footer-item {{ request()->routeIs('profile') ? 'active' : '' }}">
-            <a href="{{ route('profile') }}">
-                <i>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none">
-                        <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 5C14.21 5 16 6.79 16 9C16 11.21 14.21 13 12 13C9.79 13 8 11.21 8 9C8 6.79 9.79 5 12 5ZM12 19.2C9.5 19.2 7.29 17.92 6 15.98C6.03 13.99 10 12.9 12 12.9C13.99 12.9 17.97 13.99 18 15.98C16.71 17.92 14.5 19.2 12 19.2Z" fill="currentColor"/>
-                    </svg>
-                </i>
-                <span>My Profile</span>
-                <span class="tooltip">My Profile</span>
-            </a>
-        </div>
-    </div>
 </nav>

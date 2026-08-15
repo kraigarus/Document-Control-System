@@ -51,15 +51,17 @@ class DatabaseController extends Controller
 
             if ($request->input('search')) {
                 $search = $request->input('search');
-                $query->where(function ($q) use ($search) {
-                    $q->whereHas('documentRequestForm', function ($q2) use ($search) {
-                        $q2->where('doc_title', 'like', "%{$search}%")
-                            ->orWhere('drf_no', 'like', "%{$search}%");
+                $like = '%' . $search . '%';
+                $query->where(function ($q) use ($like) {
+                    $q->whereHas('documentRequestForm', function ($q2) use ($like) {
+                        $q2->where('doc_title', 'ilike', $like)
+                            ->orWhere('drf_no', 'ilike', $like);
                     })
-                    ->orWhereHas('masterlistRegistration', function ($q2) use ($search) {
-                        $q2->where('doc_no', 'like', "%{$search}%")
-                            ->orWhere('doc_title', 'like', "%{$search}%");
-                    });
+                    ->orWhereHas('masterlistRegistration', function ($q2) use ($like) {
+                        $q2->where('doc_no', 'ilike', $like)
+                            ->orWhere('doc_title', 'ilike', $like);
+                    })
+                    ->orWhereRaw('dcs_document_requests.id::text ilike ?', [$like]);
                 });
             }
 
@@ -210,10 +212,8 @@ class DatabaseController extends Controller
             $groups = collect();
             foreach ($grouped as $groupKey => $rows) {
                 $sorted = $rows->sortByDesc('rev_no')->values();
-                $docNo  = str_starts_with($groupKey, 'no_ml_') ? 'N/A' : $groupKey;
-
                 $parent = $sorted->first();
-                $parent['status'] = ($docNo !== 'N/A') ? 'Latest' : 'Active';
+                $parent['status'] = ($parent['doc_no'] && $parent['doc_no'] !== 'N/A') ? 'Latest' : 'Active';
 
                 $children = $sorted->slice(1)->values()->map(function ($child) {
                     $child['status'] = 'Obsolete';
@@ -221,7 +221,7 @@ class DatabaseController extends Controller
                 });
 
                 $groups->push([
-                    'doc_no'         => $docNo,
+                    'doc_no'         => $parent['doc_no'] ?? 'N/A',
                     'parent'         => $parent,
                     'children'       => $children,
                     'has_revisions'  => $sorted->count() > 1,
@@ -281,9 +281,21 @@ class DatabaseController extends Controller
                 return ($b['parent']['request_id'] ?? 0) <=> ($a['parent']['request_id'] ?? 0);
             })->values();
 
+            $total = $groups->count();
+            $perPage = max(1, min(100, (int) $request->input('per_page', 50)));
+            $page = max(1, (int) $request->input('page', 1));
+            $lastPage = max(1, (int) ceil($total / $perPage));
+            if ($page > $lastPage) {
+                $page = $lastPage;
+            }
+            $groups = $groups->slice(($page - 1) * $perPage, $perPage)->values();
+
             return response()->json([
-                'data'  => $groups,
-                'total' => $groups->count(),
+                'data'      => $groups,
+                'total'     => $total,
+                'page'      => $page,
+                'per_page'  => $perPage,
+                'last_page' => $lastPage,
             ]);
 
         } catch (\Exception $e) {
@@ -294,6 +306,8 @@ class DatabaseController extends Controller
                 'error' => "An error occurred (ref: {$refId})",
                 'data'  => [],
                 'total' => 0,
+                'page'  => 1,
+                'last_page' => 1,
             ], 500);
         }
     }

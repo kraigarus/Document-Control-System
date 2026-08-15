@@ -31,11 +31,6 @@
         </button>
         @endif
         <hr>
-        <button class="subSystem" onclick="window.location.href='/profile'">
-            <img src="{{ asset('icons/profile.svg') }}" alt="Profile Icon">
-            <span>Profile</span>
-        </button>
-
         <form id="logoutForm" action="{{ route('logout') }}" method="POST" style="display: none;">
             @csrf
         </form>

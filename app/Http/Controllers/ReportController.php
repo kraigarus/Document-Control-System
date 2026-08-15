@@ -186,16 +186,10 @@ class ReportController extends Controller
     private function applyMasterlistPeriodFilter($query, ?string $dateFrom, ?string $dateTo)
     {
         if ($dateFrom) {
-            $query->where(function ($q) use ($dateFrom) {
-                $q->whereDate('doc_registered_date', '>=', $dateFrom)
-                    ->orWhereNull('doc_registered_date');
-            });
+            $query->whereDate('doc_registered_date', '>=', $dateFrom);
         }
         if ($dateTo) {
-            $query->where(function ($q) use ($dateTo) {
-                $q->whereDate('doc_registered_date', '<=', $dateTo)
-                    ->orWhereNull('doc_registered_date');
-            });
+            $query->whereDate('doc_registered_date', '<=', $dateTo);
         }
 
         return $query;
@@ -267,18 +261,6 @@ class ReportController extends Controller
         }
 
         return $query;
-    }
-
-    // ════════════════════════════════════════════
-    // INDEX — Report selection page
-    // ════════════════════════════════════════════
-    public function index()
-    {
-        $categories = $this->getReportCategories();
-        $docTypes   = DocType::whereNull('parent_id')->orderBy('doc_type_name')->get();
-        $originators = $this->getOriginatorOptions();
-        $offices     = $this->getSourceOfficeOptions();
-        return view('pages.dcs.reports.index', compact('categories', 'docTypes', 'originators', 'offices'));
     }
 
     public function masterlist()
@@ -376,6 +358,36 @@ class ReportController extends Controller
         return $query;
     }
 
+    /**
+     * Keep latest or obsolete DocumentRequest rows, partitioned like visibility:
+     * doc_no + doc_type_id + sub_type_id.
+     */
+    private function filterRequestsByRevisionStatus($docs, array $filters)
+    {
+        $status = $filters['revision_status'] ?? null;
+        if (!$status || $status === 'all') {
+            return $docs;
+        }
+
+        $grouped = $docs->groupBy(function ($doc) {
+            $ml = $doc->masterlistRegistration;
+            $docNo = ($ml && $ml->doc_no) ? $ml->doc_no : ('id:' . $doc->id);
+            return $docNo . '||' . (int) $doc->doc_type_id . '||' . (int) ($doc->sub_type_id ?? 0);
+        });
+
+        $kept = collect();
+        foreach ($grouped as $group) {
+            $sorted = $group->sortByDesc(fn ($doc) => (int) ($doc->masterlistRegistration->revise_no ?? 0))->values();
+            if ($status === 'latest') {
+                $kept->push($sorted->first());
+            } else {
+                $sorted->slice(1)->each(fn ($doc) => $kept->push($doc));
+            }
+        }
+
+        return $kept->values();
+    }
+
     // ════════════════════════════════════════════
     // MASTERLIST REPORT
     // ════════════════════════════════════════════
@@ -411,6 +423,8 @@ class ReportController extends Controller
                 'no_pages'         => $ml->no_pages,
                 'doc_type'         => $doc?->docType->doc_type_name ?? $ml->docType->doc_type_name ?? 'N/A',
                 'sub_type'         => $doc?->subType->doc_type_name ?? null,
+                'type_key'         => (int) ($doc?->doc_type_id ?? $ml->doc_type_id ?? 0)
+                    . '|' . (int) ($doc?->sub_type_id ?? 0),
                 'pdf_path'         => $ml->scanned_masterlist
                     ? '/storage/' . $ml->scanned_masterlist : null,
             ];
@@ -418,7 +432,7 @@ class ReportController extends Controller
 
         $revisionStatus = $filters['revision_status'] ?? null;
         if ($revisionStatus && $revisionStatus !== 'all') {
-            $grouped = $rows->groupBy('doc_no');
+            $grouped = $rows->groupBy(fn ($r) => ($r['doc_no'] ?? '') . '||' . ($r['type_key'] ?? ''));
 
             if ($revisionStatus === 'latest') {
                 // Keep only the highest rev_no per doc_no
@@ -500,17 +514,22 @@ class ReportController extends Controller
             $q->where('doc_type_name', $docTypeName);
         });
 
-        if ($dateFrom) {
-            $query->whereDate('created_at', '>=', $dateFrom);
-        }
-        if ($dateTo) {
-            $query->whereDate('created_at', '<=', $dateTo);
+        if ($dateFrom || $dateTo) {
+            $query->whereHas('masterlistRegistration', function ($q) use ($dateFrom, $dateTo) {
+                if ($dateFrom) {
+                    $q->whereDate('doc_registered_date', '>=', $dateFrom);
+                }
+                if ($dateTo) {
+                    $q->whereDate('doc_registered_date', '<=', $dateTo);
+                }
+            });
         }
 
         $query = $this->applyCommonFilters($query, $filters);
         $query = $this->applySubTypeFilter($query, $filters);
 
         $docs = $query->orderBy('id', 'desc')->get();
+        $docs = $this->filterRequestsByRevisionStatus($docs, $filters);
 
         $rows = $docs->map(function ($doc, $index) {
             $ml  = $doc->masterlistRegistration;
@@ -686,17 +705,22 @@ class ReportController extends Controller
             $q->where('doc_type_name', $docTypeName);
         });
 
-        if ($dateFrom) {
-            $query->whereDate('created_at', '>=', $dateFrom);
-        }
-        if ($dateTo) {
-            $query->whereDate('created_at', '<=', $dateTo);
+        if ($dateFrom || $dateTo) {
+            $query->whereHas('masterlistRegistration', function ($q) use ($dateFrom, $dateTo) {
+                if ($dateFrom) {
+                    $q->whereDate('doc_registered_date', '>=', $dateFrom);
+                }
+                if ($dateTo) {
+                    $q->whereDate('doc_registered_date', '<=', $dateTo);
+                }
+            });
         }
 
         $query = $this->applyCommonFilters($query, $filters);
         $query = $this->applySubTypeFilter($query, $filters);
 
         $docs = $query->orderBy('id', 'desc')->get();
+        $docs = $this->filterRequestsByRevisionStatus($docs, $filters);
 
         $rows = $docs->map(function ($doc, $index) {
             $ml  = $doc->masterlistRegistration;
@@ -989,45 +1013,47 @@ class ReportController extends Controller
                 break;
         }
 
-        $rows = $docs->map(function ($doc, $index) use ($sub) {
+        $docs = $this->filterRequestsByRevisionStatus($docs, $filters);
+        $ratingsByRequest = \App\Models\OpcrRating::whereIn('request_id', $docs->pluck('id'))
+            ->where('sub_type', $sub)
+            ->get()
+            ->keyBy('request_id');
+
+        $rows = $docs->map(function ($doc, $index) use ($sub, $ratingsByRequest) {
             $ml = $doc->masterlistRegistration;
+            $dist = $doc->documentDistribution;
 
-            $dateReceived = $ml && $ml->doc_registered_date
-                ? \Carbon\Carbon::parse($ml->doc_registered_date)->format('m/d/Y') : null;
+            $receivedAt = ($ml && $ml->doc_registered_date)
+                ? \Carbon\Carbon::parse($ml->doc_registered_date)->startOfDay()
+                : null;
 
-            $dateReleased = null;
-            $dist = DocumentDistribution::where('request_id', $doc->id)->first();
+            $releasedAt = null;
             if ($dist && $dist->doc_distribution_date_actual) {
-                $dateReleased = \Carbon\Carbon::parse($dist->doc_distribution_date_actual)->format('m/d/Y');
+                $releasedAt = \Carbon\Carbon::parse($dist->doc_distribution_date_actual)->startOfDay();
             } elseif ($ml && $ml->effectivity_date) {
-                $dateReleased = \Carbon\Carbon::parse($ml->effectivity_date)->format('m/d/Y');
+                $releasedAt = \Carbon\Carbon::parse($ml->effectivity_date)->startOfDay();
             }
 
-            // Calculate days advanced/delayed
+            $dateReceived = $receivedAt?->format('m/d/Y');
+            $dateReleased = $releasedAt?->format('m/d/Y');
+
+            // + advanced (released before received), - delayed (released after received)
             $daysDiff = null;
             $daysType = null;
-            if ($ml && $ml->effectivity_date && $dateReleased) {
-                try {
-                    $effectivity = \Carbon\Carbon::parse($ml->effectivity_date);
-                    $released    = \Carbon\Carbon::parse($dateReleased);
-                    $diff        = $effectivity->diffInDays($released, false);
-                    if ($diff >= 0) {
-                        $daysDiff = $diff;
-                        $daysType = 'advanced';
-                    } else {
-                        $daysDiff = abs($diff);
-                        $daysType = 'delayed';
-                    }
-                } catch (\Exception $e) {
-                    $daysDiff = null;
-                    $daysType = null;
+            if ($receivedAt && $releasedAt) {
+                if ($releasedAt->lt($receivedAt)) {
+                    $daysDiff = (int) $releasedAt->diffInDays($receivedAt);
+                    $daysType = 'advanced';
+                } elseif ($releasedAt->gt($receivedAt)) {
+                    $daysDiff = -1 * (int) $receivedAt->diffInDays($releasedAt);
+                    $daysType = 'delayed';
+                } else {
+                    $daysDiff = 0;
+                    $daysType = 'on_time';
                 }
             }
 
-                        // Load saved ratings
-            $opcrRating = \App\Models\OpcrRating::where('request_id', $doc->id)
-                ->where('sub_type', $sub)
-                ->first();
+            $opcrRating = $ratingsByRequest->get($doc->id);
 
             return [
                 'no'            => $index + 1,
@@ -1079,7 +1105,7 @@ class ReportController extends Controller
 
     private function getOpcrDocs($startDate, $endDate, ?array $docTypeNames, array $filters = [])
     {
-        $query = DocumentRequest::with(['masterlistRegistration', 'docType'])
+        $query = DocumentRequest::with(['masterlistRegistration', 'docType', 'documentDistribution'])
             ->whereHas('masterlistRegistration', function ($q) use ($startDate, $endDate) {
                 $q->whereNotNull('doc_no')
                     ->where('doc_no', '!=', '')
@@ -1093,6 +1119,7 @@ class ReportController extends Controller
         }
 
         $query = $this->applyCommonFilters($query, $filters);
+        $query = $this->applySubTypeFilter($query, $filters);
 
         return $query->orderBy('id', 'desc')->get();
     }
@@ -1138,26 +1165,29 @@ class ReportController extends Controller
             'docType',
         ]);
 
-        if ($dateFrom) {
-            $query->where('created_at', '>=', $dateFrom);
+        if ($dateFrom || $dateTo) {
+            $query->whereHas('masterlistRegistration', function ($q) use ($dateFrom, $dateTo) {
+                if ($dateFrom) {
+                    $q->whereDate('doc_registered_date', '>=', $dateFrom);
+                }
+                if ($dateTo) {
+                    $q->whereDate('doc_registered_date', '<=', $dateTo);
+                }
+            });
         }
-        if ($dateTo) {
-            $query->where('created_at', '<=', $dateTo . ' 23:59:59');
-        }
-        
+
         $query = $this->applyCommonFilters($query, $filters);
+        $query = $this->applySubTypeFilter($query, $filters);
 
         $docs = $query->orderBy('id', 'desc')->get();
+        $docs = $this->filterRequestsByRevisionStatus($docs, $filters);
 
         $rows = $docs->map(function ($doc, $index) {
             $ml  = $doc->masterlistRegistration;
             $drf = $doc->documentRequestForm;
             $dcn = $doc->documentChangeNotice;
 
-            $originator = $ml && $ml->sourceOffices->count() > 0
-                ? $ml->sourceOffices->map(fn($o) => $o->office?->office_name)
-                    ->filter()->implode(', ')
-                : null;
+            $originator = $ml ? ($ml->originator_name ?: null) : null;
 
             $checklists = collect();
             if ($drf) $checklists->push('DRF');

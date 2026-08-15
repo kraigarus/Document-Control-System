@@ -582,9 +582,9 @@ body {
     font-weight: 700;
 }
 
-.opcr-days-delayed {
-    color: #dc2626;
+.opcr-days-zero {
     font-weight: 700;
+    color: var(--rpt-text-secondary);
 }
 
 /* ── Print ── */
@@ -1169,9 +1169,13 @@ body {
 }
 
 .rpt-preview-shell {
-    min-height: 420px;
+    min-height: 0;
     background: #f1f5f9;
     border-top: 1px solid var(--rpt-border);
+}
+
+.rpt-preview-shell--frame {
+    min-height: 420px;
 }
 
 .rpt-preview-frame {
@@ -1180,6 +1184,12 @@ body {
     border: none;
     background: #fff;
     display: block;
+}
+
+.rpt-preview-frame[hidden],
+.rpt-table-scroll[hidden],
+.rpt-preview-placeholder[hidden] {
+    display: none !important;
 }
 
 .rpt-preview-placeholder {

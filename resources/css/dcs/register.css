@@ -1332,6 +1332,19 @@ body {
     filter: brightness(0.9);
 }
 
+.reg-upload-viewfile {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none;
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 6px;
+    width: auto;
+    height: auto;
+}
+
 .reg-revrow-locked {
     background: #f8fafc !important;
     cursor: not-allowed !important;

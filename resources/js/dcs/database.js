@@ -5,7 +5,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const searchInput = document.getElementById('dbSearch');
 
     let currentTypeId = 'all';
-    
+    let currentPage = 1;
+
+    function tableColspan() {
+        const row = document.querySelector('.db-table thead tr');
+        return row ? Math.max(row.children.length, 46) : 46;
+    }
+
+    function on(el, event, handler) {
+        if (el) el.addEventListener(event, handler);
+    } 
     // ═══════════════════════════════════════════
     // Header row heights
     // ═══════════════════════════════════════════
@@ -122,6 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.querySelectorAll('.db-type-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             currentTypeId = btn.dataset.typeId;
+            currentPage = 1;
             loadData();
         });
     });
@@ -130,9 +140,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Search
     // ═══════════════════════════════════════════
     let searchTimer;
-    searchInput.addEventListener('input', () => {
+    on(searchInput, 'input', () => {
         clearTimeout(searchTimer);
-        searchTimer = setTimeout(() => { loadData(); }, 400);
+        searchTimer = setTimeout(() => { currentPage = 1; loadData(); }, 400);
     });
 
     // ═══════════════════════════════════════════
@@ -141,37 +151,39 @@ document.addEventListener('DOMContentLoaded', () => {
     const filterOverlay = document.getElementById('filterOverlay');
     const filterPanel = document.getElementById('filterPanel');
 
-    document.getElementById('openFilterBtn').addEventListener('click', () => {
-        filterOverlay.classList.add('db-open');
-        filterPanel.classList.add('db-open');
+    on(document.getElementById('openFilterBtn'), 'click', () => {
+        filterOverlay?.classList.add('db-open');
+        filterPanel?.classList.add('db-open');
     });
 
     function closeFilter() {
-        filterOverlay.classList.remove('db-open');
-        filterPanel.classList.remove('db-open');
+        filterOverlay?.classList.remove('db-open');
+        filterPanel?.classList.remove('db-open');
     }
 
-    document.getElementById('closeFilterBtn').addEventListener('click', closeFilter);
-    filterOverlay.addEventListener('click', closeFilter);
+    on(document.getElementById('closeFilterBtn'), 'click', closeFilter);
+    on(filterOverlay, 'click', closeFilter);
 
-    document.getElementById('resetFilterBtn').addEventListener('click', () => {
-        document.getElementById('filterOriginator').value = '';
-        document.getElementById('filterSourceUnit').value = '';
-        document.getElementById('filterStatus').value = '';
-        document.getElementById('filterDateFrom').value = '';
-        document.getElementById('filterDateTo').value = '';
-        document.getElementById('filterRevNo').value = '';
-        if (document.getElementById('filterSubType')) document.getElementById('filterSubType').value = 'all';
-        if (document.getElementById('filterRevisionScope')) document.getElementById('filterRevisionScope').value = 'all';
-        if (document.getElementById('filterRevisionStatus')) document.getElementById('filterRevisionStatus').value = 'all';
+    on(document.getElementById('resetFilterBtn'), 'click', () => {
+        const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+        setVal('filterOriginator', '');
+        setVal('filterSourceUnit', '');
+        setVal('filterStatus', '');
+        setVal('filterDateFrom', '');
+        setVal('filterDateTo', '');
+        setVal('filterRevNo', '');
+        setVal('filterSubType', 'all');
+        setVal('filterRevisionScope', 'all');
+        setVal('filterRevisionStatus', 'all');
     });
 
-    document.getElementById('applyFilterBtn').addEventListener('click', () => {
+    on(document.getElementById('applyFilterBtn'), 'click', () => {
         closeFilter();
+        currentPage = 1;
         loadData();
     });
 
-    document.getElementById('exportBtn').addEventListener('click', () => {
+    on(document.getElementById('exportBtn'), 'click', () => {
         const params = buildParams();
         const qs = new URLSearchParams(params).toString();
         window.location.href = '/database/export?' + qs;
@@ -180,7 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function buildParams() {
         const p = {};
         if (currentTypeId !== 'all') p.doc_type_id = currentTypeId;
-        if (searchInput.value.trim()) p.search = searchInput.value.trim();
+        if (searchInput && searchInput.value.trim()) p.search = searchInput.value.trim();
         const originator = document.getElementById('filterOriginator').value.trim();
         const sourceUnit = document.getElementById('filterSourceUnit').value;
         const status = document.getElementById('filterStatus').value;
@@ -199,6 +211,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (subType && subType !== 'all') p.sub_type_id = subType;
         if (revisionScope && revisionScope !== 'all') p.revision_scope = revisionScope;
         if (revisionStatus && revisionStatus !== 'all') p.revision_status = revisionStatus;
+        p.page = currentPage;
+        p.per_page = 50;
         
         return p;
     }
@@ -207,9 +221,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load data
     // ═══════════════════════════════════════════
     async function loadData() {
-        document.querySelector('.db-table-scroll').style.display = '';
-        emptyState.style.display = 'none';
-        tableBody.innerHTML = '<tr><td colspan="46" style="text-align:center;padding:40px;color:#94a3b8;">Loading documents...</td></tr>';
+        const scroll = document.querySelector('.db-table-scroll');
+        if (scroll) scroll.style.display = '';
+        if (emptyState) emptyState.style.display = 'none';
+        tableBody.innerHTML = '<tr><td colspan="' + tableColspan() + '" style="text-align:center;padding:40px;color:#94a3b8;">Loading documents...</td></tr>';
 
         try {
             const params = buildParams();
@@ -233,16 +248,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            docCount.textContent = json.total + ' Documents';
+            if (docCount) docCount.textContent = json.total + ' Documents';
 
             if (!json.data || json.data.length === 0) {
                 showEmpty('No documents found for the selected filters.', false);
                 return;
             }
 
-            document.querySelector('.db-table-scroll').style.display = '';
-            emptyState.style.display = 'none';
+            const scroll = document.querySelector('.db-table-scroll');
+            if (scroll) scroll.style.display = '';
+            if (emptyState) emptyState.style.display = 'none';
             renderRows(json.data);
+            renderPager(json);
 
         } catch (e) {
             console.error('Database load error:', e);
@@ -252,7 +269,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function showEmpty(message, isError) {
-        document.querySelector('.db-table-scroll').style.display = 'none';
+        const scroll = document.querySelector('.db-table-scroll');
+        if (scroll) scroll.style.display = 'none';
+        if (!emptyState) return;
         emptyState.style.display = '';
 
         emptyState.innerHTML =
@@ -265,6 +284,35 @@ document.addEventListener('DOMContentLoaded', () => {
             '<h3>' + (isError ? 'Error Loading Data' : 'No Documents Found') + '</h3>' +
             '<p>' + esc(message) + '</p>' +
             (isError ? '<button class="db-btn db-btn-primary" style="margin-top:12px" onclick="location.reload()">Retry</button>' : '');
+        const pager = document.getElementById('dbPager');
+        if (pager) pager.innerHTML = '';
+    }
+
+    function renderPager(json) {
+        let pager = document.getElementById('dbPager');
+        if (!pager) {
+            pager = document.createElement('div');
+            pager.id = 'dbPager';
+            pager.style.cssText = 'display:flex;gap:8px;align-items:center;justify-content:flex-end;padding:12px 16px;font-size:13px;color:#475569';
+            const wrap = document.querySelector('.db-table-scroll')?.parentElement;
+            if (wrap) wrap.appendChild(pager);
+        }
+        const page = json.page || 1;
+        const last = json.last_page || 1;
+        if (last <= 1) {
+            pager.innerHTML = '';
+            return;
+        }
+        pager.innerHTML =
+            '<button type="button" class="db-btn" id="dbPrevPage"' + (page <= 1 ? ' disabled' : '') + '>Previous</button>' +
+            '<span>Page ' + page + ' of ' + last + '</span>' +
+            '<button type="button" class="db-btn" id="dbNextPage"' + (page >= last ? ' disabled' : '') + '>Next</button>';
+        document.getElementById('dbPrevPage')?.addEventListener('click', () => {
+            if (currentPage > 1) { currentPage--; loadData(); }
+        });
+        document.getElementById('dbNextPage')?.addEventListener('click', () => {
+            if (currentPage < last) { currentPage++; loadData(); }
+        });
     }
 
     // ═══════════════════════════════════════════
@@ -347,7 +395,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!(catSlug in categoryState)) categoryState[catSlug] = false;
                 const expanded = categoryState[catSlug];
                 html += '<tr class="db-category-row">' +
-                    '<td colspan="60">' +
+                    '<td colspan="' + tableColspan() + '">' +
                         '<span class="db-category-toggle' + (expanded ? ' expanded' : '') + '" data-category="' + catSlug + '">' +
                             '<span class="db-category-chevron">' + (expanded ? '\u25B2' : '\u25BC') + '</span>' +
                             esc(catName.toUpperCase()) +
@@ -433,7 +481,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         return '<tr class="db-courses-row' + extraClass + '" data-category-row="' + catSlug + '"' +
             (displayAttr || '') + '>' +
-            '<td colspan="60">' +
+            '<td colspan="' + tableColspan() + '">' +
                 '<div class="db-courses-toggle" data-target="' + rowId + '">' +
                     '<span class="db-courses-chevron">\u25B6</span>' +
                     '<span class="db-courses-label"><i class="fa-solid fa-graduation-cap"></i> Courses (' + count + ')</span>' +

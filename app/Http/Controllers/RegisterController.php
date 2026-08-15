@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\DocumentRequest;
 use App\Models\DocumentRequestForm;
 use App\Models\DrfOffice;
+use App\Models\DcnOffice;
 use App\Models\DocumentChangeNotice;
 use App\Models\DocRevision;
 use App\Models\MasterlistRegistration;
@@ -35,6 +36,36 @@ class RegisterController extends Controller
         if ($path) {
             Storage::disk('public')->delete($path);
         }
+    }
+
+    /**
+     * Use an uploaded revision scan, or copy the selected masterlist scan into scans/revisions.
+     */
+    private function resolveRevisionScannedCopy(Request $request, int $i, array &$uploadedFiles): ?string
+    {
+        if ($request->hasFile('scannedCopy') && isset($request->file('scannedCopy')[$i])) {
+            $path = $request->file('scannedCopy')[$i]->store('scans/revisions', 'public');
+            $uploadedFiles[] = $path;
+
+            return $path;
+        }
+
+        $source = $request->input('revisionScannedPath')[$i] ?? null;
+        if (!is_string($source) || trim($source) === '') {
+            return null;
+        }
+
+        $source = ltrim(str_replace(['../', '..\\'], '', $source), '/');
+        if ($source === '' || str_contains($source, '..') || !Storage::disk('public')->exists($source)) {
+            return null;
+        }
+
+        $ext = strtolower(pathinfo($source, PATHINFO_EXTENSION));
+        $dest = 'scans/revisions/' . uniqid('rev_', true) . ($ext !== '' ? '.' . $ext : '');
+        Storage::disk('public')->copy($source, $dest);
+        $uploadedFiles[] = $dest;
+
+        return $dest;
     }
 
     /**
@@ -109,34 +140,61 @@ class RegisterController extends Controller
     public function apiSearchDocuments(Request $request)
     {
         $q = trim($request->input('q', ''));
-        if (mb_strlen($q) < 1) return response()->json([]);
+        if (mb_strlen($q) < 1) {
+            return response()->json([]);
+        }
 
-        $visibleIds = $this->getLatestRevisionIds(); // only current/latest revisions are linkable
+        $visibleIds = $this->getLatestRevisionIds();
+        $field = $request->input('field');
+        $docTypeId = $request->input('doc_type_id');
+        $subTypeId = $request->input('sub_type_id');
 
         $results = MasterlistRegistration::whereIn('request_id', $visibleIds)
             ->whereNotNull('doc_no')
-            ->where(function ($qr) use ($q) {
-                $qr->where('doc_title', 'like', "%{$q}%")
-                ->orWhere('doc_no', 'like', "%{$q}%");
+            ->where('doc_no', '!=', '')
+            ->when($docTypeId, function ($qr) use ($docTypeId, $subTypeId) {
+                $qr->whereHas('request', function ($req) use ($docTypeId, $subTypeId) {
+                    $req->where('doc_type_id', $docTypeId);
+                    if ($subTypeId) {
+                        $req->where('sub_type_id', $subTypeId);
+                    }
+                });
+            })
+            ->where(function ($qr) use ($q, $field) {
+                if ($field === 'no') {
+                    $qr->where('doc_no', 'ilike', "%{$q}%");
+                } elseif ($field === 'title') {
+                    $qr->where('doc_title', 'ilike', "%{$q}%");
+                } else {
+                    $qr->where('doc_title', 'ilike', "%{$q}%")
+                        ->orWhere('doc_no', 'ilike', "%{$q}%");
+                }
             })
             ->when($request->filled('exclude_request_id'), function ($qr) use ($request) {
                 $qr->where('request_id', '!=', $request->exclude_request_id);
             })
+            ->orderBy('doc_no')
             ->orderBy('doc_title')
             ->limit(15)
             ->get(['id', 'request_id', 'doc_no', 'doc_title', 'revise_no', 'effectivity_date', 'brief_purpose', 'scanned_masterlist']);
 
-        return response()->json($results->map(fn ($m) => [
-            'masterlist_id'     => $m->id,
-            'request_id'        => $m->request_id,
-            'doc_no'            => $m->doc_no,
-            'doc_title'         => $m->doc_title,
-            'revise_no'         => $m->revise_no,
-            'effectivity_date'  => $m->effectivity_date ? \Carbon\Carbon::parse($m->effectivity_date)->format('Y-m-d') : null,
-            'brief_purpose'     => $m->brief_purpose,
-            'scanned_copy_url'  => $m->scanned_masterlist ? \Storage::disk('public')->url($m->scanned_masterlist) : null,
-            'label'             => $m->doc_title . ($m->doc_no ? ' (' . $m->doc_no . ')' : ''),
-        ]));
+        return response()->json($results->map(function ($m) {
+            $docNo = $m->doc_no ?: 'No number';
+            $title = $m->doc_title ?: 'Untitled';
+
+            return [
+                'masterlist_id'      => $m->id,
+                'request_id'         => $m->request_id,
+                'doc_no'             => $m->doc_no,
+                'doc_title'          => $m->doc_title,
+                'revise_no'          => $m->revise_no,
+                'effectivity_date'   => $m->effectivity_date ? \Carbon\Carbon::parse($m->effectivity_date)->format('Y-m-d') : null,
+                'brief_purpose'      => $m->brief_purpose,
+                'scanned_copy_url'   => $m->scanned_masterlist ? \Storage::disk('public')->url($m->scanned_masterlist) : null,
+                'scanned_copy_path'  => $m->scanned_masterlist,
+                'label'              => $docNo . ' — ' . $title . ' (Rev ' . (int) $m->revise_no . ')',
+            ];
+        }));
     }
 
     /**
@@ -187,71 +245,80 @@ class RegisterController extends Controller
             return null;
         }
 
-        if ($request->has('syllabiCourseName')) {
-            $courseNames = $request->syllabiCourseName;
-            $copiesArr   = $request->syllabiCopies ?? [];
-            $total       = count($courseNames);
-            $i           = 0;
+        if (!$request->has('syllabiCourseName')) {
+            return back()->withInput()->with('error', 'At least one course is required.');
+        }
 
-            while ($i < $total) {
-                $courseName = $courseNames[$i];
-                $copies     = max(1, (int) ($copiesArr[$i] ?? 1));
-                $courseLabel = $courseName ?: ('Course group starting row ' . ($i + 1));
+        $courseNames = $request->syllabiCourseName;
+        $copiesArr   = $request->syllabiCopies ?? [];
+        $total       = count($courseNames);
+        $i           = 0;
 
-                if (empty($courseName)) {
-                    $i += $copies;
-                    continue;
-                }
+        while ($i < $total) {
+            $courseName = $courseNames[$i];
+            $copies     = max(1, (int) ($copiesArr[$i] ?? 1));
+            $courseLabel = $courseName ?: ('Course group starting row ' . ($i + 1));
 
-                if (empty($request->syllabiNoPages[$i]) || $request->syllabiNoPages[$i] <= 0) {
-                    return back()->withInput()->with('error', "Syllabi \"{$courseLabel}\": No. of Pages must be greater than 0.");
-                }
-
-                for ($c = 0; $c < $copies; $c++) {
-                    $rowIdx  = $i + $c;
-                    if ($rowIdx >= $total) {
-                        break;
-                    }
-                    $copyNum  = $c + 1;
-                    $rowLabel = "Syllabi \"{$courseLabel}\" (Copy {$copyNum})";
-
-                    $drfAvailArr = $request->syllabiDrfAvailability ?? [];
-                    $isDrfAvailable = ($drfAvailArr[$rowIdx] ?? 'not available') === 'available';
-
-                    if ($isDrfAvailable) {
-                        if (empty($request->syllabiDrfNo[$rowIdx])) {
-                            return back()->withInput()->with('error', "{$rowLabel}: DRF No. is required.");
-                        }
-                        if (empty($request->syllabiDrfDate[$rowIdx])) {
-                            return back()->withInput()->with('error', "{$rowLabel}: DRF Date is required.");
-                        }
-                        if (empty($request->syllabiDrfReceived[$rowIdx])) {
-                            return back()->withInput()->with('error', "{$rowLabel}: DRF Received Date is required.");
-                        }
-                    }
-
-                    if ($copies > 1) {
-                        $facultyCount = count(array_filter(array_map('trim', explode(',', $request->syllabiFaculty[$rowIdx] ?? ''))));
-                        if ($facultyCount > 1) {
-                            return back()->withInput()->with('error',
-                                "{$rowLabel}: Only one faculty per row is allowed when copies are split across rows.");
-                        }
-                    }
-
-                    if ($request->hasFile('syllabiScannedDrf') && isset($request->file('syllabiScannedDrf')[$rowIdx])) {
-                        $file = $request->file('syllabiScannedDrf')[$rowIdx];
-                        $ext = strtolower($file->getClientOriginalExtension());
-                        if (!in_array($ext, ['pdf', 'docx'])) {
-                            return back()->withInput()->with('error', "{$rowLabel}: Scanned DRF — only .pdf and .docx files are accepted.");
-                        }
-                        if ($file->getSize() > 10 * 1024 * 1024) {
-                            return back()->withInput()->with('error', "{$rowLabel}: Scanned DRF — file size must not exceed 10MB.");
-                        }
-                    }
-                }
-
+            if (empty($courseName)) {
                 $i += $copies;
+                continue;
             }
+
+            if (empty($request->syllabiNoPages[$i]) || $request->syllabiNoPages[$i] <= 0) {
+                return back()->withInput()->with('error', "Syllabi \"{$courseLabel}\": No. of Pages must be greater than 0.");
+            }
+
+            for ($c = 0; $c < $copies; $c++) {
+                $rowIdx  = $i + $c;
+                if ($rowIdx >= $total) {
+                    break;
+                }
+                $copyNum  = $c + 1;
+                $rowLabel = "Syllabi \"{$courseLabel}\" (Copy {$copyNum})";
+
+                $drfAvailArr = $request->syllabiDrfAvailability ?? [];
+                $isDrfAvailable = ($drfAvailArr[$rowIdx] ?? 'not available') === 'available';
+
+                if ($isDrfAvailable) {
+                    if (empty($request->syllabiDrfNo[$rowIdx])) {
+                        return back()->withInput()->with('error', "{$rowLabel}: DRF No. is required.");
+                    }
+                    if (empty($request->syllabiDrfDate[$rowIdx])) {
+                        return back()->withInput()->with('error', "{$rowLabel}: DRF Date is required.");
+                    }
+                    if (empty($request->syllabiDrfReceived[$rowIdx])) {
+                        return back()->withInput()->with('error', "{$rowLabel}: DRF Received Date is required.");
+                    }
+                }
+
+                if ($copies > 1) {
+                    $facultyCount = count(array_filter(array_map('trim', explode(',', $request->syllabiFaculty[$rowIdx] ?? ''))));
+                    if ($facultyCount > 1) {
+                        return back()->withInput()->with('error',
+                            "{$rowLabel}: Only one faculty per row is allowed when copies are split across rows.");
+                    }
+                }
+
+                if ($request->hasFile('syllabiScannedDrf') && isset($request->file('syllabiScannedDrf')[$rowIdx])) {
+                    $file = $request->file('syllabiScannedDrf')[$rowIdx];
+                    $ext = strtolower($file->getClientOriginalExtension());
+                    if (!in_array($ext, ['pdf', 'docx'])) {
+                        return back()->withInput()->with('error', "{$rowLabel}: Scanned DRF — only .pdf and .docx files are accepted.");
+                    }
+                    if ($file->getSize() > 10 * 1024 * 1024) {
+                        return back()->withInput()->with('error', "{$rowLabel}: Scanned DRF — file size must not exceed 10MB.");
+                    }
+                }
+            }
+
+            $i += $copies;
+        }
+
+        $namedCourses = collect($courseNames)
+            ->filter(fn ($name) => trim((string) $name) !== '')
+            ->count();
+        if ($namedCourses === 0) {
+            return back()->withInput()->with('error', 'At least one course is required.');
         }
 
         $request->validate([
@@ -282,7 +349,7 @@ class RegisterController extends Controller
     // GET /register/revised
     public function revised()
     {
-        return view('pages.dcs.register-revised');
+        return redirect()->route('register.create', ['type' => 'revised']);
     }
 
     // POST /register
@@ -399,9 +466,10 @@ class RegisterController extends Controller
             $requestId = $docRequest->id;
             $docTypeId = $request->doc_type_id;
             $versionId = $request->version_id;
+            $checkedChecklists = array_map('intval', $request->input('checklists', []));
 
             // ── 2. DRF (Section 1) ──
-            if ($request->filled('drfNo')) {
+            if (in_array(1, $checkedChecklists, true) && $request->filled('drfNo')) {
                 $drfFile = null;
                 if ($request->hasFile('drfFile')) {
                     $drfFile = $request->file('drfFile')->store('scans/drf', 'public');
@@ -435,12 +503,15 @@ class RegisterController extends Controller
             }
 
             // ── 3. DCN (Section 2) ──
-            if ($request->filled('dcnNumber')) {
+            if (in_array(2, $checkedChecklists, true) && $request->filled('dcnNumber')) {
                 $dcnFile = null;
                 if ($request->hasFile('dcnFile')) {
                     $dcnFile = $request->file('dcnFile')->store('scans/dcn', 'public');
                     $uploadedFiles[] = $dcnFile;
                 }
+
+                $dcnOfficeIds = array_values(array_filter($request->input('dcnSourceUnit', [])));
+                $firstDcnOffice = $dcnOfficeIds[0] ?? null;
 
                 $dcn = DocumentChangeNotice::create([
                     'checklist_id'     => 2,
@@ -451,28 +522,31 @@ class RegisterController extends Controller
                     'dcn_date'         => $request->noticeDate,
                     'dcn_receipt_date' => $request->receiptDate,
                     'dcn_receipt_time' => $request->receiptTime,
-                    'office_id'        => $request->dcnSourceUnit,
+                    'office_id'        => $firstDcnOffice,
                     'scanned_dcn'      => $dcnFile,
                     'created_by'       => auth()->id(),
                 ]);
+                $this->saveDcnOffices($dcn, $dcnOfficeIds);
 
-                if ($request->has('documentTitle')) {
-                    foreach ($request->documentTitle as $i => $title) {
-                        if (empty($title)) continue;
+                if ($request->has('documentTitle') || $request->has('documentNo')) {
+                    $titles = $request->documentTitle ?? [];
+                    $numbers = $request->documentNo ?? [];
+                    $totalRows = max(count($titles), count($numbers));
 
-                        $scannedCopy = null;
-                        if ($request->hasFile('scannedCopy') && isset($request->file('scannedCopy')[$i])) {
-                            $scannedCopy = $request->file('scannedCopy')[$i]->store('scans/revisions', 'public');
-                            $uploadedFiles[] = $scannedCopy;
+                    for ($i = 0; $i < $totalRows; $i++) {
+                        $title = $titles[$i] ?? null;
+                        $docNo = $numbers[$i] ?? null;
+                        if (empty($title) && empty($docNo)) {
+                            continue;
                         }
 
                         DocRevision::create([
                             'dcn_id'           => $dcn->id,
                             'title'            => $title,
-                            'document_no'      => $request->documentNo[$i] ?? null,
+                            'document_no'      => $docNo,
                             'effectivity_date' => $request->effectiveDate[$i] ?? null,
                             'revision_no'      => $request->revisionNo[$i] ?? null,
-                            'scanned_copy'     => $scannedCopy,
+                            'scanned_copy'     => $this->resolveRevisionScannedCopy($request, $i, $uploadedFiles),
                             'brief_purpose'    => $request->revisionPurpose[$i] ?? null,
                         ]);
                     }
@@ -480,7 +554,7 @@ class RegisterController extends Controller
             }
 
             // ── 4. Masterlist (Section 3) ──
-            if (!$isSyllabi && $request->filled('masterlistDocNo')) {
+            if (in_array(3, $checkedChecklists, true) && !$isSyllabi && $request->filled('masterlistDocNo')) {
                 $masterlistFile = null;
                 if ($request->hasFile('uploadScannedCopy')) {
                     $masterlistFile = $request->file('uploadScannedCopy')->store('scans/masterlist', 'public');
@@ -525,7 +599,7 @@ class RegisterController extends Controller
             }
 
             // ── Syllabi (inside transaction — just data operations) ──
-            if ($isSyllabi) {
+            if (in_array(3, $checkedChecklists, true) && $isSyllabi) {
                 $totalPages = 0;
                 if ($request->has('syllabiNoPages')) {
                     $totalPages = array_sum(
@@ -589,7 +663,7 @@ class RegisterController extends Controller
             }
 
             // ── 5. Retrieval (Section 4) ──
-            if ($request->filled('retrievalDate')) {
+            if (in_array(4, $checkedChecklists, true) && $request->filled('retrievalDate')) {
                 $retrievalFile = null;
                 if ($request->hasFile('scannedRet')) {
                     $retrievalFile = $request->file('scannedRet')->store('scans/retrieval', 'public');
@@ -628,7 +702,7 @@ class RegisterController extends Controller
             }
 
             // ── 6. Distribution (Section 5) ──
-            if ($request->filled('distributionDate')) {
+            if (in_array(5, $checkedChecklists, true) && $request->filled('distributionDate')) {
                 $distFile = null;
                 if ($request->hasFile('scanneddist')) {
                     $distFile = $request->file('scanneddist')->store('scans/distribution', 'public');
@@ -700,6 +774,24 @@ class RegisterController extends Controller
             return back()->withInput()
                 ->with('error', 'Failed to save document. Please try again. (ref: ' . $refId . ')');
         }
+    }
+
+    private function saveDcnOffices(DocumentChangeNotice $dcn, array $officeIds): void
+    {
+        DcnOffice::where('dcn_id', $dcn->id)->delete();
+        $firstId = null;
+        foreach ($officeIds as $officeId) {
+            $id = (int) trim((string) $officeId);
+            if ($id <= 0) {
+                continue;
+            }
+            DcnOffice::create([
+                'dcn_id'    => $dcn->id,
+                'office_id' => $id,
+            ]);
+            $firstId ??= $id;
+        }
+        $dcn->update(['office_id' => $firstId]);
     }
 
     /** Save Source Unit origins for a Masterlist registration (defined offices only). */
@@ -925,21 +1017,7 @@ class RegisterController extends Controller
             ->orderBy('id', 'desc');
 
         if ($request->filled('search')) {
-            $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->whereHas('documentRequestForm', function ($q2) use ($search) {
-                    $q2->where('drf_no', 'like', "%{$search}%")
-                        ->orWhere('doc_title', 'like', "%{$search}%");
-                })
-                ->orWhereHas('documentChangeNotice', function ($q2) use ($search) {
-                    $q2->where('dcn_no', 'like', "%{$search}%");
-                })
-                ->orWhereHas('masterlistRegistration', function ($q2) use ($search) {
-                    $q2->where('doc_no', 'like', "%{$search}%")
-                        ->orWhere('doc_title', 'like', "%{$search}%");
-                })
-                ->orWhere('id', 'like', "%{$search}%");
-            });
+            $this->applyDocumentTextSearch($query, $request->search);
         }
 
         if ($request->filled('doc_type_id')) {
@@ -981,20 +1059,7 @@ class RegisterController extends Controller
             }
 
             if ($search) {
-                $query->where(function ($q) use ($search) {
-                    $q->whereHas('documentRequestForm', function ($q2) use ($search) {
-                        $q2->where('drf_no', 'like', "%{$search}%")
-                            ->orWhere('doc_title', 'like', "%{$search}%");
-                    })
-                    ->orWhereHas('documentChangeNotice', function ($q2) use ($search) {
-                        $q2->where('dcn_no', 'like', "%{$search}%");
-                    })
-                    ->orWhereHas('masterlistRegistration', function ($q2) use ($search) {
-                        $q2->where('doc_no', 'like', "%{$search}%")
-                            ->orWhere('doc_title', 'like', "%{$search}%");
-                    })
-                    ->orWhere('id', 'like', "%{$search}%");
-                });
+                $this->applyDocumentTextSearch($query, $search);
             }
 
             $total       = $query->count();
@@ -1102,7 +1167,8 @@ class RegisterController extends Controller
 
         $drf        = $this->getSection1Drf($id);
         $drfOffices = $drf ? DrfOffice::where('document_request_form_id', $drf->id)->with('office')->get() : collect();
-        $dcn                 = DocumentChangeNotice::where('request_id', $id)->first();
+        $dcn                 = DocumentChangeNotice::with('office')->where('request_id', $id)->first();
+        $dcnOffices          = $dcn ? DcnOffice::where('dcn_id', $dcn->id)->with('office')->get() : collect();
         $revisions           = $dcn ? DocRevision::where('dcn_id', $dcn->id)->get() : collect();
         $masterlist          = $ml;
         $retrieval           = DocumentRetrieval::where('request_id', $id)->first();
@@ -1128,7 +1194,7 @@ class RegisterController extends Controller
         $approvalBodies = \App\Models\ApprovalBody::all();
 
         return view('pages.dcs.create-update.edit', compact(
-            'docRequest', 'drf', 'drfOffices', 'dcn', 'revisions', 'masterlist',
+            'docRequest', 'drf', 'drfOffices', 'dcn', 'dcnOffices', 'revisions', 'masterlist',
             'retrieval', 'retrievalOffices', 'distribution',
             'distributionOffices', 'approval', 'syllabi',
             'offices', 'docTypes', 'versionTypes', 'approvalBodies', 'masterlistSourceUnit', 'sourceOffices'
@@ -1194,6 +1260,11 @@ class RegisterController extends Controller
             $copies     = max(1, (int) ($copiesArr[$i] ?? 1));
 
             if (empty($courseName)) {
+                $i += $copies;
+                continue;
+            }
+
+            if (empty($request->program_id) || empty($request->semester_id)) {
                 $i += $copies;
                 continue;
             }
@@ -1326,9 +1397,10 @@ class RegisterController extends Controller
     private function saveRelatedDocuments(MasterlistRegistration $masterlist, array $relatedIds): void
     {
         // Remove ALL existing links touching this masterlist, in either direction
-        \App\Models\MasterlistRelatedDoc::where('masterlist_id', $masterlist->id)
-            ->orWhere('related_doc_id', $masterlist->id)
-            ->delete();
+        \App\Models\MasterlistRelatedDoc::where(function ($q) use ($masterlist) {
+            $q->where('masterlist_id', $masterlist->id)
+                ->orWhere('related_doc_id', $masterlist->id);
+        })->delete();
 
         // Re-create forward-direction links for what's currently selected
         foreach ($relatedIds as $id) {
@@ -1338,6 +1410,25 @@ class RegisterController extends Controller
                 'related_doc_id'  => (int) $id,
             ]);
         }
+    }
+
+    private function applyDocumentTextSearch($query, string $search): void
+    {
+        $like = '%' . $search . '%';
+        $query->where(function ($q) use ($like) {
+            $q->whereHas('documentRequestForm', function ($q2) use ($like) {
+                $q2->where('drf_no', 'ilike', $like)
+                    ->orWhere('doc_title', 'ilike', $like);
+            })
+            ->orWhereHas('documentChangeNotice', function ($q2) use ($like) {
+                $q2->where('dcn_no', 'ilike', $like);
+            })
+            ->orWhereHas('masterlistRegistration', function ($q2) use ($like) {
+                $q2->where('doc_no', 'ilike', $like)
+                    ->orWhere('doc_title', 'ilike', $like);
+            })
+            ->orWhereRaw('dcs_document_requests.id::text ilike ?', [$like]);
+        });
     }
 
     // ──────────────────────────────────────────────────────────
@@ -1444,7 +1535,7 @@ class RegisterController extends Controller
             }
 
             // ── 2. DRF ──
-            if ($request->filled('drfNo')) {
+            if (in_array(1, $checkedChecklists, true) && $request->filled('drfNo')) {
                 $drf     = $this->getSection1Drf($requestId);
                 $drfFile = $drf ? $drf->scanned_drf : null;
 
@@ -1489,7 +1580,7 @@ class RegisterController extends Controller
             }
 
             // ── 3. DCN ──
-            if ($request->filled('dcnNumber')) {
+            if (in_array(2, $checkedChecklists, true) && $request->filled('dcnNumber')) {
                 $dcn     = DocumentChangeNotice::where('request_id', $requestId)->first();
                 $dcnFile = $dcn ? $dcn->scanned_dcn : null;
 
@@ -1500,6 +1591,9 @@ class RegisterController extends Controller
                     $uploadedFiles[] = $dcnFile;
                 }
 
+                $dcnOfficeIds = array_values(array_filter($request->input('dcnSourceUnit', [])));
+                $firstDcnOffice = $dcnOfficeIds[0] ?? null;
+
                 $dcnData = [
                     'checklist_id'     => 2,
                     'version_id'       => $versionId,
@@ -1508,7 +1602,7 @@ class RegisterController extends Controller
                     'dcn_date'         => $request->noticeDate,
                     'dcn_receipt_date' => $request->receiptDate,
                     'dcn_receipt_time' => $request->receiptTime,
-                    'office_id'        => $request->dcnSourceUnit,
+                    'office_id'        => $firstDcnOffice,
                     'scanned_dcn'      => $dcnFile,
                 ];
 
@@ -1520,6 +1614,7 @@ class RegisterController extends Controller
                         'created_by' => auth()->id(),
                     ]));
                 }
+                $this->saveDcnOffices($dcn, $dcnOfficeIds);
 
                 // Revisions — delete old (with file cleanup), insert new
                 $oldRevisions = DocRevision::where('dcn_id', $dcn->id)->get();
@@ -1528,23 +1623,25 @@ class RegisterController extends Controller
                 }
                 $oldRevisions->each->delete();
 
-                if ($request->has('documentTitle')) {
-                    foreach ($request->documentTitle as $i => $title) {
-                        if (empty($title)) continue;
+                if ($request->has('documentTitle') || $request->has('documentNo')) {
+                    $titles = $request->documentTitle ?? [];
+                    $numbers = $request->documentNo ?? [];
+                    $totalRows = max(count($titles), count($numbers));
 
-                        $scannedCopy = null;
-                        if ($request->hasFile('scannedCopy') && isset($request->file('scannedCopy')[$i])) {
-                            $scannedCopy = $request->file('scannedCopy')[$i]->store('scans/revisions', 'public');
-                            $uploadedFiles[] = $scannedCopy;
+                    for ($i = 0; $i < $totalRows; $i++) {
+                        $title = $titles[$i] ?? null;
+                        $docNo = $numbers[$i] ?? null;
+                        if (empty($title) && empty($docNo)) {
+                            continue;
                         }
 
                         DocRevision::create([
                             'dcn_id'           => $dcn->id,
                             'title'            => $title,
-                            'document_no'      => $request->documentNo[$i] ?? null,
+                            'document_no'      => $docNo,
                             'effectivity_date' => $request->effectiveDate[$i] ?? null,
                             'revision_no'      => $request->revisionNo[$i] ?? null,
-                            'scanned_copy'     => $scannedCopy,
+                            'scanned_copy'     => $this->resolveRevisionScannedCopy($request, $i, $uploadedFiles),
                             'brief_purpose'    => $request->revisionPurpose[$i] ?? null,
                         ]);
                     }
@@ -1687,7 +1784,7 @@ class RegisterController extends Controller
             }
 
             // ── 5. Retrieval ──
-            if ($request->filled('retrievalDate')) {
+            if (in_array(4, $checkedChecklists, true) && $request->filled('retrievalDate')) {
                 $retrieval     = DocumentRetrieval::where('request_id', $requestId)->first();
                 $retrievalFile = $retrieval ? $retrieval->scanned_retrieval : null;
 
@@ -1739,7 +1836,7 @@ class RegisterController extends Controller
             }
 
             // ── 6. Distribution ──
-            if ($request->filled('distributionDate')) {
+            if (in_array(5, $checkedChecklists, true) && $request->filled('distributionDate')) {
                 $distribution = DocumentDistribution::where('request_id', $requestId)->first();
                 $distFile     = $distribution ? $distribution->scanned_distribution : null;
 

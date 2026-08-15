@@ -64,6 +64,12 @@ class LoginController extends Controller
             ]);
         }
 
+        if (!$user->account_active) {
+            throw ValidationException::withMessages([
+                'email' => 'This account is inactive. Contact administrator.',
+            ]);
+        }
+
         // Login without remember me
         Auth::login($user);
 

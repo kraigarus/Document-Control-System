@@ -29,7 +29,6 @@ const CFG = window.APP_CONFIG || {};
 const CURRENT_VERSION_ID = CFG.CURRENT_VERSION_ID || null;
 const CURRENT_DOC_TYPE_ID = CFG.CURRENT_DOC_TYPE_ID || null;
 const CURRENT_SUB_TYPE_ID = CFG.CURRENT_SUB_TYPE_ID || null;
-const CURRENT_DCN_SOURCE = CFG.CURRENT_DCN_SOURCE || '';
 const CURRENT_APPROVAL_BODY = CFG.CURRENT_APPROVAL_BODY || '';
 const IS_EDIT_MODE = true;
 
@@ -204,19 +203,18 @@ document.addEventListener("DOMContentLoaded", async function () {
     if (form) form.setAttribute("autocomplete", "off");
 
     try {
-        const [offices, docTypes, versionTypes, approvalBodies, originators, faculties] = await Promise.all([
+        const [offices, docTypes, versionTypes, approvalBodies, originators] = await Promise.all([
             fetch("/api/offices").then(r => r.json()),
             fetch("/api/doc-types").then(r => r.json()),
             fetch("/api/version-types").then(r => r.json()),
             fetch("/api/approval-bodies").then(r => r.json()),
             fetch("/api/originators").then(r => r.json()),
-            fetch("/api/faculties").then(r => r.json()),
         ]);
 
         allOffices = Array.isArray(offices) ? offices : [];
         allDocTypes = Array.isArray(docTypes) ? docTypes : [];
         allOriginators = Array.isArray(originators) ? originators : [];
-        allFaculties = Array.isArray(faculties) ? faculties : [];
+        allFaculties = [];
 
         const versionSelect = document.getElementById("versionType");
         while (versionSelect.options.length > 1) versionSelect.remove(1);
@@ -256,16 +254,6 @@ document.addEventListener("DOMContentLoaded", async function () {
         injectHiddenForDisabled('docType', 'doc_type_id');
         injectHiddenForDisabled('subType', 'sub_type_id');
 
-        const dcnSel = document.getElementById("dcnSourceUnit");
-        if (dcnSel) {
-            while (dcnSel.options.length > 1) dcnSel.remove(1);
-            allOffices.forEach(o => {
-                const opt = new Option(o.office_name, o.office_id);
-                if (o.office_id == CURRENT_DCN_SOURCE) opt.selected = true;
-                dcnSel.add(opt);
-            });
-        }
-
         const approvalSelect = document.getElementById("approvalBody");
         if (approvalSelect) {
             while (approvalSelect.options.length > 1) approvalSelect.remove(1);
@@ -291,8 +279,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         }
 
         // ── Wire initial DCN revision row search ──
-        const initialRevisionRow = document.querySelector('#revisionTableBody tr');
-        if (initialRevisionRow) bindRevisionRowSearch(initialRevisionRow);
+        document.querySelectorAll('#revisionTableBody tr').forEach(tr => bindRevisionRowSearch(tr));
 
         // ── Version type change → apply revision mode ──
         const versionTypeEl = document.getElementById("versionType");
@@ -313,6 +300,19 @@ document.addEventListener("DOMContentLoaded", async function () {
             officeFieldName: 'drfSourceUnit[]',
             nameFieldName: null,
             initial: (window.__existingDrfOffices || []).map(o => ({ type: 'office', id: o.id, label: o.label })),
+        });
+
+        createSourceUnitWidget({
+            key: 'dcn',
+            widgetId: 'dcnSourceUnitWidget',
+            inputId: 'dcnSourceUnitSearch',
+            arrowId: 'dcnSourceArrowBtn',
+            resultsId: 'dcnSourceResults',
+            chipsId: 'dcnSourceInlineChips',
+            allowFreeText: false,
+            officeFieldName: 'dcnSourceUnit[]',
+            nameFieldName: null,
+            initial: (window.__existingDcnOffices || []).map(o => ({ type: 'office', id: o.id, label: o.label })),
         });
 
         createSourceUnitWidget({
@@ -488,7 +488,7 @@ document.addEventListener("DOMContentLoaded", async function () {
 });
 
 function revertAutofill() {
-    const selectIds = ["versionType", "docType", "subType", "dcnSourceUnit", "approvalBody"];
+    const selectIds = ["versionType", "docType", "subType", "approvalBody"];
     selectIds.forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
@@ -551,7 +551,13 @@ function renderChecklists(checklists, disabled) {
 
         const sectionId = SECTION_MAP[c.checklist_id];
         const section = sectionId ? document.getElementById(sectionId) : null;
-        cb.checked = section ? (section.style.display !== "none") : false;
+        let shouldCheck = section ? (section.style.display !== "none") : false;
+        // Syllabi/TOS: DRF lives in the syllabi wizard, not standalone section-1
+        if (parseInt(c.checklist_id, 10) === 1) {
+            const syllabiSection = document.getElementById("section-syllabi");
+            if (syllabiSection && syllabiSection.style.display !== "none") shouldCheck = true;
+        }
+        cb.checked = shouldCheck;
         cb.dataset.lastChecked = cb.checked ? "true" : "false";
 
         const span = document.createElement("span");
@@ -598,18 +604,9 @@ function syncChecklistHiddenInputs() {
 
 function initializeEditState() {
     const container = document.getElementById("dynamicCheckboxes");
-    container.querySelectorAll("input[type='checkbox']").forEach(cb => {
-        cb.disabled = true;
-        cb.dataset.lastChecked = cb.checked ? "true" : "false";
-        toggleSection(parseInt(cb.value), cb.checked);
-    });
-    syncChecklistHiddenInputs();
-    showFormActions();
-    enableApproval();
-    setTimeout(initFileInputs, 100);
-
-    // Set syllabi mode from initial sub-type
     const subTypeId = document.getElementById("subType")?.value;
+
+    // Syllabi mode must be set before toggleSection, or checking DRF would open section-1
     if (subTypeId && isSyllabiLikeSubType(subTypeId)) {
         const subTypeData = allDocTypes.find(d => d.doc_type_id == subTypeId);
         window.__isSyllabiMode = true;
@@ -620,7 +617,23 @@ function initializeEditState() {
             applySyllabiSectionLabel();
             syncSyllabiToMasterlistFields();
         }
+        container.querySelectorAll("input[type='checkbox']").forEach(cb => {
+            if (cb.value === "1") {
+                cb.checked = true;
+                cb.dataset.lastChecked = "true";
+            }
+        });
     }
+
+    container.querySelectorAll("input[type='checkbox']").forEach(cb => {
+        cb.disabled = true;
+        cb.dataset.lastChecked = cb.checked ? "true" : "false";
+        toggleSection(parseInt(cb.value), cb.checked);
+    });
+    syncChecklistHiddenInputs();
+    showFormActions();
+    enableApproval();
+    setTimeout(initFileInputs, 100);
 }
 
 function lockChecklist() {
@@ -788,23 +801,46 @@ function removeRevSearchDropdown(key) {
     if (dd) dd.remove();
 }
 
-function handleRevisionSearchInput(input, key) {
+function handleRevisionSearchInput(input, key, field) {
     if (input.readOnly) return;
     clearTimeout(revSearchTimers[key]);
     const dd = getOrCreateRevSearchDropdown(key);
     const q = input.value.trim();
     if (q.length < 1) { dd.style.display = 'none'; return; }
 
+    const docTypeId = document.getElementById('docType')?.value || CURRENT_DOC_TYPE_ID;
+    const subTypeId = document.getElementById('subType')?.value || CURRENT_SUB_TYPE_ID;
+    const hasChildren = allDocTypes.some(d => String(d.parent_id) === String(docTypeId));
+
+    if (!docTypeId) {
+        dd.innerHTML = '<div class="reg-reldocs-noresult">Select a Document Type first</div>';
+        positionFixedDropdown(dd, input);
+        dd.style.display = 'block';
+        return;
+    }
+    if (hasChildren && !subTypeId) {
+        dd.innerHTML = '<div class="reg-reldocs-noresult">Select a Sub-Type first</div>';
+        positionFixedDropdown(dd, input);
+        dd.style.display = 'block';
+        return;
+    }
+
     revSearchTimers[key] = setTimeout(async () => {
         try {
-            const excludeId = document.getElementById('requestId')?.value || '';
-            const url = '/api/documents/search?q=' + encodeURIComponent(q)
-                + (excludeId ? '&exclude_request_id=' + excludeId : '');
-            const data = await fetch(url).then(r => r.json());
+            const params = new URLSearchParams({
+                q,
+                field: field || '',
+                doc_type_id: docTypeId,
+            });
+            if (subTypeId) params.set('sub_type_id', subTypeId);
+            const excludeId = document.getElementById('requestId')?.value;
+            if (excludeId) params.set('exclude_request_id', excludeId);
+
+            const data = await fetch('/api/documents/search?' + params.toString()).then(r => r.json());
             revSearchCache[key] = data;
 
             dd.innerHTML = data.length === 0
-                ? '<div class="reg-reldocs-noresult">No matching documents found</div>'
+                ? '<div class="reg-reldocs-noresult">No matching documents of this type</div>'
                 : data.map((d, idx) => `<div onmousedown="pickRevisionDocument('${key}', ${idx})">${escapeHtml(d.label)}</div>`).join('');
 
             positionFixedDropdown(dd, input);
@@ -824,36 +860,39 @@ window.pickRevisionDocument = function (key, idx) {
     const noInput      = row.querySelector('input[name="documentNo[]"]');
     const effField     = row.querySelector('input[name="effectiveDate[]"]');
     const revField     = row.querySelector('input[name="revisionNo[]"]');
+    const pathInput    = row.querySelector('input[name="revisionScannedPath[]"]');
     const purposeField = row.querySelector('input[name="revisionPurpose[]"]');
 
     if (titleInput) titleInput.value = doc.doc_title || '';
     if (noInput) noInput.value = doc.doc_no || '';
-    if (effField && doc.effectivity_date) effField.value = doc.effectivity_date;
-    if (revField && doc.revise_no !== null && doc.revise_no !== undefined) revField.value = doc.revise_no;
-    if (purposeField && doc.brief_purpose) purposeField.value = doc.brief_purpose;
+    if (effField) effField.value = doc.effectivity_date || '';
+    if (revField) revField.value = (doc.revise_no !== null && doc.revise_no !== undefined) ? doc.revise_no : '';
+    if (pathInput) pathInput.value = doc.scanned_copy_path || '';
+    if (purposeField) purposeField.value = doc.brief_purpose || '';
 
     lockRevisionRowFields(row);
     lockRevisionScannedCopyCell(row, doc.scanned_copy_url);
     closeRevSearchDropdown(key);
 };
 
+function lockRevisionPopulatedField(el) {
+    if (!el) return;
+    el.readOnly = true;
+    el.classList.add('reg-revrow-locked');
+    el.style.background = '#f8fafc';
+    el.style.cursor = 'not-allowed';
+    el.style.color = '#475569';
+}
+
 function lockRevisionRowFields(row) {
     row.dataset.linked = "true";
     row.querySelectorAll(
         'input[name="documentTitle[]"], input[name="documentNo[]"], input[name="effectiveDate[]"], input[name="revisionNo[]"], input[name="revisionPurpose[]"]'
-    ).forEach(el => {
-        el.readOnly = true;
-        el.classList.add('reg-revrow-locked');
-        el.style.background = '#f8fafc';
-        el.style.cursor = 'not-allowed';
-        el.style.color = '#475569';
-    });
+    ).forEach(lockRevisionPopulatedField);
 }
 
 function lockRevisionScannedCopyCell(row, scannedCopyUrl) {
-    const fileInput = row.querySelector('input[name="scannedCopy[]"]');
-    if (!fileInput) return;
-    const cell = fileInput.closest('td');
+    const cell = row.querySelector('.reg-rev-scan-cell');
     if (!cell) return;
 
     if (scannedCopyUrl) {
@@ -876,9 +915,9 @@ function bindRevisionSearchInput(input, uid, field) {
     const key = uid + '_' + field;
     if (!input.id) input.id = 'revSearchInput_' + key;
 
-    input.addEventListener('input', () => handleRevisionSearchInput(input, key));
+    input.addEventListener('input', () => handleRevisionSearchInput(input, key, field));
     input.addEventListener('focus', () => {
-        if (!input.readOnly && input.value.trim().length >= 1) handleRevisionSearchInput(input, key);
+        if (!input.readOnly && input.value.trim().length >= 1) handleRevisionSearchInput(input, key, field);
     });
 
     const reposition = () => {
@@ -892,8 +931,9 @@ function bindRevisionSearchInput(input, uid, field) {
 function bindRevisionRowSearch(tr) {
     if (!tr.dataset.uid) tr.dataset.uid = ++revisionRowUidCounter;
     const uid = tr.dataset.uid;
-    bindRevisionSearchInput(tr.querySelector('input[name="documentTitle[]"]'), uid, 'title');
     bindRevisionSearchInput(tr.querySelector('input[name="documentNo[]"]'), uid, 'no');
+    bindRevisionSearchInput(tr.querySelector('input[name="documentTitle[]"]'), uid, 'title');
+    if (tr.dataset.linked === 'true') lockRevisionRowFields(tr);
 }
 
 function removeRevisionRowDropdowns(tr) {
@@ -1824,10 +1864,12 @@ async function initSyllabiContextWiring() {
     if (collegeSel && !collegeSel.dataset.wired) {
         collegeSel.dataset.wired = "true";
         collegeSel.addEventListener("change", async function () {
-            programSel.innerHTML = '<option value="" selected disabled>Select program</option>';
-            programSel.disabled = true;
-            semSel.value = ""; semSel.disabled = true;
-            sySel.value = ""; sySel.disabled = true;
+            if (programSel) {
+                programSel.innerHTML = '<option value="" selected disabled>Select program</option>';
+                programSel.disabled = true;
+            }
+            if (semSel) { semSel.value = ""; semSel.disabled = true; }
+            if (sySel) { sySel.value = ""; sySel.disabled = true; }
             updateSyllabiTitle();
             clearSyllabiCourseRows();
             allFaculties = [];
@@ -1838,6 +1880,7 @@ async function initSyllabiContextWiring() {
 
             try {
                 const programs = await fetch("/api/programs/" + this.value).then(r => r.json());
+                if (!programSel) return;
                 programs.forEach(p => {
                     const opt = new Option(p.program_name, p.program_id);
                     opt.dataset.code = p.program_code || "";
@@ -1850,8 +1893,8 @@ async function initSyllabiContextWiring() {
     if (programSel && !programSel.dataset.wired) {
         programSel.dataset.wired = "true";
         programSel.addEventListener("change", function () {
-            semSel.value = ""; semSel.disabled = !this.value;
-            sySel.value = ""; sySel.disabled = true;
+            if (semSel) { semSel.value = ""; semSel.disabled = !this.value; }
+            if (sySel) { sySel.value = ""; sySel.disabled = true; }
             updateSyllabiTitle();
             clearSyllabiCourseRows();
         });
@@ -1859,7 +1902,7 @@ async function initSyllabiContextWiring() {
     if (semSel && !semSel.dataset.wired) {
         semSel.dataset.wired = "true";
         semSel.addEventListener("change", function () {
-            sySel.value = ""; sySel.disabled = !this.value;
+            if (sySel) { sySel.value = ""; sySel.disabled = !this.value; }
             updateSyllabiTitle();
             clearSyllabiCourseRows();
         });
@@ -1943,6 +1986,21 @@ function wireSyllabiMasterlistSync() {
 // ══════════════════════════════════════════════
 // SYLLABI — FACULTY PICKER
 // ══════════════════════════════════════════════
+function bindSyllabiFacultyReposition() {
+    if (window.__syllabiFacultyRepositionBound) return;
+    window.__syllabiFacultyRepositionBound = true;
+    const repositionOpen = () => {
+        document.querySelectorAll('[id^="syllabiFacultyDropdown_"]').forEach(dd => {
+            if (dd.style.display !== 'block') return;
+            const uid = dd.id.replace('syllabiFacultyDropdown_', '');
+            const input = document.getElementById('syllabiFacultyInput_' + uid);
+            if (input) positionFixedDropdown(dd, input);
+        });
+    };
+    window.addEventListener('scroll', repositionOpen, true);
+    window.addEventListener('resize', repositionOpen);
+}
+
 function buildSyllabiFacultyCellHTML(uid) {
     return `
         <div class="syllabi-faculty-wrap" id="syllabiFacultyWrap_${uid}" style="position:relative;">
@@ -2175,12 +2233,7 @@ function bindSyllabiFacultyInput(uid) {
         pickSyllabiFacultyFromQuery(uid, val);
     });
 
-    const reposition = () => {
-        const dd = document.getElementById('syllabiFacultyDropdown_' + uid);
-        if (dd && dd.style.display === 'block') positionFixedDropdown(dd, input);
-    };
-    window.addEventListener('scroll', reposition, true);
-    window.addEventListener('resize', reposition);
+    bindSyllabiFacultyReposition();
 }
 
 async function renderSyllabiFacultyDropdown(uid, input) {
@@ -2408,15 +2461,8 @@ async function seedExistingSyllabiGroups() {
             const existingHidden = tr.querySelector('input[name="syllabiExistingScannedDrf[]"]');
             if (existingHidden && data.scanned_drf) existingHidden.value = data.scanned_drf;
 
-            if (data.scanned_drf_name) {
-                const cell = tr.querySelector('.reg-upload-cell');
-                if (cell) {
-                    const span = cell.querySelector('span');
-                    const icon = cell.querySelector('i');
-                    if (span) span.textContent = data.scanned_drf_name;
-                    if (icon) icon.className = 'fa-solid fa-file-pdf';
-                    cell.classList.add('reg-upload-cell-success');
-                }
+            if (data.scanned_drf) {
+                showExistingSyllabiScannedFile(tr, data.scanned_drf);
             }
         });
     });
@@ -2439,6 +2485,28 @@ function setVal(tr, name, value) {
     if (value === null || value === undefined || value === '') return;
     const el = tr.querySelector(`[name="${name}"]`);
     if (el) el.value = value;
+}
+
+function showExistingSyllabiScannedFile(tr, path) {
+    if (!tr || !path) return;
+    const cell = tr.querySelector('.reg-upload-cell');
+    if (!cell) return;
+
+    const url = '/storage/' + String(path).replace(/^\/+/, '').replace(/^storage\//, '');
+    const ext = (String(path).split('.').pop() || '').toLowerCase();
+    const isPdf = ext === 'pdf';
+    const iconClass = isPdf ? 'fa-solid fa-file-pdf' : 'fa-solid fa-file-word';
+    const label = isPdf ? 'View PDF' : 'View document';
+    const linkClass = isPdf ? 'reg-upload-viewfile reg-revrow-viewfile-pdf' : 'reg-upload-viewfile reg-revrow-viewfile-doc';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'reg-upload-cell reg-upload-cell-success';
+    wrap.innerHTML =
+        '<input type="file" name="syllabiScannedDrf[]" accept=".pdf,.docx" disabled style="display:none">' +
+        '<a href="' + url + '" target="_blank" rel="noopener" class="' + linkClass + '" title="' + label + '">' +
+            '<i class="' + iconClass + '"></i><span>' + label + '</span>' +
+        '</a>';
+    cell.replaceWith(wrap);
 }
 
 // ══════════════════════════════════════════════
@@ -2848,8 +2916,8 @@ function validateForm() {
         return errors;
     }
 
-    const checked = document.querySelectorAll("#dynamicCheckboxes input[type='checkbox']:checked:not(:disabled)");
-    if (checked.length === 0) {
+    const checkedAny = document.querySelectorAll("#dynamicCheckboxes input[type='checkbox']:checked");
+    if (checkedAny.length === 0) {
         errors.push({ field: "dynamicCheckboxes", message: "Please check at least one checklist.", type: "checklist" });
         return errors;
     }
@@ -3031,7 +3099,7 @@ function collectMissingFields() {
     if (sectionVisible("section-2")) {
         checkText("DCN", "dcnNumber", "DCN No.");
         checkText("DCN", "noticeDate", "DCN Date");
-        checkText("DCN", "dcnSourceUnit", "Source Unit");
+        if (!window.__sourceWidgets.dcn || window.__sourceWidgets.dcn.selected.length === 0) missing.push("DCN: Source Unit");
     }
 
     if (sectionVisible("section-3")) {
@@ -3041,7 +3109,7 @@ function collectMissingFields() {
             checkText("Masterlist", "masterlistEffectivityDate", "Effectivity Date");
         }
         checkText("Masterlist", "masterlistNoOfPages", "No. of Pages");
-        checkText("Masterlist", "briefPurpose", "Brief Purpose");
+        checkText("Masterlist", "briefPurpose", "Justification");
         if (!window.__sourceWidgets.masterlistOriginator || window.__sourceWidgets.masterlistOriginator.selected.length === 0) missing.push("Masterlist: Originator");
         if (!window.__sourceWidgets.masterlist || window.__sourceWidgets.masterlist.selected.length === 0) missing.push("Masterlist: Source Unit");
     }
@@ -3289,13 +3357,15 @@ function buildDcnReview(reviewContent) {
         { label: "DCN No.", value: getInputVal("dcnNumber") },
         { label: "DCN Date", value: formatInputDate("noticeDate") },
         { label: "Receipt", value: formatInputDate("receiptDate") + " " + getInputVal("receiptTime") },
-        { label: "Source Unit", value: getSelectText("dcnSourceUnit") },
+        { label: "Source Unit", value: window.__sourceWidgets.dcn?.selected.length > 0 ? window.__sourceWidgets.dcn.selected.map(i => i.label).join(', ') : null },
         { label: "File", value: f && f.length > 0 ? f[0].name : null, isFile: true },
     ]);
     const rev = [];
     document.querySelectorAll("#revisionTableBody tr").forEach((r, i) => {
         const t = r.querySelector('input[name="documentTitle[]"]');
-        if (t && t.value.trim()) rev.push("Row " + (i + 1) + ": " + t.value);
+        const n = r.querySelector('input[name="documentNo[]"]');
+        const label = (n && n.value.trim() ? n.value.trim() + ' — ' : '') + (t && t.value.trim() ? t.value.trim() : '');
+        if (label) rev.push("Row " + (i + 1) + ": " + label);
     });
     if (rev.length) addReviewList(reviewContent, "Revisions", rev);
 }
@@ -3372,20 +3442,26 @@ window.handleGenerateReport = function () { alert("Report generation coming soon
 // ══════════════════════════════════════════════
 // REVISION TABLE
 // ══════════════════════════════════════════════
+function revisionRowCellsHTML() {
+    return `
+        <td>
+            <input type="text" name="documentNo[]" placeholder="Search or enter document no." autocomplete="off">
+            <input type="hidden" name="revisionScannedPath[]" value="">
+        </td>
+        <td><input type="text" name="documentTitle[]" placeholder="Search or enter document title" autocomplete="off"></td>
+        <td><input type="date" name="effectiveDate[]" readonly class="reg-revrow-locked" tabindex="-1"></td>
+        <td><input type="number" name="revisionNo[]" placeholder="—" readonly class="reg-revrow-locked" tabindex="-1"></td>
+        <td class="reg-rev-scan-cell" style="text-align:center;color:#94a3b8;">—</td>
+        <td><input type="text" name="revisionPurpose[]" placeholder="—" readonly class="reg-revrow-locked" tabindex="-1"></td>
+        <td><button type="button" class="reg-row-del" onclick="removeRevisionRow(this)"><i class="fa-solid fa-trash-can"></i></button></td>
+    `;
+}
+
 window.addRevisionRow = function () {
     const tbody = document.getElementById("revisionTableBody"); if (!tbody) return;
     const tr = document.createElement("tr");
-    tr.innerHTML = `
-        <td><input type="text" name="documentTitle[]" placeholder="Title"></td>
-        <td><input type="text" name="documentNo[]" placeholder="Doc No."></td>
-        <td><input type="date" name="effectiveDate[]"></td>
-        <td><input type="text" name="revisionNo[]" placeholder="0"></td>
-        <td><input type="file" name="scannedCopy[]" accept=".pdf,.docx"></td>
-        <td><input type="text" name="revisionPurpose[]" placeholder="Purpose"></td>
-        <td><button type="button" class="reg-row-del" onclick="removeRevisionRow(this)"><i class="fa-solid fa-trash-can"></i></button></td>
-    `;
+    tr.innerHTML = revisionRowCellsHTML();
     tbody.appendChild(tr);
-    bindTableFileInput(tr.querySelector('input[type="file"]'));
     bindRevisionRowSearch(tr);
 };
 

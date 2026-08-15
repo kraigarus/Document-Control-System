@@ -153,9 +153,17 @@
                     </div>
                     <div class="reg-field">
                         <label>Source Unit</label>
-                        <select id="dcnSourceUnit" name="dcnSourceUnit">
-                            <option value="" selected disabled>Select office</option>
-                        </select>
+                        <div class="reg-reldocs" id="dcnSourceUnitWidget">
+                            <div class="reg-reldocs-inputwrap">
+                                <input type="text" id="dcnSourceUnitSearch" class="reg-reldocs-input"
+                                    placeholder="Type to search offices..." autocomplete="off">
+                                <button type="button" class="reg-reldocs-arrow-btn" id="dcnSourceArrowBtn">
+                                    <i class="fa-solid fa-chevron-down"></i>
+                                </button>
+                            </div>
+                            <div id="dcnSourceResults" class="reg-reldocs-dropdown" style="display:none;"></div>
+                            <div id="dcnSourceInlineChips" class="reg-reldocs-dropdown reg-reldocs-selected-panel" style="display:none;"></div>
+                        </div>
                     </div>
                 </div>
 
@@ -165,8 +173,8 @@
                         <table class="reg-table">
                             <thead>
                                 <tr>
-                                    <th>Title</th>
                                     <th>Document No.</th>
+                                    <th>Document Title</th>
                                     <th>Effectivity Date</th>
                                     <th>Revision No.</th>
                                     <th>Scanned Copy</th>
@@ -176,12 +184,15 @@
                             </thead>
                             <tbody id="revisionTableBody">
                                 <tr>
-                                    <td><input type="text" name="documentTitle[]" placeholder="Enter Document Title"></td>
-                                    <td><input type="text" name="documentNo[]" placeholder="Enter Document No."></td>
-                                    <td><input type="date" name="effectiveDate[]"></td>
-                                    <td><input type="number" name="revisionNo[]" placeholder="0"></td>
-                                    <td><input type="file" name="scannedCopy[]"></td>
-                                    <td><input type="text" name="revisionPurpose[]" placeholder="Enter Purpose"></td>
+                                    <td>
+                                        <input type="text" name="documentNo[]" placeholder="Search or enter document no." autocomplete="off">
+                                        <input type="hidden" name="revisionScannedPath[]" value="">
+                                    </td>
+                                    <td><input type="text" name="documentTitle[]" placeholder="Search or enter document title" autocomplete="off"></td>
+                                    <td><input type="date" name="effectiveDate[]" readonly class="reg-revrow-locked" tabindex="-1"></td>
+                                    <td><input type="number" name="revisionNo[]" placeholder="—" readonly class="reg-revrow-locked" tabindex="-1"></td>
+                                    <td class="reg-rev-scan-cell" style="text-align:center;color:#94a3b8;">—</td>
+                                    <td><input type="text" name="revisionPurpose[]" placeholder="—" readonly class="reg-revrow-locked" tabindex="-1"></td>
                                     <td>
                                         <button type="button" class="reg-row-del" onclick="removeRevisionRow(this)">
                                             <i class="fa-solid fa-trash-can"></i>

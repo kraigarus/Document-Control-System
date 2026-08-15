@@ -8,6 +8,8 @@ use App\Models\VersionType;
 use App\Models\DocumentRequest;
 use App\Models\DocumentRequestForm;
 use App\Models\DocumentChangeNotice;
+use App\Models\DcnOffice;
+use App\Models\DrfOffice;
 use App\Models\MasterlistSourceOffice;
 use App\Models\RetrievalOffice;
 use App\Models\DistributionOffice;
@@ -219,8 +221,9 @@ class SettingsController extends Controller
     {
         $office = Office::findOrFail($id);
 
-        $inUse = DocumentRequestForm::where('office_id', $id)->exists()
+        $inUse = DrfOffice::where('office_id', $id)->exists()
             || DocumentChangeNotice::where('office_id', $id)->exists()
+            || DcnOffice::where('office_id', $id)->exists()
             || MasterlistSourceOffice::where('office_id', $id)->exists()
             || RetrievalOffice::where('office_id', $id)->exists()
             || DistributionOffice::where('office_id', $id)->exists();

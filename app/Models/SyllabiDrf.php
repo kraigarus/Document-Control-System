@@ -22,6 +22,13 @@ class SyllabiDrf extends Model
         'scanned_drf',
     ];
 
+    protected function casts(): array
+    {
+        return [
+            'is_drf_available' => 'boolean',
+        ];
+    }
+
     public function syllabus()
     {
         return $this->belongsTo(Syllabi::class, 'syllabi_id');

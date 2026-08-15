@@ -264,8 +264,9 @@ document.addEventListener('DOMContentLoaded', function () {
             radio.addEventListener('change', function () {
                 if (this.checked) {
                     state.selectedFile = state.files[idx];
+                    resetConfigUI();
+                    state.stampType = null;
 
-                    // Pre-select stamp type if file is already stamped
                     if (file.stamped && file.stamp_type) {
                         state.stampType = file.stamp_type;
                         document.querySelectorAll('.st-type-pill').forEach(p => p.classList.remove('selected'));
@@ -305,6 +306,7 @@ document.addEventListener('DOMContentLoaded', function () {
         state.currentPage = 1;
         state.pageCount = 1;
         state.placement = null;
+        state.stampType = null;
         updatePageNav();
 
         downloadBtn.disabled = true;

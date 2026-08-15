@@ -30,9 +30,7 @@ class InactiveUser
 
         $idleTime = now()->timestamp - $lastActivity;
 
-        // ── FIX #1: Always update activity BEFORE checking timeout ──
-        // This ensures that if the user IS making a request, they're considered active.
-        // The keep-alive ping and normal page loads both reset the clock.
+        // Always update activity BEFORE checking timeout.
         session(['last_activity_time' => now()->timestamp]);
 
         // Auto logout — only if TRULY inactive (no request within the window)

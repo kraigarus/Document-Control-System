@@ -7,7 +7,6 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\StampingController;
 use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\SettingsController;
-use App\Http\Controllers\ProfileController;
 use App\Models\DocumentRequest;
 use App\Services\DocumentVisibilityService;
 
@@ -25,10 +24,9 @@ Route::post('/logout', [LoginController::class, 'logout'])->name('logout')->midd
 
 // Keep-alive (auth required)
 Route::post('/keep-alive', function () {
-    // Just touching the session resets its expiry
-    session()->put('last_activity', now());
+    session()->put('last_activity_time', now()->timestamp);
     return response()->json(['status' => 'ok']);
-    })->name('keep-alive')->middleware('auth');
+})->name('keep-alive')->middleware('auth');
 
 // ── Protected routes ──
 Route::middleware(['auth', 'active'])->group(function () {
@@ -39,7 +37,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         $visibleIds = $visibility->getVisibleRequestIds();
 
         $base = fn () => DocumentRequest::whereIn('id', $visibleIds)
-            ->where('approval_status', '!=', 'obsolete');
+            ->whereIn('approval_status', ['applicable', 'not_applicable']);
 
         return response()->json([
             'totalDocuments'    => $base()->count(),
@@ -187,14 +185,6 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('/program-courses', [SettingsController::class, 'storeProgramCourse'])->name('programcourses.store');
         Route::put('/program-courses/{id}', [SettingsController::class, 'updateProgramCourse'])->name('programcourses.update');
         Route::delete('/program-courses/{id}', [SettingsController::class, 'destroyProgramCourse'])->name('programcourses.destroy');
-    });
-
-    Route::middleware('auth')->prefix('profile')->name('profile.')->group(function () {
-        Route::get('/', [ProfileController::class, 'index'])->name('index');
-        Route::put('/info', [ProfileController::class, 'updateInfo'])->name('info.update');
-        Route::put('/password', [ProfileController::class, 'updatePassword'])->name('password.update');
-        Route::post('/photo', [ProfileController::class, 'updatePhoto'])->name('photo.update');
-        Route::delete('/photo', [ProfileController::class, 'destroyPhoto'])->name('photo.destroy');
     });
 });
 

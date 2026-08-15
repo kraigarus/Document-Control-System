@@ -155,6 +155,41 @@
                                     ];
                                 }
 
+                                $seenSyllabiPaths = [];
+                                foreach ($doc->syllabi as $syl) {
+                                    $courseName = $syl->course->course_name ?? 'Syllabi';
+                                    foreach ($syl->drfs as $sd) {
+                                        if (empty($sd->scanned_drf)) continue;
+                                        $path = $sd->scanned_drf;
+                                        if (isset($seenSyllabiPaths[$path])) continue;
+                                        $seenSyllabiPaths[$path] = true;
+
+                                        $siblingIds = $syl->drfs
+                                            ->where('scanned_drf', $path)
+                                            ->pluck('id');
+                                        $key = 'syllabi_drf_' . $sd->id;
+                                        $s = $stampMap[$key] ?? null;
+                                        foreach ($siblingIds as $sid) {
+                                            $alt = $stampMap['syllabi_drf_' . $sid] ?? null;
+                                            if ($alt) {
+                                                $s = $alt;
+                                                $key = 'syllabi_drf_' . $sid;
+                                                break;
+                                            }
+                                        }
+
+                                        $files[] = [
+                                            'key'        => $key,
+                                            'label'      => 'Syllabi DRF — ' . $courseName,
+                                            'abbr'       => 'SDR',
+                                            'cls'        => 'drf',
+                                            'path'       => $path,
+                                            'stamped'    => !!$s,
+                                            'stamp_type' => $s?->stamp_type,
+                                        ];
+                                    }
+                                }
+
                                 $anyStamped = collect($files)->contains(fn($f) => $f['stamped']);
                             @endphp
                             <tr data-search="{{ strtolower($docNo . ' ' . $title . ' ' . $docType) }}">

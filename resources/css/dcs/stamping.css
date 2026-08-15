@@ -214,7 +214,7 @@ body {
 
 .st-table-scroll { overflow-x: auto; }
 
-.st-table { width: 100%; border-collapse: collapse; }
+.st-table { width: 100%; border-collapse: collapse; table-layout: auto; }
 
 .st-table thead {
     background: linear-gradient(135deg, var(--st-accent) 0%, var(--st-accent-dark) 100%);
@@ -232,18 +232,18 @@ body {
     border-bottom: none;
 }
 
-.st-table thead th.col-title { text-align: left; }
+.st-table thead th.col-title { text-align: left; max-width: 360px; }
 .st-table thead th.col-files { text-align: center; }
 .st-table thead th.col-files i { opacity: 0.7; }
 
 /* Column width classes */
 .col-idx   { width: 48px; }
-.col-type  { width: 120px; }
-.col-docno { width: 150px; }
-.col-title { min-width: 200px; }
+.col-type  { width: 130px; }
+.col-docno { width: 1%; white-space: nowrap; }
+.col-title { width: auto; }
 .col-rev   { width: 56px; }
-.col-files { min-width: 200px; }
-.col-action{ width: 110px; }
+.col-files { width: 180px; }
+.col-action{ width: 120px; }
 
 /* Row animation */
 .st-table tbody tr {
@@ -282,7 +282,7 @@ body {
     text-align: center;
 }
 
-.st-table tbody td.col-title { text-align: left; }
+.st-table tbody td.col-title { text-align: left; max-width: 360px; }
 .st-table tbody td.col-files { text-align: center; }
 
 /* ── Cell Styles ── */
@@ -307,19 +307,25 @@ body {
 }
 
 .st-doc-no {
+    display: block;
     font-weight: 700;
     font-size: 0.82rem;
     color: var(--st-accent);
     letter-spacing: 0.01em;
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
 .st-doc-title {
-    font-weight: 600;
-    max-width: 280px;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.35;
+    font-weight: 600;
     font-size: 0.84rem;
     color: var(--st-text);
 }
