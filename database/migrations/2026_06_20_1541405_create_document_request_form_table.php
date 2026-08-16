@@ -25,8 +25,8 @@ return new class extends Migration
             $table->time('drf_receipt_time')->nullable();
             $table->string('doc_title')->nullable();
             $table->string('scanned_drf')->nullable();
-            $table->foreignId('created_by')
-                  ->constrained('accounts');
+            $table->unsignedInteger('created_by');
+            $table->foreign('created_by')->references('id')->on('account');
             $table->timestamps();
         });
     }

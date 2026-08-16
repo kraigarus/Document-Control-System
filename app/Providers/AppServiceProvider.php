@@ -22,13 +22,12 @@ class AppServiceProvider extends ServiceProvider
 
         Blade::anonymousComponentPath(resource_path('views/layouts'), 'layouts');
 
-        // Force HTTPS in production
+        if (! $this->app->runningInConsole() && request()->hasHeader('Host')) {
+            URL::forceRootUrl(request()->schemeAndHttpHost());
+        }
+
         if ($this->app->environment('production')) {
             URL::forceScheme('https');
         }
-
-        view()->composer('partials.inactivity-modal', function ($view) {
-            $view->with('session_remaining', config('session.lifetime') * 60);
-        });
     }
 }

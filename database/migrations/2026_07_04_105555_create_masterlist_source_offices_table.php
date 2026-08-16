@@ -14,9 +14,8 @@ return new class extends Migration
             $table->foreignId('masterlist_id')
                   ->constrained('dcs_masterlist_registration')
                   ->cascadeOnDelete();
-            $table->foreignId('office_id')->nullable()
-                  ->constrained('offices')
-                  ->nullOnDelete();
+            $table->unsignedInteger('office_id')->nullable();
+            $table->foreign('office_id')->references('id')->on('office')->nullOnDelete();
             $table->timestamps();
             $table->index('masterlist_id');
         });

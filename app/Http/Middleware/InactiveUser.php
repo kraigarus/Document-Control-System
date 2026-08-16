@@ -47,7 +47,7 @@ class InactiveUser
             $request->session()->regenerateToken();
 
             return redirect()->route('login')->withErrors([
-                'email' => 'You have been logged out due to inactivity.',
+                'username' => 'You have been logged out due to inactivity.',
             ]);
         }
 

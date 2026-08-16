@@ -1,23 +1,5 @@
-:root {
-    --reg-accent: #000080;
-    --reg-accent-dark: #091d5a;
-    --reg-accent-subtle: #eef2ff;
-    --reg-surface: #ffffff;
-    --reg-bg: #f8fafc;
-    --reg-border: #e2e8f0;
-    --reg-border-strong: #cbd5e1;
-    --reg-text: #1e293b;
-    --reg-text-muted: #64748b;
-    --reg-text-subtle: #94a3b8;
-    --reg-radius: 10px;
-    --reg-radius-sm: 8px;
-    --reg-success: #16a34a;
-    --reg-success-bg: #f0fdf4;
-    --reg-success-border: #86efac;
-    --reg-error: #dc2626;
-    --reg-error-bg: #fef2f2;
-    --reg-error-border: #fecaca;
-}
+@import './tokens.css';
+
 
 .reg-revision-table {
     padding-top: 15px;

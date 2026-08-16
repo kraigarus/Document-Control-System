@@ -1,3 +1,5 @@
+@import './tokens.css';
+
 *,
 *::before,
 *::after {
@@ -13,7 +15,7 @@ html {
 }
 
 body {
-    font-family: 'Arial', sans-serif;
+    font-family: var(--dcs-font);
     display: flex;
     flex-direction: column;
     height: 100vh;
@@ -24,54 +26,6 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
-:root {
-    --set-accent: #0d2a7a;
-    --set-accent-light: #1a3a9e;
-    --set-accent-subtle: #eef2ff;
-    --set-gold: #c9a227;
-    --set-gold-bg: #fdf8ec;
-    --set-surface: #ffffff;
-    --set-bg: #f8fafc;
-    --set-border: #e2e8f0;
-    --set-border-light: #f1f5f9;
-    --set-text: #1e293b;
-    --set-text-sec: #475569;
-    --set-text-muted: #94a3b8;
-    --set-text-subtle: #94a3b8;
-    --set-green: #059669;
-    --set-green-bg: #ecfdf5;
-    --set-red: #dc2626;
-    --set-red-bg: #fef2f2;
-    --set-radius: 12px;
-    --set-radius-sm: 8px;
-    --set-shadow: 0 1px 3px rgba(15, 23, 42, 0.04),
-                  0 4px 12px rgba(15, 23, 42, 0.03);
-    --set-shadow-hover: 0 4px 16px rgba(15, 23, 42, 0.08),
-                        0 1px 4px rgba(15, 23, 42, 0.04);
-
-    /* ── Layout tokens — synced with header/sidebar ── */
-    --sidebar-width: 272px;
-    --sidebar-collapsed: 68px;
-    --header-height: 70px;
-    --content-padding: clamp(16px, 2vw, 32px);
-}
-
-/* ─── Animations ─── */
-@keyframes fadeInUp {
-    from { opacity: 0; transform: translateY(16px); }
-    to   { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes modalSlideUp {
-    from { opacity: 0; transform: translateY(16px) scale(0.97); }
-    to   { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-@keyframes toastSlideIn {
-    from { opacity: 0; transform: translateY(12px); }
-    to   { opacity: 1; transform: translateY(0); }
-}
-
 /* ─── Main Container ─── */
 .settings-main {
     position: fixed;
@@ -79,13 +33,11 @@ body {
     left: var(--sidebar-width);
     right: 0;
     bottom: 0;
-    padding: var(--content-padding);
-    padding-inline: clamp(16px, 2.5vw, 32px);
+    padding: var(--dcs-page-pad);
     background-color: var(--set-bg);
     overflow-y: auto;
     overflow-x: hidden;
-    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-                padding 0.3s ease;
+    transition: left var(--dcs-ease), padding var(--dcs-ease);
 }
 
 .settings-main::-webkit-scrollbar { width: 6px; }
@@ -99,28 +51,19 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
-    margin-bottom: clamp(16px, 2vw, 24px);
+    margin-bottom: 24px;
     flex-wrap: wrap;
     gap: 12px;
 }
 
 .settings-breadcrumb {
-    font-size: 0.78rem;
-    color: var(--set-text-muted);
-    font-weight: 400;
-    margin-bottom: 4px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.settings-breadcrumb span {
-    font-weight: 600;
-    color: var(--set-text-sec);
-}
-
 .settings-header h1 {
-    font-size: clamp(1.3rem, 1.1rem + 1vw, 1.6rem);
+    font-size: var(--dcs-title-size);
     font-weight: 800;
     color: var(--set-text);
     letter-spacing: -0.02em;
@@ -178,12 +121,7 @@ body {
 
 /* ─── Tab Panels ─── */
 .tab-panel {
-    display: none;
     animation: fadeInUp 0.3s ease forwards;
-}
-
-.tab-panel.active {
-    display: block;
 }
 
 /* ─── Panel Toolbar ─── */
@@ -570,6 +508,8 @@ body {
 .empty-state i { font-size: 1.8rem; opacity: 0.3; }
 .empty-state span { font-size: 0.82rem; font-weight: 500; }
 
+[x-cloak] { display: none !important; }
+
 /* ═══════════════════════════════════
    MODAL
    ═══════════════════════════════════ */
@@ -577,7 +517,7 @@ body {
     position: fixed;
     inset: 0;
     background: rgba(12, 18, 33, 0.35);
-    display: none;
+    display: flex;
     align-items: center;
     justify-content: center;
     z-index: 20000;

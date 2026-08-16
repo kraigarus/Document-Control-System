@@ -1,4 +1,3 @@
-@vite(['resources/css/dcs/header.css'])
 <div class="actions-container" id="actionsContainer">
     <button class="action_button" id="actionsBtn" onclick="toggleDropdown(event)">
         <span>ACTIONS</span>
@@ -7,27 +6,15 @@
     <div class="drop_down-container" id="dropdown">
         <span class="menu-label">Move To</span>
         @unless(request()->routeIs('portal'))
-        <button class="subSystem" onclick="window.location.href='/portal'">
+        <button class="subSystem" onclick="window.location.href='{{ route('portal', absolute: false) }}'">
             <img src="{{ asset('icons/portal.svg') }}" alt="Portal Icon">
             <span>Portal</span>
         </button>
         @endunless
-        @if(auth()->user()?->permissions?->is_sadm && !request()->is('admin*'))
-        <button class="subSystem" onclick="window.location.href='/admin/console/'">
-            <img src="{{ asset('icons/user-admin.svg') }}" alt="Admin Console Icon">
-            <span>Admin Console</span>
-        </button>
-        @endif
-        @if((auth()->user()?->permissions?->is_sadm || auth()->user()?->permissions?->can_access_dts) && !request()->is('dts*'))
-        <button class="subSystem" onclick="window.location.href='/dts'">
+        @if((auth()->user()?->permissions?->is_sadm || auth()->user()?->permissions?->can_access_dcs) && !request()->is('dcs*'))
+        <button class="subSystem" onclick="window.location.href='{{ route('dcs', absolute: false) }}'">
             <img src="{{ asset('icons/dts.svg') }}" alt="Document Control Icon">
-            <span>Document Tracking</span>
-        </button>
-        @endif
-        @if((auth()->user()?->permissions?->is_sadm || auth()->user()?->permissions?->can_access_rdp) && !request()->is('rdp*'))
-        <button class="subSystem" onclick="window.location.href='/rdp'">
-            <img src="{{ asset('icons/rdp.svg') }}" alt="Records Disposition Icon">
-            <span>Records Disposition</span>
+            <span>Document Control</span>
         </button>
         @endif
         <hr>
@@ -58,7 +45,6 @@
         }
     }
 
-    // Close dropdown when clicking outside
     document.addEventListener('click', function (event) {
         const container = document.querySelector('.actions-container');
         const dropdown = document.getElementById('dropdown');

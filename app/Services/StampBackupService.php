@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\DocumentStamp;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -45,7 +45,8 @@ class StampBackupService
             @unlink($meta);
         }
 
-        DocumentStamp::where('document_request_id', $requestId)
+        DB::table('dcs_document_stamps')
+            ->where('document_request_id', $requestId)
             ->where('file_key', $fileKey)
             ->delete();
 
@@ -68,7 +69,8 @@ class StampBackupService
         $meta        = self::readMeta($requestId, $fileKey);
         $currentHash = is_readable($absolutePath) ? md5_file($absolutePath) : '';
 
-        $hasStamp = DocumentStamp::where('document_request_id', $requestId)
+        $hasStamp = DB::table('dcs_document_stamps')
+            ->where('document_request_id', $requestId)
             ->where('file_key', $fileKey)
             ->exists();
 

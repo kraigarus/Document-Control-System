@@ -1,29 +1,432 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="icon" href="/images/logo.png" type="image/png">
-    <title>CSPC - Document Control System</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    @vite(['resources/css/dcs/database.css'])
-</head>
-<body>
+<?php
 
-@include('partials.header')
-@include('partials.sidebar')
-@include('partials.inactivity-modal')
+use App\Helpers\RegisterQueryHelper;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Livewire\Attributes\Layout;
+use Livewire\Attributes\Title;
+use Livewire\Volt\Component;
 
-<div class="db-filter-overlay" id="filterOverlay"></div>
-<aside class="db-filter-panel" id="filterPanel">
+new #[Layout('layouts.dcs')] #[Title('CSPC - Document Control System')] class extends Component {
+    public string $search = '';
+    public string $docTypeId = 'all';
+    public string $subTypeId = 'all';
+    public string $originator = '';
+    public string $sourceUnit = '';
+    public string $status = '';
+    public string $revisionScope = 'all';
+    public string $revisionStatus = 'all';
+    public string $dateFrom = '';
+    public string $dateTo = '';
+    public string $revNo = '';
+    public int $page = 1;
+    public string $notice = '';
+
+    public function updated($name): void
+    {
+        if ($name !== 'page') {
+            $this->page = 1;
+        }
+    }
+
+    public function setType(string $id): void
+    {
+        $this->docTypeId = $id;
+        $this->page = 1;
+    }
+
+    public function resetFilters(): void
+    {
+        $this->subTypeId = 'all';
+        $this->originator = '';
+        $this->sourceUnit = '';
+        $this->status = '';
+        $this->revisionScope = 'all';
+        $this->revisionStatus = 'all';
+        $this->dateFrom = '';
+        $this->dateTo = '';
+        $this->revNo = '';
+        $this->page = 1;
+    }
+
+    public function goToPage(int $page): void
+    {
+        $this->page = max(1, $page);
+    }
+
+    public function export(): void
+    {
+        $this->notice = 'Export feature coming soon.';
+    }
+
+    public function with(): array
+    {
+        return array_merge($this->catalog(), ['list' => $this->listing()]);
+    }
+
+    private function catalog(): array
+    {
+        return [
+            'docTypes' => DB::table('dcs_doc_types')->whereNull('parent_id')->get(),
+            'subTypes' => DB::table('dcs_doc_types')->whereNotNull('parent_id')->orderBy('doc_type_name')->get(),
+            'offices' => DB::table('office')->where('is_active', true)->orderBy('office_name')->get(),
+            'originators' => DB::table('dcs_originators')->orderBy('originator_name')->get(),
+        ];
+    }
+
+    private function listing(): array
+    {
+        try {
+            $query = DB::table('dcs_document_requests as dr');
+
+            if ($this->docTypeId !== 'all' && $this->docTypeId !== '') {
+                $query->where('dr.doc_type_id', $this->docTypeId);
+            }
+
+            if ($this->subTypeId !== 'all' && $this->subTypeId !== '') {
+                $query->where('dr.sub_type_id', $this->subTypeId);
+            }
+
+            if ($this->search !== '') {
+                $like = '%' . $this->search . '%';
+                $query->where(function ($q) use ($like) {
+                    $q->whereExists(function ($q2) use ($like) {
+                        $q2->select(DB::raw(1))
+                            ->from('dcs_document_request_form as drf')
+                            ->whereColumn('drf.request_id', 'dr.id')
+                            ->where(function ($q3) use ($like) {
+                                $q3->where('drf.doc_title', 'ilike', $like)
+                                    ->orWhere('drf.drf_no', 'ilike', $like);
+                            });
+                    })
+                    ->orWhereExists(function ($q2) use ($like) {
+                        $q2->select(DB::raw(1))
+                            ->from('dcs_masterlist_registration as ml')
+                            ->whereColumn('ml.request_id', 'dr.id')
+                            ->where(function ($q3) use ($like) {
+                                $q3->where('ml.doc_no', 'ilike', $like)
+                                    ->orWhere('ml.doc_title', 'ilike', $like);
+                            });
+                    })
+                    ->orWhereRaw('dr.id::text ilike ?', [$like]);
+                });
+            }
+
+            if ($this->originator !== '') {
+                $originator = $this->originator;
+                $query->whereExists(function ($q) use ($originator) {
+                    $q->select(DB::raw(1))
+                        ->from('dcs_masterlist_registration as ml')
+                        ->whereColumn('ml.request_id', 'dr.id')
+                        ->where('ml.originator_name', $originator);
+                });
+            }
+
+            if ($this->sourceUnit !== '') {
+                $officeId = $this->sourceUnit;
+                $query->whereExists(function ($q) use ($officeId) {
+                    $q->select(DB::raw(1))
+                        ->from('dcs_masterlist_registration as ml')
+                        ->join('dcs_masterlist_source_offices as so', 'so.masterlist_id', '=', 'ml.id')
+                        ->whereColumn('ml.request_id', 'dr.id')
+                        ->where('so.office_id', $officeId);
+                });
+            }
+
+            if ($this->status !== '') {
+                $query->where('dr.approval_status', $this->status);
+            }
+
+            if ($this->dateFrom !== '') {
+                $from = $this->dateFrom;
+                $query->whereExists(function ($q) use ($from) {
+                    $q->select(DB::raw(1))
+                        ->from('dcs_masterlist_registration as ml')
+                        ->whereColumn('ml.request_id', 'dr.id')
+                        ->where('ml.effectivity_date', '>=', $from);
+                });
+            }
+
+            if ($this->dateTo !== '') {
+                $to = $this->dateTo;
+                $query->whereExists(function ($q) use ($to) {
+                    $q->select(DB::raw(1))
+                        ->from('dcs_masterlist_registration as ml')
+                        ->whereColumn('ml.request_id', 'dr.id')
+                        ->where('ml.effectivity_date', '<=', $to);
+                });
+            }
+
+            if ($this->revNo !== '') {
+                $revNo = $this->revNo;
+                $query->whereExists(function ($q) use ($revNo) {
+                    $q->select(DB::raw(1))
+                        ->from('dcs_masterlist_registration as ml')
+                        ->whereColumn('ml.request_id', 'dr.id')
+                        ->where('ml.revise_no', $revNo);
+                });
+            }
+
+            $allRows = RegisterQueryHelper::hydrateRequests($query->orderByDesc('dr.id')->get())
+                ->map(fn ($doc) => $this->mapDocument($doc));
+
+            $grouped = $allRows->groupBy(function ($row) {
+                if (! $row['doc_no'] || $row['doc_no'] === 'N/A') {
+                    return 'no_ml_' . $row['request_id'];
+                }
+
+                return $row['doc_no'] . '||' . ($row['doc_type_id'] ?? 0) . '||' . ($row['sub_type_id'] ?? 0);
+            });
+
+            $groups = collect();
+            foreach ($grouped as $rows) {
+                $sorted = $rows->sortByDesc('rev_no')->values();
+                $parent = $sorted->first();
+                $parent['status'] = ($parent['doc_no'] && $parent['doc_no'] !== 'N/A') ? 'Latest' : 'Active';
+
+                $children = $sorted->slice(1)->values()->map(function ($child) {
+                    $child['status'] = 'Obsolete';
+
+                    return $child;
+                });
+
+                $groups->push([
+                    'doc_no' => $parent['doc_no'] ?? 'N/A',
+                    'parent' => $parent,
+                    'children' => $children->all(),
+                    'has_revisions' => $sorted->count() > 1,
+                    'revision_count' => $sorted->count(),
+                ]);
+            }
+
+            if ($this->revisionScope === 'obsolete') {
+                $groups = $groups->filter(fn ($g) => $g['has_revisions'])->values();
+            }
+
+            if ($this->revisionStatus === 'latest') {
+                $groups = $groups->map(function ($g) {
+                    $g['children'] = [];
+
+                    return $g;
+                })->values();
+            } elseif ($this->revisionStatus === 'obsolete') {
+                $groups = $groups
+                    ->filter(fn ($g) => $g['has_revisions'])
+                    ->flatMap(function ($g) {
+                        return collect($g['children'])->map(function ($child) use ($g) {
+                            $child['status'] = 'Obsolete';
+
+                            return [
+                                'doc_no' => $g['doc_no'],
+                                'parent' => $child,
+                                'children' => [],
+                                'has_revisions' => false,
+                                'revision_count' => $g['revision_count'],
+                            ];
+                        });
+                    })
+                    ->values();
+            }
+
+            $categoryOrder = [
+                'internal' => 0,
+                'internal forms' => 1,
+                'external' => 2,
+                'forms' => 3,
+                'logbooks' => 4,
+            ];
+
+            $groups = $groups->sort(function ($a, $b) use ($categoryOrder) {
+                $catA = $a['parent']['doc_type_name'] ?? 'zzz';
+                $catB = $b['parent']['doc_type_name'] ?? 'zzz';
+
+                $rankA = $categoryOrder[strtolower($catA)] ?? PHP_INT_MAX;
+                $rankB = $categoryOrder[strtolower($catB)] ?? PHP_INT_MAX;
+
+                if ($rankA !== $rankB) {
+                    return $rankA <=> $rankB;
+                }
+
+                $catCompare = strcmp($catA, $catB);
+                if ($catCompare !== 0) {
+                    return $catCompare;
+                }
+
+                return ($b['parent']['request_id'] ?? 0) <=> ($a['parent']['request_id'] ?? 0);
+            })->values();
+
+            $total = $groups->count();
+            $perPage = 50;
+            $lastPage = max(1, (int) ceil($total / $perPage));
+            $page = min(max(1, $this->page), $lastPage);
+
+            return [
+                'data' => $groups->slice(($page - 1) * $perPage, $perPage)->values()->all(),
+                'total' => $total,
+                'page' => $page,
+                'per_page' => $perPage,
+                'last_page' => $lastPage,
+            ];
+        } catch (\Throwable $e) {
+            $refId = uniqid('err_');
+            Log::error("Database listing error [{$refId}]: " . $e->getMessage());
+
+            return [
+                'data' => [],
+                'total' => 0,
+                'page' => 1,
+                'per_page' => 50,
+                'last_page' => 1,
+                'error' => "An error occurred (ref: {$refId})",
+            ];
+        }
+    }
+
+    private function mapDocument(object $doc): array
+    {
+        $hasSyllabi = $doc->syllabi->isNotEmpty();
+        $drf = ($doc->documentRequestForm && ! $hasSyllabi) ? $doc->documentRequestForm : null;
+        $syllabiCourses = $doc->syllabi->pluck('course.course_name')->filter()->values();
+        $ml = $doc->masterlistRegistration;
+        $appr = $doc->approvalRecords?->first();
+        $dcn = $doc->documentChangeNotice;
+        $ret = $doc->documentRetrieval;
+        $dist = $doc->documentDistribution;
+
+        $dcnPurpose = null;
+        if ($dcn && $dcn->revisions->isNotEmpty()) {
+            $dcnPurpose = $dcn->revisions->sortBy('id')->first()->brief_purpose;
+        }
+
+        $retOffices = null;
+        if ($ret && $ret->offices) {
+            $retOffices = $ret->offices
+                ->map(fn ($o) => $o->office?->office_name)
+                ->filter()->implode(', ') ?: null;
+        }
+
+        $distOffices = null;
+        if ($dist && $dist->offices) {
+            $distOffices = $dist->offices
+                ->map(fn ($o) => $o->office?->office_name)
+                ->filter()->implode(', ') ?: null;
+        }
+
+        $sourceUnitName = null;
+        if ($ml && $ml->sourceOffices->count() > 0) {
+            $sourceUnitName = $ml->sourceOffices
+                ->map(fn ($o) => $o->office?->office_name)
+                ->filter()->implode(', ') ?: null;
+        }
+
+        $deadlineDiff = null;
+        if ($ml && $ml->deadline && $ml->effectivity_date) {
+            $deadlineDiff = Carbon::parse($ml->effectivity_date)->diffInDays(Carbon::parse($ml->deadline));
+        }
+
+        return [
+            'request_id' => $doc->id,
+            'doc_type_id' => $doc->doc_type_id,
+            'sub_type_id' => $doc->sub_type_id,
+            'doc_type_name' => $doc->docType->doc_type_name ?? 'Uncategorized',
+            'doc_no' => $ml ? $ml->doc_no : 'N/A',
+            'rev_no' => $ml ? (int) $ml->revise_no : 0,
+            'title' => ($ml && $ml->doc_title) ? $ml->doc_title : (($drf && $drf->doc_title) ? $drf->doc_title : 'N/A'),
+            'effectivity' => ($ml && $ml->effectivity_date) ? Carbon::parse($ml->effectivity_date)->format('M d, Y') : null,
+            'originator' => $ml?->originator_name,
+            'pages' => $ml?->no_pages,
+            'status' => $doc->approval_status ?? 'Active',
+            'pdf_path' => ($ml && $ml->scanned_masterlist) ? '/storage/' . $ml->scanned_masterlist : null,
+            'source_unit' => $sourceUnitName,
+            'related' => $ml ? ($ml->relatedList ?? collect())->map(fn ($r) => [
+                'doc_no' => $r->doc_no,
+                'title' => $r->doc_title,
+            ])->values() : [],
+            'syllabi_courses' => $syllabiCourses,
+            'approval_no' => $appr?->approval_no,
+            'approval_date' => ($appr && $appr->approval_date) ? Carbon::parse($appr->approval_date)->format('M d, Y') : null,
+            'deadline_date' => ($ml && $ml->deadline) ? Carbon::parse($ml->deadline)->format('M d, Y') : null,
+            'deadline_diff' => $deadlineDiff !== null ? $deadlineDiff . ' days' : null,
+            'ml_receipt_date' => ($ml && $ml->doc_receipt_date) ? Carbon::parse($ml->doc_receipt_date)->format('M d, Y') : null,
+            'ml_receipt_time' => $ml && $ml->doc_receipt_time ? $this->formatTime($ml->doc_receipt_time) : null,
+            'ml_register_date' => ($ml && $ml->doc_registered_date) ? Carbon::parse($ml->doc_registered_date)->format('M d, Y') : null,
+            'ml_register_time' => $ml && $ml->doc_registered_time ? $this->formatTime($ml->doc_registered_time) : null,
+            'dcn_no' => $dcn?->dcn_no,
+            'dcn_date' => ($dcn && $dcn->dcn_date) ? Carbon::parse($dcn->dcn_date)->format('M d, Y') : null,
+            'dcn_receipt_date' => ($dcn && $dcn->dcn_receipt_date) ? Carbon::parse($dcn->dcn_receipt_date)->format('M d, Y') : null,
+            'dcn_receipt_time' => $dcn && $dcn->dcn_receipt_time ? $this->formatTime($dcn->dcn_receipt_time) : null,
+            'dcn_purpose' => $dcnPurpose,
+            'dcn_scan' => ($dcn && $dcn->scanned_dcn) ? '/storage/' . $dcn->scanned_dcn : null,
+            'drf_no' => $drf?->drf_no,
+            'drf_date' => ($drf && $drf->drf_date) ? Carbon::parse($drf->drf_date)->format('M d, Y') : null,
+            'drf_receipt_date' => ($drf && $drf->drf_receipt_date) ? Carbon::parse($drf->drf_receipt_date)->format('M d, Y') : null,
+            'drf_receipt_time' => $drf && $drf->drf_receipt_time ? $this->formatTime($drf->drf_receipt_time) : null,
+            'drf_scan' => ($drf && $drf->scanned_drf) ? '/storage/' . $drf->scanned_drf : null,
+            'dist_onfile_date' => ($dist && $dist->doc_distribution_date_file) ? Carbon::parse($dist->doc_distribution_date_file)->format('M d, Y') : null,
+            'dist_onfile_time' => $dist && $dist->doc_distribution_time_file ? $this->formatTime($dist->doc_distribution_time_file) : null,
+            'dist_actual_date' => ($dist && $dist->doc_distribution_date_actual) ? Carbon::parse($dist->doc_distribution_date_actual)->format('M d, Y') : null,
+            'dist_actual_time' => $dist && $dist->doc_distribution_time_actual ? $this->formatTime($dist->doc_distribution_time_actual) : null,
+            'dist_offices' => $distOffices,
+            'dist_scan' => ($dist && $dist->scanned_distribution) ? '/storage/' . $dist->scanned_distribution : null,
+            'ret_onfile' => ($ret && $ret->doc_retrieval_date_file) ? Carbon::parse($ret->doc_retrieval_date_file)->format('M d, Y') : null,
+            'ret_actual' => ($ret && $ret->doc_retrieval_date_actual) ? Carbon::parse($ret->doc_retrieval_date_actual)->format('M d, Y') : null,
+            'ret_offices' => $retOffices,
+            'ret_scan' => ($ret && $ret->scanned_retrieval) ? '/storage/' . $ret->scanned_retrieval : null,
+        ];
+    }
+
+    private function formatTime($time): ?string
+    {
+        if (! $time) {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($time)->format('h:i A');
+        } catch (\Throwable $e) {
+            return (string) $time;
+        }
+    }
+}; ?>
+
+@php
+    $categoryState = [];
+    foreach (($list['data'] ?? []) as $group) {
+        $name = $group['parent']['doc_type_name'] ?? 'Uncategorized';
+        $slug = strtolower(preg_replace('/[^a-z0-9]+/i', '-', $name));
+        $categoryState[$slug] = false;
+    }
+@endphp
+
+<div x-data="{
+    filterOpen: false,
+    notice: @js($notice),
+    open: { approval: true, deadline: true, masterlist: true, dcn: true, drf: true, distribution: true, retrieval: true },
+    categories: {{ json_encode($categoryState) }},
+    expandedRevs: {},
+    openCourses: {},
+    toggle(g) { this.open[g] = !this.open[g] },
+    collapseAll() {
+        const next = Object.values(this.open).some(Boolean);
+        Object.keys(this.open).forEach(k => this.open[k] = !next);
+    },
+    toggleCategory(slug) { this.categories[slug] = !this.categories[slug] },
+    toggleRev(id) { this.expandedRevs[id] = !this.expandedRevs[id] },
+    toggleCourses(id) { this.openCourses[id] = !this.openCourses[id] },
+    slug(name) { return String(name || 'uncategorized').toLowerCase().replace(/[^a-z0-9]+/g, '-') }
+}">
+
+<div class="db-filter-overlay" :class="{ 'db-open': filterOpen }" @click="filterOpen = false"></div>
+<aside class="db-filter-panel" :class="{ 'db-open': filterOpen }" id="filterPanel">
     <div class="db-filter-head">
         <h3>Filters</h3>
-        <button class="db-close-btn" id="closeFilterBtn">&times;</button>
+        <button class="db-close-btn" type="button" @click="filterOpen = false">&times;</button>
     </div>
     <div class="db-filter-body">
         <div class="db-filter-group">
         <label>Sub-type</label>
-        <select id="filterSubType">
+        <select wire:model="subTypeId">
             <option value="all">All Sub-types</option>
             @foreach($subTypes ?? [] as $sub)
                 <option value="{{ $sub->id }}">{{ $sub->doc_type_name }}</option>
@@ -32,7 +435,7 @@
     </div>
     <div class="db-filter-group">
         <label>Originator</label>
-        <select id="filterOriginator">
+        <select wire:model="originator">
             <option value="">All Originators</option>
             @foreach($originators as $orig)
                 <option value="{{ $orig->originator_name }}">{{ $orig->originator_name }}</option>
@@ -41,7 +444,7 @@
     </div>
     <div class="db-filter-group">
         <label>Source Unit</label>
-        <select id="filterSourceUnit">
+        <select wire:model="sourceUnit">
             <option value="">All Units</option>
             @foreach($offices ?? [] as $office)
                 <option value="{{ $office->id }}">{{ $office->office_name }}</option>
@@ -50,7 +453,7 @@
     </div>
     <div class="db-filter-group">
         <label>Approval Status</label>
-        <select id="filterStatus">
+        <select wire:model="status">
             <option value="">Any</option>
             <option value="applicable">Applicable</option>
             <option value="not_applicable">Not Applicable</option>
@@ -58,14 +461,14 @@
     </div>
     <div class="db-filter-group">
         <label>Revision</label>
-        <select id="filterRevisionScope">
+        <select wire:model="revisionScope">
             <option value="all">All Documents</option>
             <option value="obsolete">Has Obsolete Revisions</option>
         </select>
     </div>
     <div class="db-filter-group">
         <label>Revision Status</label>
-        <select id="filterRevisionStatus">
+        <select wire:model="revisionStatus">
             <option value="all">All</option>
             <option value="latest">Latest Only</option>
             <option value="obsolete">Obsolete Only</option>
@@ -73,23 +476,23 @@
     </div>
     <div class="db-filter-group">
         <label>Effectivity Date From</label>
-        <input type="date" id="filterDateFrom">
+        <input type="date" wire:model="dateFrom">
     </div>
     <div class="db-filter-group">
         <label>Effectivity Date To</label>
-        <input type="date" id="filterDateTo">
+        <input type="date" wire:model="dateTo">
     </div>
     <div class="db-filter-group">
         <label>Revision No</label>
-        <input type="text" id="filterRevNo" placeholder="e.g. 3">
+        <input type="text" wire:model="revNo" placeholder="e.g. 3">
     </div>
     </div>
     <div class="db-filter-foot">
-        <button class="db-btn db-btn-ghost" id="resetFilterBtn">Reset</button>
-        <button class="db-btn db-btn-primary" id="applyFilterBtn">Apply Filters</button>
+        <button class="db-btn db-btn-ghost" type="button" wire:click="resetFilters">Reset</button>
+        <button class="db-btn db-btn-primary" type="button" @click="filterOpen = false" wire:click="$refresh">Apply Filters</button>
     </div>
 </aside>
-    
+
 <main class="db-page">
 
     <header class="db-header">
@@ -98,44 +501,42 @@
             <h1>Inventory</h1>
         </div>
         <div class="db-header-right">
-            <span class="db-count-badge" id="docCount">Loading...</span>
+            <span class="db-count-badge">{{ $list['total'] ?? 0 }} Documents</span>
         </div>
     </header>
 
+    @if($notice)
+        <p class="db-notice">{{ $notice }}</p>
+    @endif
+    @if(!empty($list['error']))
+        <p class="db-notice">{{ $list['error'] }}</p>
+    @endif
+
     <section class="db-controls">
-        <div class="db-type-grid" id="docTypeGrid">
-            <button class="db-type-btn active" data-type-id="all">ALL</button>
+        <div class="db-type-grid">
+            <button class="db-type-btn {{ $docTypeId === 'all' ? 'active' : '' }}" type="button" wire:click="setType('all')">ALL</button>
             @foreach($docTypes ?? [] as $type)
-                <button class="db-type-btn" data-type-id="{{ $type->id }}">{{ strtoupper($type->doc_type_name) }}</button>
+                <button class="db-type-btn {{ (string) $docTypeId === (string) $type->id ? 'active' : '' }}" type="button" wire:click="setType('{{ $type->id }}')">{{ strtoupper($type->doc_type_name) }}</button>
             @endforeach
         </div>
         <div class="db-controls-right">
             <div class="db-search-wrap">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                <input type="text" id="dbSearch" placeholder="Search documents..." autocomplete="off">
+                <input type="text" wire:model.live.debounce.400ms="search" placeholder="Search documents..." autocomplete="off">
             </div>
-            <button class="db-collapse-btn" id="collapseAllBtn" title="Collapse all columns">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="4 14 10 14 10 20"/>
-                    <polyline points="20 10 14 10 14 4"/>
-                    <line x1="14" y1="10" x2="21" y2="3"/>
-                    <line x1="3" y1="21" x2="10" y2="14"/>
-                </svg>
-                <span id="collapseBtnLabel" class="btn-label">Collapse</span>
+            <button class="db-collapse-btn" type="button" @click="collapseAll()" title="Collapse all columns">
+                <span class="btn-label">Collapse</span>
             </button>
-            <button class="db-filter-btn" id="openFilterBtn">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            <button class="db-filter-btn" type="button" @click="filterOpen = true">
                 <span class="btn-label">Filter</span>
             </button>
-            <button class="db-export-btn" id="exportBtn">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <button class="db-export-btn" type="button" wire:click="export">
                 <span class="btn-label">Export</span>
             </button>
         </div>
     </section>
-    
-    {{-- TABLE --}}
-    <section class="db-table-wrap">
+
+    <section class="db-table-wrap" wire:loading.class="is-loading">
         <div class="db-table-scroll">
             <table class="db-table" id="inventoryTable">
                 <thead>
@@ -152,88 +553,162 @@
                         <th rowspan="3">SOURCE UNIT</th>
                         <th rowspan="3">RELATED DOCS</th>
 
-                        <th rowspan="3" class="col-group-summary collapsed" data-group="approval">APPROVAL <span class="collapse-arrow">&#9654;</span></th>
-                        <th colspan="2" class="col-group-approval col-group-expanded">APPROVAL <span class="collapse-arrow" data-toggle="approval">&#9664;</span></th>
+                        <th rowspan="3" class="col-group-summary" data-group="approval" x-show="!open.approval" x-on:click="toggle('approval')">APPROVAL <span class="collapse-arrow">&#9654;</span></th>
+                        <th colspan="2" class="col-group-approval col-group-expanded" x-show="open.approval" x-on:click="toggle('approval')">APPROVAL <span class="collapse-arrow">&#9664;</span></th>
 
-                        <th rowspan="3" class="col-group-summary collapsed" data-group="deadline">DEADLINE <span class="collapse-arrow">&#9654;</span></th>
-                        <th colspan="2" class="col-group-deadline col-group-expanded">DEADLINE <span class="collapse-arrow" data-toggle="deadline">&#9664;</span></th>
+                        <th rowspan="3" class="col-group-summary" data-group="deadline" x-show="!open.deadline" x-on:click="toggle('deadline')">DEADLINE <span class="collapse-arrow">&#9654;</span></th>
+                        <th colspan="2" class="col-group-deadline col-group-expanded" x-show="open.deadline" x-on:click="toggle('deadline')">DEADLINE <span class="collapse-arrow">&#9664;</span></th>
 
-                        <th rowspan="3" class="col-group-summary collapsed" data-group="masterlist">MASTERLIST <span class="collapse-arrow">&#9654;</span></th>
-                        <th colspan="4" class="col-group-masterlist col-group-expanded">MASTERLIST REGISTRATION <span class="collapse-arrow" data-toggle="masterlist">&#9664;</span></th>
+                        <th rowspan="3" class="col-group-summary" data-group="masterlist" x-show="!open.masterlist" x-on:click="toggle('masterlist')">MASTERLIST <span class="collapse-arrow">&#9654;</span></th>
+                        <th colspan="4" class="col-group-masterlist col-group-expanded" x-show="open.masterlist" x-on:click="toggle('masterlist')">MASTERLIST REGISTRATION <span class="collapse-arrow">&#9664;</span></th>
 
-                        <th rowspan="3" class="col-group-summary collapsed" data-group="dcn">DCN <span class="collapse-arrow">&#9654;</span></th>
-                        <th colspan="6" class="col-group-dcn col-group-expanded">DOCUMENT CHANGE NOTICE <span class="collapse-arrow" data-toggle="dcn">&#9664;</span></th>
+                        <th rowspan="3" class="col-group-summary" data-group="dcn" x-show="!open.dcn" x-on:click="toggle('dcn')">DCN <span class="collapse-arrow">&#9654;</span></th>
+                        <th colspan="6" class="col-group-dcn col-group-expanded" x-show="open.dcn" x-on:click="toggle('dcn')">DOCUMENT CHANGE NOTICE <span class="collapse-arrow">&#9664;</span></th>
 
-                        <th rowspan="3" class="col-group-summary collapsed" data-group="drf">DRF <span class="collapse-arrow">&#9654;</span></th>
-                        <th colspan="5" class="col-group-drf col-group-expanded">DOCUMENT REQUEST FORM <span class="collapse-arrow" data-toggle="drf">&#9664;</span></th>
+                        <th rowspan="3" class="col-group-summary" data-group="drf" x-show="!open.drf" x-on:click="toggle('drf')">DRF <span class="collapse-arrow">&#9654;</span></th>
+                        <th colspan="5" class="col-group-drf col-group-expanded" x-show="open.drf" x-on:click="toggle('drf')">DOCUMENT REQUEST FORM <span class="collapse-arrow">&#9664;</span></th>
 
-                        <th rowspan="3" class="col-group-summary collapsed" data-group="distribution">DISTRIBUTION <span class="collapse-arrow">&#9654;</span></th>
-                        <th colspan="6" class="col-group-distribution col-group-expanded">DISTRIBUTION <span class="collapse-arrow" data-toggle="distribution">&#9664;</span></th>
+                        <th rowspan="3" class="col-group-summary" data-group="distribution" x-show="!open.distribution" x-on:click="toggle('distribution')">DISTRIBUTION <span class="collapse-arrow">&#9654;</span></th>
+                        <th colspan="6" class="col-group-distribution col-group-expanded" x-show="open.distribution" x-on:click="toggle('distribution')">DISTRIBUTION <span class="collapse-arrow">&#9664;</span></th>
 
-                        <th rowspan="3" class="col-group-summary collapsed" data-group="retrieval">RETRIEVAL <span class="collapse-arrow">&#9654;</span></th>
-                        <th colspan="4" class="col-group-retrieval col-group-expanded">RETRIEVAL <span class="collapse-arrow" data-toggle="retrieval">&#9664;</span></th>
+                        <th rowspan="3" class="col-group-summary" data-group="retrieval" x-show="!open.retrieval" x-on:click="toggle('retrieval')">RETRIEVAL <span class="collapse-arrow">&#9654;</span></th>
+                        <th colspan="4" class="col-group-retrieval col-group-expanded" x-show="open.retrieval" x-on:click="toggle('retrieval')">RETRIEVAL <span class="collapse-arrow">&#9664;</span></th>
                     </tr>
 
                     <tr class="db-head-secondary">
-                        <th colspan="2" class="col-group-approval col-group-expanded">BOT/ADCO APPROVAL</th>
-                        <th rowspan="2" class="col-group-deadline col-group-expanded">DATE</th>
-                        <th rowspan="2" class="col-group-deadline col-group-expanded">DAY DIFF</th>
-                        <th colspan="2" class="col-group-masterlist col-group-expanded">DOCUMENT RECEIPT</th>
-                        <th colspan="2" class="col-group-masterlist col-group-expanded">DOCUMENT REGISTERED</th>
-                        <th rowspan="2" class="col-group-dcn col-group-expanded">DCN NO.</th>
-                        <th rowspan="2" class="col-group-dcn col-group-expanded">DCN DATE</th>
-                        <th colspan="2" class="col-group-dcn col-group-expanded">DCN RECEIPT (ACTUAL)</th>
-                        <th rowspan="2" class="col-group-dcn col-group-expanded">PURPOSE OF REVISION</th>
-                        <th rowspan="2" class="col-group-dcn col-group-expanded">SCANNED DCN</th>
-                        <th rowspan="2" class="col-group-drf col-group-expanded">DRF NO.</th>
-                        <th rowspan="2" class="col-group-drf col-group-expanded">DRF DATE</th>
-                        <th colspan="2" class="col-group-drf col-group-expanded">DRF RECEIPT</th>
-                        <th rowspan="2" class="col-group-drf col-group-expanded">SCANNED DRF</th>
-                        <th colspan="2" class="col-group-distribution col-group-expanded">DISTRIBUTION (ON FILE)</th>
-                        <th colspan="2" class="col-group-distribution col-group-expanded">DISTRIBUTION (ACTUAL)</th>
-                        <th rowspan="2" class="col-group-distribution col-group-expanded">RECEIVING OFFICE(S)</th>
-                        <th rowspan="2" class="col-group-distribution col-group-expanded">SCANNED DIST.</th>
-                        <th colspan="2" class="col-group-retrieval col-group-expanded">DATE</th>
-                        <th rowspan="2" class="col-group-retrieval col-group-expanded">RETRIEVED OFFICE(S)</th>
-                        <th rowspan="2" class="col-group-retrieval col-group-expanded">SCANNED RET.</th>
+                        <th colspan="2" class="col-group-approval col-group-expanded" x-show="open.approval">BOT/ADCO APPROVAL</th>
+                        <th rowspan="2" class="col-group-deadline col-group-expanded" x-show="open.deadline">DATE</th>
+                        <th rowspan="2" class="col-group-deadline col-group-expanded" x-show="open.deadline">DAY DIFF</th>
+                        <th colspan="2" class="col-group-masterlist col-group-expanded" x-show="open.masterlist">DOCUMENT RECEIPT</th>
+                        <th colspan="2" class="col-group-masterlist col-group-expanded" x-show="open.masterlist">DOCUMENT REGISTERED</th>
+                        <th rowspan="2" class="col-group-dcn col-group-expanded" x-show="open.dcn">DCN NO.</th>
+                        <th rowspan="2" class="col-group-dcn col-group-expanded" x-show="open.dcn">DCN DATE</th>
+                        <th colspan="2" class="col-group-dcn col-group-expanded" x-show="open.dcn">DCN RECEIPT (ACTUAL)</th>
+                        <th rowspan="2" class="col-group-dcn col-group-expanded" x-show="open.dcn">PURPOSE OF REVISION</th>
+                        <th rowspan="2" class="col-group-dcn col-group-expanded" x-show="open.dcn">SCANNED DCN</th>
+                        <th rowspan="2" class="col-group-drf col-group-expanded" x-show="open.drf">DRF NO.</th>
+                        <th rowspan="2" class="col-group-drf col-group-expanded" x-show="open.drf">DRF DATE</th>
+                        <th colspan="2" class="col-group-drf col-group-expanded" x-show="open.drf">DRF RECEIPT</th>
+                        <th rowspan="2" class="col-group-drf col-group-expanded" x-show="open.drf">SCANNED DRF</th>
+                        <th colspan="2" class="col-group-distribution col-group-expanded" x-show="open.distribution">DISTRIBUTION (ON FILE)</th>
+                        <th colspan="2" class="col-group-distribution col-group-expanded" x-show="open.distribution">DISTRIBUTION (ACTUAL)</th>
+                        <th rowspan="2" class="col-group-distribution col-group-expanded" x-show="open.distribution">RECEIVING OFFICE(S)</th>
+                        <th rowspan="2" class="col-group-distribution col-group-expanded" x-show="open.distribution">SCANNED DIST.</th>
+                        <th colspan="2" class="col-group-retrieval col-group-expanded" x-show="open.retrieval">DATE</th>
+                        <th rowspan="2" class="col-group-retrieval col-group-expanded" x-show="open.retrieval">RETRIEVED OFFICE(S)</th>
+                        <th rowspan="2" class="col-group-retrieval col-group-expanded" x-show="open.retrieval">SCANNED RET.</th>
                     </tr>
 
                     <tr class="db-head-tertiary">
-                        <th class="col-group-approval col-group-expanded">NO.</th>
-                        <th class="col-group-approval col-group-expanded">APPV. DATE</th>
-                        <th class="col-group-masterlist col-group-expanded">DATE</th>
-                        <th class="col-group-masterlist col-group-expanded">TIME</th>
-                        <th class="col-group-masterlist col-group-expanded">DATE</th>
-                        <th class="col-group-masterlist col-group-expanded">TIME</th>
-                        <th class="col-group-dcn col-group-expanded">DATE</th>
-                        <th class="col-group-dcn col-group-expanded">TIME</th>
-                        <th class="col-group-drf col-group-expanded">DATE</th>
-                        <th class="col-group-drf col-group-expanded">TIME</th>
-                        <th class="col-group-distribution col-group-expanded">DATE</th>
-                        <th class="col-group-distribution col-group-expanded">TIME</th>
-                        <th class="col-group-distribution col-group-expanded">DATE</th>
-                        <th class="col-group-distribution col-group-expanded">TIME</th>
-                        <th class="col-group-retrieval col-group-expanded">ON FILE</th>
-                        <th class="col-group-retrieval col-group-expanded">ACTUAL</th>
+                        <th class="col-group-approval col-group-expanded" x-show="open.approval">NO.</th>
+                        <th class="col-group-approval col-group-expanded" x-show="open.approval">APPV. DATE</th>
+                        <th class="col-group-masterlist col-group-expanded" x-show="open.masterlist">DATE</th>
+                        <th class="col-group-masterlist col-group-expanded" x-show="open.masterlist">TIME</th>
+                        <th class="col-group-masterlist col-group-expanded" x-show="open.masterlist">DATE</th>
+                        <th class="col-group-masterlist col-group-expanded" x-show="open.masterlist">TIME</th>
+                        <th class="col-group-dcn col-group-expanded" x-show="open.dcn">DATE</th>
+                        <th class="col-group-dcn col-group-expanded" x-show="open.dcn">TIME</th>
+                        <th class="col-group-drf col-group-expanded" x-show="open.drf">DATE</th>
+                        <th class="col-group-drf col-group-expanded" x-show="open.drf">TIME</th>
+                        <th class="col-group-distribution col-group-expanded" x-show="open.distribution">DATE</th>
+                        <th class="col-group-distribution col-group-expanded" x-show="open.distribution">TIME</th>
+                        <th class="col-group-distribution col-group-expanded" x-show="open.distribution">DATE</th>
+                        <th class="col-group-distribution col-group-expanded" x-show="open.distribution">TIME</th>
+                        <th class="col-group-retrieval col-group-expanded" x-show="open.retrieval">ON FILE</th>
+                        <th class="col-group-retrieval col-group-expanded" x-show="open.retrieval">ACTUAL</th>
                     </tr>
                 </thead>
 
-                <tbody id="tableBody">
+                <tbody>
+                    @php $lastCategory = null; @endphp
+                    @forelse(($list['data'] ?? []) as $i => $group)
+                        @php
+                            $r = $group['parent'];
+                            $catName = $r['doc_type_name'] ?? 'Uncategorized';
+                            $catSlug = strtolower(preg_replace('/[^a-z0-9]+/i', '-', $catName));
+                            $itemNo = (($list['page'] ?? 1) - 1) * ($list['per_page'] ?? 50) + $i + 1;
+                            $revKey = 'rev-' . $r['request_id'];
+                        @endphp
+
+                        @if($catName !== $lastCategory)
+                            <tr class="db-category-row">
+                                <td colspan="46">
+                                    <span class="db-category-toggle" :class="{ expanded: categories['{{ $catSlug }}'] }" x-on:click="toggleCategory('{{ $catSlug }}')">
+                                        <span class="db-category-chevron" x-text="categories['{{ $catSlug }}'] ? '▲' : '▼'"></span>
+                                        {{ strtoupper($catName) }}
+                                    </span>
+                                </td>
+                            </tr>
+                            @php $lastCategory = $catName; @endphp
+                        @endif
+
+                        <tr class="db-parent-row" x-show="categories['{{ $catSlug }}']">
+                            <td>
+                                @if(!empty($group['has_revisions']))
+                                    <span class="db-expand-btn" :class="{ expanded: expandedRevs['{{ $revKey }}'] }" x-on:click.stop="toggleRev('{{ $revKey }}')" title="Show older revisions">▶</span>
+                                @endif
+                                {{ $itemNo }}
+                            </td>
+                            @include('pages.dcs.database._row', ['r' => $r])
+                        </tr>
+
+                        @if(!empty($r['syllabi_courses']) && count($r['syllabi_courses']))
+                            <tr class="db-courses-row" x-show="categories['{{ $catSlug }}']">
+                                <td colspan="46">
+                                    <div class="db-courses-toggle" :class="{ expanded: openCourses['{{ $r['request_id'] }}'] }" x-on:click="toggleCourses('{{ $r['request_id'] }}')">
+                                        <span class="db-courses-chevron" x-text="openCourses['{{ $r['request_id'] }}'] ? '▼' : '▶'"></span>
+                                        <span class="db-courses-label"><i class="fa-solid fa-graduation-cap"></i> Courses ({{ count($r['syllabi_courses']) }})</span>
+                                    </div>
+                                    <div class="db-courses-list" x-show="openCourses['{{ $r['request_id'] }}']" x-cloak>
+                                        @foreach($r['syllabi_courses'] as $course)
+                                            <span class="db-course-chip">{{ $course }}</span>
+                                        @endforeach
+                                    </div>
+                                </td>
+                            </tr>
+                        @endif
+
+                        @foreach($group['children'] ?? [] as $ci => $child)
+                            <tr class="db-child-row" x-show="categories['{{ $catSlug }}'] && expandedRevs['{{ $revKey }}']">
+                                <td class="db-child-ind"><span class="db-child-dot"></span>{{ $itemNo }}.{{ $ci + 1 }}</td>
+                                @include('pages.dcs.database._row', ['r' => $child])
+                            </tr>
+                            @if(!empty($child['syllabi_courses']) && count($child['syllabi_courses']))
+                                <tr class="db-courses-row db-child-courses-row" x-show="categories['{{ $catSlug }}'] && expandedRevs['{{ $revKey }}']">
+                                    <td colspan="46">
+                                        <div class="db-courses-toggle" :class="{ expanded: openCourses['{{ $child['request_id'] }}'] }" x-on:click="toggleCourses('{{ $child['request_id'] }}')">
+                                            <span class="db-courses-chevron" x-text="openCourses['{{ $child['request_id'] }}'] ? '▼' : '▶'"></span>
+                                            <span class="db-courses-label"><i class="fa-solid fa-graduation-cap"></i> Courses ({{ count($child['syllabi_courses']) }})</span>
+                                        </div>
+                                        <div class="db-courses-list" x-show="openCourses['{{ $child['request_id'] }}']" x-cloak>
+                                            @foreach($child['syllabi_courses'] as $course)
+                                                <span class="db-course-chip">{{ $course }}</span>
+                                            @endforeach
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endif
+                        @endforeach
+                    @empty
+                        <tr><td colspan="46" style="text-align:center;padding:40px;color:#94a3b8;">No documents found</td></tr>
+                    @endforelse
                 </tbody>
             </table>
         </div>
 
-        <div class="db-empty" id="emptyState" style="display:none">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
-            <h3>No documents found</h3>
-            <p>Try adjusting your search or filters</p>
-        </div>
+        @if(($list['last_page'] ?? 1) > 1)
+            <div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;padding:12px 16px;">
+                @if(($list['page'] ?? 1) > 1)
+                    <button type="button" class="db-btn" wire:click="goToPage({{ $list['page'] - 1 }})">Previous</button>
+                @endif
+                <span>Page {{ $list['page'] }} of {{ $list['last_page'] }}</span>
+                @if(($list['page'] ?? 1) < ($list['last_page'] ?? 1))
+                    <button type="button" class="db-btn" wire:click="goToPage({{ $list['page'] + 1 }})">Next</button>
+                @endif
+            </div>
+        @endif
 
     </section>
 
 </main>
-
-@vite(['resources/js/dcs/database.js'])
-
-</body>
-</html>
+</div>

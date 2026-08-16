@@ -1,34 +1,6 @@
 /* header.css */
 * {
-    font-family: Arial, Helvetica, sans-serif;
     box-sizing: border-box;
-}
-
-:root {
-    --nav-top: var(--header-height, 70px);
-    --header-height: 70px;
-    --header-bg: #000080;
-    --gold: #FFB800;
-    --white-100: #ffffff;
-    --white-80: rgba(255, 255, 255, 0.8);
-    --white-70: rgba(255, 255, 255, 0.7);
-    --white-50: rgba(255, 255, 255, 0.5);
-    --white-45: rgba(255, 255, 255, 0.45);
-    --white-15: rgba(255, 255, 255, 0.15);
-    --white-12: rgba(255, 255, 255, 0.12);
-    --white-08: rgba(255, 255, 255, 0.08);
-    --white-06: rgba(255, 255, 255, 0.06);
-    --accent: #0d2a7a;
-    --accent-light: #1a3a9e;
-    --accent-subtle: #eef2ff;
-    --surface: #ffffff;
-    --border: #e2e8f0;
-    --border-light: #f1f5f9;
-    --text: #1e293b;
-    --text-muted: #334155;
-    --text-subtle: #94a3b8;
-    --red: #dc2626;
-    --red-light: #ef4444;
 }
 
 /* ─── Top Nav ─── */

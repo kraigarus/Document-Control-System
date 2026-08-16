@@ -1,19 +1,72 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <link rel="icon" href="/images/logo.png" type="image/png">
-    <title>CSPC - Document Control System</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<?php
+
+use App\Helpers\RegisterQueryHelper;
+use Illuminate\Support\Facades\DB;
+use Livewire\Attributes\Layout;
+use Livewire\Attributes\Title;
+use Livewire\Volt\Component;
+
+new #[Layout('layouts.dcs')] #[Title('CSPC - Document Control System')] class extends Component {
+    public function with(): array
+    {
+        $visibleIds = RegisterQueryHelper::visibleRequestIds();
+        $query = DB::table('dcs_document_requests as dr')
+            ->whereIn('dr.id', $visibleIds ?: [0])
+            ->where(function ($q) {
+                $q->whereExists(fn ($q2) =>
+                    $q2->select(DB::raw(1))->from('dcs_masterlist_registration as ml')
+                        ->whereColumn('ml.request_id', 'dr.id')
+                        ->whereNotNull('ml.scanned_masterlist')->where('ml.scanned_masterlist', '!=', ''))
+                  ->orWhereExists(fn ($q2) =>
+                    $q2->select(DB::raw(1))->from('dcs_document_request_form as drf')
+                        ->whereColumn('drf.request_id', 'dr.id')
+                        ->whereNotNull('drf.scanned_drf')->where('drf.scanned_drf', '!=', ''))
+                  ->orWhereExists(fn ($q2) =>
+                    $q2->select(DB::raw(1))->from('dcs_document_change_notice as dcn')
+                        ->whereColumn('dcn.request_id', 'dr.id')
+                        ->whereNotNull('dcn.scanned_dcn')->where('dcn.scanned_dcn', '!=', ''))
+                  ->orWhereExists(fn ($q2) =>
+                    $q2->select(DB::raw(1))->from('dcs_document_distribution as dist')
+                        ->whereColumn('dist.request_id', 'dr.id')
+                        ->whereNotNull('dist.scanned_distribution')->where('dist.scanned_distribution', '!=', ''))
+                  ->orWhereExists(fn ($q2) =>
+                    $q2->select(DB::raw(1))->from('dcs_document_retrieval as ret')
+                        ->whereColumn('ret.request_id', 'dr.id')
+                        ->whereNotNull('ret.scanned_retrieval')->where('ret.scanned_retrieval', '!=', ''))
+                  ->orWhereExists(fn ($q2) =>
+                    $q2->select(DB::raw(1))->from('dcs_syllabi as s')
+                        ->join('dcs_syllabi_drf as sd', 'sd.syllabi_id', '=', 's.id')
+                        ->whereColumn('s.request_id', 'dr.id')
+                        ->whereNotNull('sd.scanned_drf')->where('sd.scanned_drf', '!=', ''));
+            })
+            ->orderByDesc('dr.id');
+
+        $total = (clone $query)->count();
+        $perPage = 15;
+        $page = max(1, (int) request('page', 1));
+        $rows = RegisterQueryHelper::hydrateRequests(
+            (clone $query)->offset(($page - 1) * $perPage)->limit($perPage)->get()
+        );
+        $documents = new \Illuminate\Pagination\LengthAwarePaginator(
+            $rows,
+            $total,
+            $perPage,
+            $page,
+            ['path' => request()->url(), 'query' => request()->query()]
+        );
+
+        $docTypes = DB::table('dcs_doc_types')->whereNull('parent_id')->orderBy('doc_type_name')->get();
+
+        return compact('documents', 'docTypes');
+    }
+}; ?>
+
+@push('styles')
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,500&display=swap" rel="stylesheet">
-    @vite(['resources/css/dcs/stamping.css', 'resources/js/dcs/stamping.js'])
-    @include('partials.header')
-    @include('partials.sidebar')
-    @include('partials.inactivity-modal')
+@endpush
 
+<div x-data="{ q: '', type: 'all' }">
     <div class="st-container main-content">
 
         {{-- ═══ Header ═══ --}}
@@ -34,16 +87,16 @@
         <div class="st-toolbar">
             <div class="st-search-wrap">
                 <i class="fa-solid fa-magnifying-glass"></i>
-                <input type="text" id="stSearch" class="st-search"
+                <input type="text" id="stSearch" class="st-search" x-model="q"
                        placeholder="Search by title, document number, or type..." autocomplete="off">
             </div>
-            <select id="stTypeFilter" class="st-filter">
+            <select id="stTypeFilter" class="st-filter" x-model="type">
                 <option value="all">All Document Types</option>
                 @foreach($docTypes as $type)
                     <option value="{{ strtolower($type->doc_type_name) }}">{{ $type->doc_type_name }}</option>
                 @endforeach
             </select>
-            <button type="button" id="stClearBtn" class="st-btn-clear">
+            <button type="button" id="stClearBtn" class="st-btn-clear" @click="q = ''; type = 'all'">
                 <i class="fa-solid fa-xmark"></i> Clear
             </button>
         </div>
@@ -192,7 +245,8 @@
 
                                 $anyStamped = collect($files)->contains(fn($f) => $f['stamped']);
                             @endphp
-                            <tr data-search="{{ strtolower($docNo . ' ' . $title . ' ' . $docType) }}">
+                            <tr data-search="{{ strtolower($docNo . ' ' . $title . ' ' . $docType) }}"
+                                x-show="(type === 'all' || $el.dataset.search.includes(type)) && (!q || $el.dataset.search.includes(q.toLowerCase()))">
                                 <td class="col-idx">{{ $documents->firstItem() + $i }}</td>
                                 <td class="col-type"><span class="st-badge-type">{{ $docType }}</span></td>
                                 <td class="col-docno"><span class="st-doc-no">{{ $docNo }}</span></td>
@@ -476,5 +530,10 @@
         <i class="st-toast-icon fa-solid fa-check-circle"></i>
         <span class="st-toast-msg" id="toastMsg"></span>
     </div>
-</body>
-</html>
+
+    <div wire:ignore>
+        <script>
+{!! file_get_contents(public_path('js/stamping.js')) !!}
+        </script>
+    </div>
+</div>

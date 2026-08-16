@@ -12,10 +12,8 @@ return new class extends Migration
     {
         Schema::create('dcs_colleges', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('office_id')
-                  ->nullable()
-                  ->constrained('offices')
-                  ->cascadeOnDelete();
+            $table->unsignedInteger('office_id')->nullable();
+            $table->foreign('office_id')->references('id')->on('office')->cascadeOnDelete();
             $table->string('college_code', 50)->unique();
             $table->string('college_name');
             $table->timestamps();

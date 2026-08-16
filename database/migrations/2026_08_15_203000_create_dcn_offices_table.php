@@ -14,9 +14,8 @@ return new class extends Migration
             $table->foreignId('dcn_id')
                   ->constrained('dcs_document_change_notice')
                   ->cascadeOnDelete();
-            $table->foreignId('office_id')
-                  ->constrained('offices')
-                  ->cascadeOnDelete();
+            $table->unsignedInteger('office_id');
+            $table->foreign('office_id')->references('id')->on('office')->cascadeOnDelete();
             $table->timestamps();
 
             $table->unique(['dcn_id', 'office_id']);

@@ -33,8 +33,8 @@ return new class extends Migration
             $table->date('deadline')->nullable();
             $table->text('brief_purpose')->nullable();
             $table->string('scanned_masterlist')->nullable();
-            $table->foreignId('created_by')
-                  ->constrained('accounts');
+            $table->unsignedInteger('created_by');
+            $table->foreign('created_by')->references('id')->on('account');
             $table->timestamps();
         });
     }

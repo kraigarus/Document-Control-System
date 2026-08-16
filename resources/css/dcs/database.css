@@ -1,32 +1,12 @@
+@import './tokens.css';
+
 *{
-    font-family: Arial, sans-serif;
     box-sizing: border-box;
     padding: 0;
     margin: 0;
 }
 
 :root {
-    --db-primary: #0d2a7a;
-    --db-primary-hover: #1a3a9e;     
-    --db-accent: #0d2a7a;              
-    --db-accent-light: #eef2ff;      
-    --db-gold: #c9a227;                
-    --db-green: #059669;    
-    --db-green-light: #ecfdf5;
-    --db-amber: #d97706;
-    --db-amber-light: #fffbeb;
-    --db-red: #dc2626;
-    --db-red-light: #fef2f2;
-    --db-border: #e2e8f0;
-    --db-border-hover: #cbd5e1;
-    --db-bg: #f8fafc;
-    --db-white: #ffffff;
-    --db-text: #1e293b;
-    --db-text-sec: #475569;
-    --db-text-muted: #94a3b8;
-    --db-radius: 8px;
-    --db-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.03);
-    --db-shadow-lg: 0 4px 16px rgba(15, 23, 42, 0.08), 0 1px 4px rgba(15, 23, 42, 0.04);
     --sticky-1-w: 60px;
     --sticky-2-w: 150px;
     --sticky-3-w: 60px;
@@ -46,17 +26,17 @@ body {
 /* ── PAGE ── */
 .db-page {
     position: fixed;
-    top: 70px;
-    left: 272px;
+    top: var(--dcs-header-height);
+    left: var(--dcs-sidebar);
     right: 0;
     bottom: 0;
-    padding: 28px 32px;
+    padding: var(--dcs-page-pad);
     background-color: var(--db-bg);
     overflow-y: auto;
     overflow-x: hidden;
     display: flex;
     flex-direction: column;
-    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: left var(--dcs-ease);
 }
 
 .db-related-tag {
@@ -78,19 +58,18 @@ body {
     margin-bottom: 24px;
 }
 
-.db-breadcrumb {
-    font-size: 0.78rem;
-    color: var(--db-text-muted);
-    font-weight: 400;
-    margin-bottom: 4px;
-}
-.db-breadcrumb span {
-    font-weight: 600;
-    color: var(--db-text-sec);
+.db-notice {
+    margin: 0 0 16px;
+    padding: 10px 14px;
+    border-radius: var(--db-radius);
+    background: var(--db-accent-light);
+    color: var(--db-primary);
+    font-size: 0.875rem;
 }
 
+
 .db-header h1 {
-    font-size: 1.6rem;
+    font-size: var(--dcs-title-size);
     font-weight: 800;
     color: var(--db-text);
     letter-spacing: -0.02em;

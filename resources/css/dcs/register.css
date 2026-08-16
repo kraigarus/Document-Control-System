@@ -1,33 +1,13 @@
+@import './tokens.css';
+
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    font-family: 'Arial', sans-serif;
-}
-
-:root {
-    --reg-accent: #000080;
-    --reg-accent-dark: #091d5a;
-    --reg-accent-subtle: #eef2ff;
-    --reg-surface: #ffffff;
-    --reg-bg: #f8fafc;
-    --reg-border: #e2e8f0;
-    --reg-border-strong: #cbd5e1;
-    --reg-text: #1e293b;
-    --reg-text-muted: #64748b;
-    --reg-text-subtle: #94a3b8;
-    --reg-radius: 10px;
-    --reg-radius-sm: 8px;
-    --reg-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.03);
-    --reg-error: #dc2626;
-    --reg-error-bg: #fef2f2;
-    --reg-error-border: #fecaca;
-    --reg-success: #16a34a;
-    --reg-success-bg: #f0fdf4;
-    --reg-success-border: #86efac;
 }
 
 body {
+    font-family: var(--dcs-font);
     display: flex;
     flex-direction: column;
     height: 100vh;
@@ -234,23 +214,11 @@ body {
     margin-bottom: 24px;
 }
 
-.reg-breadcrumb {
-    font-size: 0.78rem;
-    color: var(--reg-text-subtle);
-    font-weight: 400;
-    margin-bottom: 4px;
-}
-
 .reg-title {
-    font-size: 1.6rem;
+    font-size: var(--dcs-title-size);
     font-weight: 800;
     color: var(--reg-text);
     letter-spacing: -0.02em;
-}
-
-.reg-breadcrumb span {
-    font-weight: 600;
-    color: var(--reg-text-sec);
 }
 
 /* ══════════════════════════════════════════════
@@ -903,13 +871,6 @@ body {
     color: #fff;
 }
 
-.reg-inline-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 8px;
-}
-
 .reg-inline-chip {
     display: inline-flex;
     align-items: center;
@@ -1048,13 +1009,6 @@ body {
     border-style: solid !important;
     border-color: var(--reg-accent) !important;
     background: var(--reg-accent-subtle) !important;
-}
-
-/* Upload — disabled state */
-.reg-upload-disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    pointer-events: none;
 }
 
 /* Upload — remove file button */
@@ -1403,14 +1357,12 @@ body {
 
 /* Column visibility per active step — Course Name (.col-pinned) always shown */
 .reg-wizard-table .col-step1,
-.reg-wizard-table .col-step2,
-.reg-wizard-table .col-step3 {
+.reg-wizard-table .col-step2 {
     display: none;
 }
 
 .reg-wizard-table[data-active-step="1"] .col-step1 { display: table-cell; }
 .reg-wizard-table[data-active-step="2"] .col-step2 { display: table-cell; }
-.reg-wizard-table[data-active-step="3"] .col-step3 { display: table-cell; }
 
 /* ═══ SYLLABI — Checkbox-only cells ═══ */
 .syllabi-check-cell {
@@ -1928,17 +1880,6 @@ select.reg-field-locked:disabled {
     color: var(--reg-text);
 }
 
-.reg-btn-report {
-    background: var(--reg-success-bg);
-    color: #166534;
-    border: 1px solid var(--reg-success-border);
-}
-
-.reg-btn-report:hover {
-    background: #dcfce7;
-    color: #14532d;
-}
-
 .reg-btn-save {
     background: var(--reg-accent);
     color: #fff;
@@ -2093,12 +2034,6 @@ select.reg-field-locked:disabled {
     word-break: break-word;
 }
 
-.review-value-empty {
-    color: #cbd5e1;
-    font-weight: 400;
-    font-style: italic;
-}
-
 .review-file {
     color: var(--reg-success);
     font-weight: 600;
@@ -2109,16 +2044,6 @@ select.reg-field-locked:disabled {
 
 .review-file i {
     font-size: 0.8rem;
-}
-
-.review-tag {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 0.78rem;
-    font-weight: 600;
-    background: var(--reg-accent-subtle);
-    color: var(--reg-accent);
 }
 
 .review-list {
@@ -2282,76 +2207,6 @@ select.reg-field-locked:disabled {
     margin-right: 4px;
 }
 
-/* ═══ VALIDATION TOAST ═══ */
-.reg-validation-toast {
-    background: var(--reg-surface);
-    border: 1px solid var(--reg-error-border);
-    border-left: 4px solid var(--reg-error);
-    border-radius: var(--reg-radius-sm);
-    margin-bottom: 20px;
-    box-shadow: 0 4px 16px rgba(220, 38, 38, 0.12);
-    animation: fadeSlideUp 0.3s ease;
-    overflow: hidden;
-}
-
-.reg-validation-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 16px;
-    background: var(--reg-error-bg);
-    border-bottom: 1px solid var(--reg-error-border);
-}
-
-.reg-validation-header i:first-child {
-    color: var(--reg-error);
-    font-size: 1rem;
-}
-
-.reg-validation-header span {
-    flex: 1;
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: var(--reg-error);
-}
-
-.reg-validation-header button {
-    background: none;
-    border: none;
-    color: var(--reg-error);
-    cursor: pointer;
-    padding: 4px;
-    border-radius: 4px;
-    font-size: 0.8rem;
-    opacity: 0.6;
-    transition: opacity 0.2s ease;
-}
-
-.reg-validation-header button:hover {
-    opacity: 1;
-}
-
-.reg-validation-list {
-    padding: 8px 16px 12px;
-    max-height: 200px;
-    overflow-y: auto;
-}
-
-.reg-validation-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 0;
-    font-size: 0.82rem;
-    color: var(--reg-text);
-}
-
-.reg-validation-item i {
-    color: var(--reg-error);
-    font-size: 0.7rem;
-    flex-shrink: 0;
-}
-
 /* ═══ INPUT ERROR STATE ═══ */
 .reg-input-error {
     border-color: var(--reg-error) !important;
@@ -2372,83 +2227,6 @@ select.reg-field-locked:disabled {
 
 .reg-field-error i {
     font-size: 0.65rem;
-    flex-shrink: 0;
-}
-
-/* ═══ VALIDATION TOAST ═══ */
-.reg-validation-toast {
-    background: var(--reg-surface);
-    border: 1px solid var(--reg-error-border);
-    border-left: 4px solid var(--reg-error);
-    border-radius: var(--reg-radius-sm);
-    margin-bottom: 20px;
-    box-shadow: 0 4px 16px rgba(220, 38, 38, 0.12);
-    animation: fadeSlideUp 0.3s ease;
-    overflow: hidden;
-}
-
-.reg-validation-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 16px;
-    background: var(--reg-error-bg);
-    border-bottom: 1px solid var(--reg-error-border);
-}
-
-.reg-validation-header i:first-child {
-    color: var(--reg-error);
-    font-size: 1rem;
-}
-
-.reg-validation-header span {
-    flex: 1;
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: var(--reg-error);
-}
-
-.reg-validation-header button {
-    background: none;
-    border: none;
-    color: var(--reg-error);
-    cursor: pointer;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 0.8rem;
-    opacity: 0.6;
-    transition: opacity 0.2s ease;
-}
-
-.reg-validation-header button:hover {
-    opacity: 1;
-}
-
-.reg-validation-list {
-    padding: 6px 16px 10px;
-    max-height: 180px;
-    overflow-y: auto;
-}
-
-.reg-validation-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 5px 8px;
-    font-size: 0.82rem;
-    color: var(--reg-text);
-    cursor: pointer;
-    border-radius: 4px;
-    transition: background 0.15s ease;
-}
-
-.reg-validation-item:hover {
-    background: var(--reg-error-bg);
-}
-
-.reg-validation-item i {
-    color: var(--reg-error);
-    font-size: 0.7rem;
     flex-shrink: 0;
 }
 
@@ -2509,6 +2287,5 @@ select.reg-field-locked:disabled {
 
     .reg-modal {
         max-height: 90vh;
-        margin: 10px;
     }
 }

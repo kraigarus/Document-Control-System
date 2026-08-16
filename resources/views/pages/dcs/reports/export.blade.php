@@ -218,7 +218,11 @@
                 @forelse($rows as $row)
                     <tr>
                         @foreach(array_keys($visCols) as $k)
-                            @php $v = is_array($row) ? ($row[$k] ?? null) : null; @endphp
+                            @php
+                                $v = is_array($row)
+                                    ? ($row[$k] ?? null)
+                                    : (is_object($row) ? ($row->{$k} ?? null) : null);
+                            @endphp
                             @if($v !== null && $v !== '')<td>{{ $v }}</td>@else<td class="rpt-na">&mdash;</td>@endif
                         @endforeach
                     </tr>

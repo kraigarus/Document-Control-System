@@ -1,24 +1,9 @@
+@import './tokens.css';
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
-:root {
-    --st-accent: #000080;
-    --st-accent-dark: #091d5a;
-    --st-accent-subtle: #eef2ff;
-    --st-surface: #ffffff;
-    --st-bg: #f1f4f9;
-    --st-border: #e2e8f0;
-    --st-text: #1e293b;
-    --st-text-muted: #64748b;
-    --st-text-subtle: #94a3b8;
-    --st-radius: 12px;
-    --st-radius-sm: 8px;
-    --st-shadow: 0 1px 3px rgba(15,23,42,0.04), 0 6px 16px rgba(15,23,42,0.04);
-    --st-error: #dc2626;
-    --st-success: #16a34a;
-}
-
 body {
-    font-family: Arial, Helvetica, sans-serif;
+    font-family: var(--dcs-font);
     background: var(--st-bg);
     color: var(--st-text);
     -webkit-font-smoothing: antialiased;
@@ -30,13 +15,13 @@ body {
 
 .st-container {
     position: fixed;
-    top: 70px;
-    left: 280px;
+    top: var(--dcs-header-height);
+    left: var(--dcs-sidebar);
     right: 0;
     bottom: 0;
-    padding: 32px 36px;
+    padding: var(--dcs-page-pad);
     overflow-y: auto;
-    transition: left 0.3s cubic-bezier(0.4,0,0.2,1);
+    transition: left var(--dcs-ease);
 }
 
 /* ═══════════════════════════════════════════
@@ -59,19 +44,14 @@ body {
 }
 
 .st-breadcrumb {
-    font-size: 0.76rem;
-    color: var(--st-text-subtle);
-    margin-bottom: 6px;
     letter-spacing: 0.01em;
 }
 
-.st-breadcrumb span { font-weight: 600; color: var(--st-text-muted); }
-
 .st-title {
-    font-size: 1.65rem;
+    font-size: var(--dcs-title-size);
     font-weight: 800;
     color: var(--st-text);
-    letter-spacing: -0.025em;
+    letter-spacing: -0.02em;
     line-height: 1.2;
 }
 

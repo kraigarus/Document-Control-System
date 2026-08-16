@@ -18,10 +18,10 @@ return new class extends Migration
             $table->foreignId('sub_type_id')->nullable()
                   ->constrained('dcs_doc_types');
             $table->enum('approval_status', ['applicable', 'not_applicable'])->nullable();
-            $table->foreignId('created_by')
-                  ->constrained('accounts');
-            $table->foreignId('updated_by')->nullable()
-                  ->constrained('accounts');
+            $table->unsignedInteger('created_by');
+            $table->unsignedInteger('updated_by')->nullable();
+            $table->foreign('created_by')->references('id')->on('account');
+            $table->foreign('updated_by')->references('id')->on('account');
             $table->timestamps();
         });
     }

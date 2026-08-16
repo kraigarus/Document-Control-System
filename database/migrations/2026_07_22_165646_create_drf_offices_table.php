@@ -14,9 +14,8 @@ return new class extends Migration
             $table->foreignId('document_request_form_id')
                   ->constrained('dcs_document_request_form')
                   ->cascadeOnDelete();
-            $table->foreignId('office_id')
-                  ->constrained('offices')
-                  ->cascadeOnDelete();
+            $table->unsignedInteger('office_id');
+            $table->foreign('office_id')->references('id')->on('office')->cascadeOnDelete();
             $table->timestamps();
         });
     }

@@ -14,10 +14,13 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // Global middleware
         $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
+        $middleware->redirectGuestsTo('/login');
+        $middleware->redirectUsersTo('/portal');
 
         // Alias for easy use on routes
         $middleware->alias([
             'active' => \App\Http\Middleware\InactiveUser::class,
+            'can.access.dcs' => \App\Http\Middleware\CanAccessDcs::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

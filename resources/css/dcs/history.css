@@ -1,26 +1,13 @@
-* { margin: 0;
+@import './tokens.css';
+
+* {
+    margin: 0;
     padding: 0;
     box-sizing: border-box;
-    font-family: Arial, Helvetica, sans-serif;
-}
-
-:root {
-    --hst-accent: #000080;
-    --hst-accent-dark: #091d5a;
-    --hst-accent-subtle: #eef2ff;
-    --hst-surface: #ffffff;
-    --hst-bg: #f8fafc;
-    --hst-border: #e2e8f0;
-    --hst-text: #1e293b;
-    --hst-text-muted: #64748b;
-    --hst-text-subtle: #94a3b8;
-    --hst-success: #16a34a;
-    --hst-success-bg: #f0fdf4;
-    --hst-radius: 10px;
-    --hst-shadow: 0 1px 3px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.03);
 }
 
 body {
+    font-family: var(--dcs-font);
     display: flex;
     flex-direction: column;
     height: 100vh;
@@ -29,13 +16,13 @@ body {
 
 .hst-container {
     position: fixed;
-    top: 70px;
-    left: 280px;
+    top: var(--dcs-header-height);
+    left: var(--dcs-sidebar);
     right: 0;
     bottom: 0;
-    padding: 28px 32px;
+    padding: var(--dcs-page-pad);
     overflow-y: auto;
-    transition: left 0.3s cubic-bezier(0.4,0,0.2,1);
+    transition: left var(--dcs-ease);
 }
 
 .hst-badge {

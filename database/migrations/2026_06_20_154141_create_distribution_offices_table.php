@@ -14,8 +14,8 @@ return new class extends Migration
             $table->foreignId('distribution_id')
                   ->constrained('dcs_document_distribution')
                   ->cascadeOnDelete();
-            $table->foreignId('office_id')
-                  ->constrained('offices');
+            $table->unsignedInteger('office_id');
+            $table->foreign('office_id')->references('id')->on('office');
             $table->integer('copies')->nullable();
         });
     }

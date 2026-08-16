@@ -20,7 +20,8 @@ return new class extends Migration
             $table->boolean('all_pages')->default(true);
             $table->string('certified_by')->nullable();
             $table->string('designation')->nullable();
-            $table->foreignId('stamped_by')->constrained('accounts');
+            $table->unsignedInteger('stamped_by');
+            $table->foreign('stamped_by')->references('id')->on('account');
             $table->timestamp('stamped_at');
             $table->timestamps();
 

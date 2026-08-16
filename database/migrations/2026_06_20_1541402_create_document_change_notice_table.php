@@ -23,11 +23,11 @@ return new class extends Migration
             $table->date('dcn_date')->nullable();
             $table->date('dcn_receipt_date')->nullable();
             $table->time('dcn_receipt_time')->nullable();
-            $table->foreignId('office_id')->nullable()
-                  ->constrained('offices');
+            $table->unsignedInteger('office_id')->nullable();
             $table->string('scanned_dcn')->nullable();
-            $table->foreignId('created_by')
-                  ->constrained('accounts');
+            $table->unsignedInteger('created_by');
+            $table->foreign('office_id')->references('id')->on('office')->nullOnDelete();
+            $table->foreign('created_by')->references('id')->on('account');
             $table->timestamps();
         });
     }

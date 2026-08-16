@@ -1,192 +1,120 @@
 <?php
 
+use App\Helpers\RegisterPersistHelper;
+use App\Helpers\RegisterQueryHelper;
+use App\Services\RegisterScanService;
+use App\Helpers\RegisterUpdateHelper;
+use App\Helpers\ReportHelper;
+use App\Services\StampService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Auth\LoginController;
-use App\Http\Controllers\RegisterController;
-use App\Http\Controllers\ReportController;
-use App\Http\Controllers\StampingController;
-use App\Http\Controllers\DatabaseController;
-use App\Http\Controllers\SettingsController;
-use App\Models\DocumentRequest;
-use App\Services\DocumentVisibilityService;
+use Livewire\Volt\Volt;
 
-// Public — portal (no auth)
-Route::get('/', fn () => view('pages.portal.portal'));
+Route::get('/', fn () => Auth::check() ? redirect()->route('portal') : redirect()->route('login'));
 
-// Login — guest only
 Route::middleware('guest')->group(function () {
-    Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login');
-    Route::post('/login', [LoginController::class, 'login']);
+    Volt::route('/login', 'pages.portal.login')->name('login');
 });
 
-// Logout (POST only, auth required)
-Route::post('/logout', [LoginController::class, 'logout'])->name('logout')->middleware('auth');
+Route::post('/logout', function (Request $request) {
+    $user = Auth::user();
+    if ($user && $user->details) {
+        $user->details->update([
+            'is_currently_online' => false,
+            'last_online_time' => now(),
+        ]);
+    }
+    Auth::logout();
+    $request->session()->invalidate();
+    $request->session()->regenerateToken();
 
-// Keep-alive (auth required)
+    return redirect()->route('login');
+})->name('logout')->middleware('auth');
+
 Route::post('/keep-alive', function () {
     session()->put('last_activity_time', now()->timestamp);
+
     return response()->json(['status' => 'ok']);
 })->name('keep-alive')->middleware('auth');
 
-// ── Protected routes ──
-Route::middleware(['auth', 'active'])->group(function () {
+Route::middleware('auth')->group(function () {
+    Route::post('/api/session/ping', function () {
+        session()->put('last_activity_time', now()->timestamp);
+        if ($user = Auth::user()) {
+            \Illuminate\Support\Facades\DB::table('account_details')
+                ->where('account_id', $user->id)
+                ->update([
+                    'is_currently_online' => true,
+                    'last_online_time' => now(),
+                ]);
+        }
 
-    // Dashboard
-    Route::get('/dashboard', fn () => view('pages.dcs.dashboard'))->name('dashboard');
-    Route::get('/api/dashboard-stats', function (DocumentVisibilityService $visibility) {
-        $visibleIds = $visibility->getVisibleRequestIds();
-
-        $base = fn () => DocumentRequest::whereIn('id', $visibleIds)
-            ->whereIn('approval_status', ['applicable', 'not_applicable']);
-
-        return response()->json([
-            'totalDocuments'    => $base()->count(),
-            'internalCount'     => $base()->where('doc_type_id', 1)->count(),
-            'internalFormsCount'=> $base()->where('doc_type_id', 2)->count(),
-            'externalCount'     => $base()->where('doc_type_id', 3)->count(),
-            'formsCount'        => $base()->where('doc_type_id', 4)->count(),
-            'logbooksCount'     => $base()->where('doc_type_id', 5)->count(),
-        ]);
+        return response()->json(['status' => 'active']);
     });
 
-    // API endpoints
-    Route::get('/api/offices', fn () => \App\Models\Office::where('status', 'active')
-        ->orderBy('office_name')
-        ->get()
-        ->map(fn ($o) => [
-            'office_id'   => $o->id,
-            'office_name' => $o->office_name,
-        ]));
+    Route::post('/api/session/tab-closed', function () {
+        if ($user = Auth::user()) {
+            \Illuminate\Support\Facades\DB::table('account_details')
+                ->where('account_id', $user->id)
+                ->update([
+                    'is_currently_online' => false,
+                ]);
+        }
 
-    Route::get('/api/doc-types', fn () => \App\Models\DocType::orderBy('id')
-        ->get(['id', 'parent_id', 'doc_type_name'])
-        ->map(fn ($d) => [
-            'doc_type_id'   => $d->id,
-            'parent_id'     => $d->parent_id,
-            'doc_type_name' => $d->doc_type_name,
-        ]));
-
-    Route::get('/api/version-types', fn () => \App\Models\VersionType::all()
-        ->map(fn ($v) => [
-            'version_id'   => $v->id,
-            'version_name' => $v->version_name,
-        ]));
-
-    Route::get('/api/approval-bodies', fn () => \App\Models\ApprovalBody::all()
-        ->map(fn ($a) => [
-            'approval_body_id' => $a->id,
-            'approval_name'    => $a->approval_name,
-        ]));
-    Route::get('/api/checklist-types', fn () => \App\Models\ChecklistType::orderBy('id')->get());
-    Route::get('/api/checklist-versions/{versionId}', function ($versionId) {
-        return \App\Models\ChecklistVersion::where('dcs_checklist_version.version_id', $versionId)
-            ->join('dcs_checklist_types', 'dcs_checklist_version.checklist_id', '=', 'dcs_checklist_types.id')
-            ->select('dcs_checklist_types.id as checklist_id', 'dcs_checklist_types.checklist_name')
-            ->orderBy('dcs_checklist_types.id')
-            ->get();
-    });
-
-    // Register — Create
-    Route::get('/register', [RegisterController::class, 'index'])->name('register.create');
-    Route::get('/register/check-docno', [RegisterController::class, 'checkDocNo'])->name('register.checkDocNo');
-    Route::post('/register', [RegisterController::class, 'store'])->name('register.store');
-    Route::get('/register/revised', [RegisterController::class, 'revised'])->name('register.revised');
-
-    Route::get('/api/colleges', [RegisterController::class, 'apiColleges']);
-    Route::get('/api/programs/{collegeId}', [RegisterController::class, 'apiPrograms']);
-    Route::get('/api/semesters', [RegisterController::class, 'apiSemesters']);
-    Route::get('/api/school-years', [RegisterController::class, 'apiSchoolYears']);
-    Route::get('/api/documents/search', [RegisterController::class, 'apiSearchDocuments']);
-    Route::get('/api/originators', [RegisterController::class, 'apiOriginators']);
-    Route::get('/api/faculties', [RegisterController::class, 'apiFaculties']);
-    Route::get('/api/program-courses/{programId}/{semesterId}', [RegisterController::class, 'apiProgramCourses']);
-
-    // Register — Update
-    Route::get('/register/update', [RegisterController::class, 'updateList'])->name('register.update');
-    Route::get('/register/update/data', [RegisterController::class, 'updateData'])->name('register.update.data');
-    Route::get('/register/{id}/edit', [RegisterController::class, 'edit'])->name('register.edit');
-    Route::put('/register/{id}', [RegisterController::class, 'updateDoc'])->name('register.updateDoc');
-    Route::delete('/register/{id}', [RegisterController::class, 'destroy'])->name('register.destroy');
-    Route::get('/register/history/{docNo}', [RegisterController::class, 'history'])->name('register.history');
-    Route::post('/register/extract-scan', [RegisterController::class, 'extractScan'])
-    ->name('register.extractScan');
-
-    // Reports
-    Route::get('/reports/masterlist', [ReportController::class, 'masterlist'])->name('reports.masterlist');
-    Route::get('/reports/monitoring', [ReportController::class, 'monitoring'])->name('reports.monitoring');
-    Route::get('/reports/opcr', [ReportController::class, 'opcr'])->name('reports.opcr');
-    Route::get('/reports/others', [ReportController::class, 'othersReport'])->name('reports.others');
-    Route::get('/reports/data', [ReportController::class, 'data'])->name('reports.data');
-    Route::get('/reports/export', [ReportController::class, 'export'])->name('reports.export');
-    Route::post('/reports/opcr/save', [ReportController::class, 'saveOpcrRatings'])->name('reports.opcr.save');
-
-    // Stamping
-    Route::get('/stamping', [StampingController::class, 'index'])->name('stamping.index');
-    Route::post('/stamp/apply',    [StampingController::class, 'apply'])->name('dcs.stamp.apply');
-    Route::post('/stamp/download', [StampingController::class, 'download'])->name('dcs.stamp.download');
-    Route::post('/stamp/preview',  [StampingController::class, 'preview'])->name('dcs.stamp.preview');
-    Route::post('/stamp/check',  [StampingController::class, 'checkStamp'])->name('dcs.stamp.check');
-    Route::post('/stamp/remove', [StampingController::class, 'remove'])->name('dcs.stamp.remove');
-
-    // Database
-    Route::get('/database', [DatabaseController::class, 'index'])->name('database.index');
-    Route::get('/database/data', [DatabaseController::class, 'data'])->name('database.data');
-    Route::get('/database/export', [DatabaseController::class, 'export'])->name('database.export');
-
-    Route::prefix('settings')->name('settings.')->group(function () {
-        Route::get('/', [SettingsController::class, 'index'])->name('index');
-
-        // Document Types & Sub-types
-        Route::post('/doc-types', [SettingsController::class, 'storeDocType'])->name('doctypes.store');
-        Route::put('/doc-types/{id}', [SettingsController::class, 'updateDocType'])->name('doctypes.update');
-        Route::delete('/doc-types/{id}', [SettingsController::class, 'destroyDocType'])->name('doctypes.destroy');
-
-        // Offices
-        Route::post('/offices', [SettingsController::class, 'storeOffice'])->name('offices.store');
-        Route::put('/offices/{id}', [SettingsController::class, 'updateOffice'])->name('offices.update');
-        Route::post('/offices/{id}/toggle-status', [SettingsController::class, 'toggleOfficeStatus'])->name('offices.toggle');
-        Route::delete('/offices/{id}', [SettingsController::class, 'destroyOffice'])->name('offices.destroy');
-
-        // Version Types
-        Route::post('/version-types', [SettingsController::class, 'storeVersionType'])->name('versiontypes.store');
-        Route::put('/version-types/{id}', [SettingsController::class, 'updateVersionType'])->name('versiontypes.update');
-        Route::delete('/version-types/{id}', [SettingsController::class, 'destroyVersionType'])->name('versiontypes.destroy');
-
-        Route::post('/originators', [SettingsController::class, 'storeOriginator'])->name('originators.store');
-        Route::put('/originators/{id}', [SettingsController::class, 'updateOriginator'])->name('originators.update');
-        Route::delete('/originators/{id}', [SettingsController::class, 'destroyOriginator'])->name('originators.destroy');
-
-        Route::post('/faculties', [SettingsController::class, 'storeFaculty']);
-        Route::put('/faculties/{id}', [SettingsController::class, 'updateFaculty']);
-        Route::delete('/faculties/{id}', [SettingsController::class, 'destroyFaculty']);
-
-        // Colleges
-        Route::post('/colleges',       [SettingsController::class, 'storeCollege'])->name('colleges.store');
-        Route::put('/colleges/{id}',   [SettingsController::class, 'updateCollege'])->name('colleges.update');
-        Route::delete('/colleges/{id}',[SettingsController::class, 'destroyCollege'])->name('colleges.destroy');
-
-        // Programs
-        Route::post('/programs',       [SettingsController::class, 'storeProgram'])->name('programs.store');
-        Route::put('/programs/{id}',   [SettingsController::class, 'updateProgram'])->name('programs.update');
-        Route::delete('/programs/{id}',[SettingsController::class, 'destroyProgram'])->name('programs.destroy');
-
-        // Semesters
-        Route::post('/semesters',       [SettingsController::class, 'storeSemester'])->name('semesters.store');
-        Route::put('/semesters/{id}',   [SettingsController::class, 'updateSemester'])->name('semesters.update');
-        Route::delete('/semesters/{id}',[SettingsController::class, 'destroySemester'])->name('semesters.destroy');
-
-        // School Years
-        Route::post('/school-years',       [SettingsController::class, 'storeSchoolYear'])->name('schoolyears.store');
-        Route::put('/school-years/{id}',   [SettingsController::class, 'updateSchoolYear'])->name('schoolyears.update');
-        Route::delete('/school-years/{id}',[SettingsController::class, 'destroySchoolYear'])->name('schoolyears.destroy');
-
-        // Program Courses (curriculum)
-        Route::get('/program-courses', [SettingsController::class, 'index']); // not needed separately — index() already handles this via /settings
-        Route::post('/program-courses', [SettingsController::class, 'storeProgramCourse'])->name('programcourses.store');
-        Route::put('/program-courses/{id}', [SettingsController::class, 'updateProgramCourse'])->name('programcourses.update');
-        Route::delete('/program-courses/{id}', [SettingsController::class, 'destroyProgramCourse'])->name('programcourses.destroy');
+        return response()->json(['status' => 'closed']);
     });
 });
 
-// Catch-all: redirect unknown routes to login
-Route::fallback(fn () => redirect('/login'));
+Route::middleware(['auth', 'active'])->group(function () {
+    Volt::route('/portal', 'pages.portal.access-page')->name('portal');
+});
+
+Route::middleware(['auth', 'active', 'can.access.dcs'])->group(function () {
+    Volt::route('/dcs', 'pages.dcs.index')->name('dcs');
+
+    Route::prefix('dcs')->name('dcs.')->group(function () {
+        Volt::route('/dashboard', 'pages.dcs.index')->name('dashboard');
+
+        Route::get('/api/documents/search', fn (Request $request) => RegisterQueryHelper::searchDocuments($request));
+        Route::get('/register/check-docno', fn (Request $request) => response()->json(RegisterQueryHelper::checkDocNo($request)))
+            ->name('register.checkDocNo');
+        Route::post('/register/extract-scan', fn (Request $request) => response()->json(RegisterScanService::extract($request)))
+            ->name('register.extractScan');
+
+        Volt::route('/register', 'pages.dcs.register.index')->name('register.create');
+        Route::post('/register', function (Request $request) {
+            return RegisterPersistHelper::persist($request);
+        })->name('register.store');
+        Route::get('/register/revised', fn () => redirect()->route('dcs.register.create', ['type' => 'revised']))
+            ->name('register.revised');
+
+        Volt::route('/register/update', 'pages.dcs.register.update')->name('register.update');
+        Volt::route('/register/history/{docNo}', 'pages.dcs.register.history')->name('register.history');
+        Volt::route('/register/{id}/edit', 'pages.dcs.register.edit')->name('register.edit');
+        Route::put('/register/{id}', function (Request $request, $id) {
+            return RegisterUpdateHelper::update($request, (int) $id);
+        })->name('register.updateDoc');
+
+        Volt::route('/reports/masterlist', 'pages.dcs.reports.show')->name('reports.masterlist');
+        Volt::route('/reports/monitoring', 'pages.dcs.reports.show')->name('reports.monitoring');
+        Volt::route('/reports/opcr', 'pages.dcs.reports.show')->name('reports.opcr');
+        Volt::route('/reports/others', 'pages.dcs.reports.show')->name('reports.others');
+        Route::get('/reports/export', fn (Request $request) => app(ReportHelper::class)->export($request))->name('reports.export');
+
+        Volt::route('/stamping', 'pages.dcs.stamping.index')->name('stamping.index');
+        Route::post('/stamp/apply', fn (Request $request) => app(StampService::class)->apply($request))->name('stamp.apply');
+        Route::post('/stamp/download', fn (Request $request) => app(StampService::class)->download($request))->name('stamp.download');
+        Route::post('/stamp/preview', fn (Request $request) => app(StampService::class)->preview($request))->name('stamp.preview');
+
+        Volt::route('/database', 'pages.dcs.database.index')->name('database.index');
+
+        Volt::route('/settings', 'pages.dcs.settings.index')->name('settings.index');
+    });
+});
+
+Route::fallback(function () {
+    return Auth::check()
+        ? redirect()->route('portal')
+        : redirect()->route('login');
+});
