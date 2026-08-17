@@ -22,12 +22,20 @@ class SampleDocumentsSeeder extends Seeder
             return;
         }
 
-        $existing = DB::table('dcs_masterlist_registration')
-            ->where('doc_no', 'like', self::PREFIX . '%')
-            ->count();
+        $sampleRows = DB::table('dcs_masterlist_registration as mr')
+            ->join('dcs_version_type as vt', 'vt.id', '=', 'mr.version_id')
+            ->where('mr.doc_no', 'like', self::PREFIX . '%')
+            ->get(['mr.doc_no', 'vt.version_name']);
 
-        if ($existing >= 50) {
-            $this->command?->info("Sample documents already present ({$existing}). Skipping.");
+        $newDocNos = $sampleRows->where('version_name', 'New')->pluck('doc_no')->unique();
+        $revisedDocNos = $sampleRows->where('version_name', 'Revised')->pluck('doc_no')->unique();
+        $revisedHaveParent = $revisedDocNos->isNotEmpty()
+            && $revisedDocNos->every(fn ($docNo) => $newDocNos->contains($docNo));
+
+        if ($newDocNos->count() >= 50 && $revisedHaveParent) {
+            $this->command?->info(
+                "Sample documents already present ({$newDocNos->count()} new, {$revisedDocNos->count()} revised of those same doc nos). Skipping."
+            );
 
             return;
         }
@@ -55,175 +63,207 @@ class SampleDocumentsSeeder extends Seeder
 
         $samples = $this->samples();
         $now = now();
+        $ctx = compact(
+            'createdBy', 'versionNew', 'versionRevised',
+            'officeIds', 'originators', 'approvalBodies', 'subTypesByParent', 'now'
+        );
 
-        DB::transaction(function () use (
-            $samples, $createdBy, $versionNew, $versionRevised,
-            $officeIds, $originators, $approvalBodies, $subTypesByParent, $now
-        ) {
+        DB::transaction(function () use ($samples, $ctx) {
+            foreach ($samples as $i => $sample) {
+                $this->insertSample($sample, $i + 1, $ctx, false);
+            }
+
             foreach ($samples as $i => $sample) {
                 $n = $i + 1;
-                $isRevised = $n % 7 === 0;
-                $versionId = $isRevised ? $versionRevised : $versionNew;
-                $reviseNo = $isRevised ? (($n % 3) + 1) : 0;
-                $approvalStatus = $n % 5 === 0 ? 'not_applicable' : 'applicable';
-                $subTypeId = $this->pickSubType($sample['doc_type_id'], $n, $subTypesByParent);
-                $originator = $originators[$n % count($originators)];
-                $sourceOffice = $officeIds[$n % count($officeIds)];
-                $registered = Carbon::parse('2026-01-06')->addDays($n * 3);
-                $received = $registered->copy()->subDays(2);
-                $effectivity = $registered->copy()->addDays(14);
-
-                $requestId = DB::table('dcs_document_requests')->insertGetId([
-                    'version_id' => $versionId,
-                    'doc_type_id' => $sample['doc_type_id'],
-                    'sub_type_id' => $subTypeId,
-                    'approval_status' => $approvalStatus,
-                    'created_by' => $createdBy,
-                    'created_at' => $registered,
-                    'updated_at' => $now,
-                ]);
-
-                $masterlistId = DB::table('dcs_masterlist_registration')->insertGetId([
-                    'checklist_id' => 3,
-                    'version_id' => $versionId,
-                    'request_id' => $requestId,
-                    'doc_type_id' => $sample['doc_type_id'],
-                    'doc_no' => $sample['doc_no'],
-                    'doc_receipt_date' => $received->toDateString(),
-                    'doc_receipt_time' => '09:00:00',
-                    'doc_registered_date' => $registered->toDateString(),
-                    'doc_registered_time' => '10:30:00',
-                    'time_spent' => 90,
-                    'doc_title' => $sample['title'],
-                    'effectivity_date' => $effectivity->toDateString(),
-                    'revise_no' => $reviseNo,
-                    'no_pages' => 4 + ($n % 24),
-                    'originator_name' => $originator,
-                    'deadline' => $effectivity->copy()->addDays(30)->toDateString(),
-                    'brief_purpose' => $sample['purpose'],
-                    'created_by' => $createdBy,
-                    'created_at' => $registered,
-                    'updated_at' => $now,
-                ]);
-
-                DB::table('dcs_masterlist_source_offices')->insert([
-                    'masterlist_id' => $masterlistId,
-                    'office_id' => $sourceOffice,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ]);
-
-                $drfId = DB::table('dcs_document_request_form')->insertGetId([
-                    'checklist_id' => 1,
-                    'version_id' => $versionId,
-                    'request_id' => $requestId,
-                    'doc_type_id' => $sample['doc_type_id'],
-                    'drf_no' => 'DRF-2026-' . str_pad((string) $n, 3, '0', STR_PAD_LEFT),
-                    'drf_date' => $received->copy()->subDay()->toDateString(),
-                    'drf_receipt_date' => $received->toDateString(),
-                    'drf_receipt_time' => '08:45:00',
-                    'doc_title' => $sample['title'],
-                    'created_by' => $createdBy,
-                    'created_at' => $registered,
-                    'updated_at' => $now,
-                ]);
-
-                DB::table('dcs_drf_offices')->insert([
-                    'document_request_form_id' => $drfId,
-                    'office_id' => $sourceOffice,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ]);
-
-                if ($isRevised) {
-                    $dcnId = DB::table('dcs_document_change_notice')->insertGetId([
-                        'checklist_id' => 2,
-                        'version_id' => $versionId,
-                        'request_id' => $requestId,
-                        'doc_type_id' => $sample['doc_type_id'],
-                        'dcn_no' => 'DCN-2026-' . str_pad((string) $n, 3, '0', STR_PAD_LEFT),
-                        'dcn_date' => $received->toDateString(),
-                        'dcn_receipt_date' => $received->toDateString(),
-                        'dcn_receipt_time' => '09:15:00',
-                        'office_id' => $sourceOffice,
-                        'created_by' => $createdBy,
-                        'created_at' => $registered,
-                        'updated_at' => $now,
-                    ]);
-
-                    DB::table('dcs_doc_revision')->insert([
-                        'dcn_id' => $dcnId,
-                        'title' => $sample['title'],
-                        'document_no' => $sample['doc_no'],
-                        'effectivity_date' => $effectivity->toDateString(),
-                        'revision_no' => $reviseNo,
-                        'brief_purpose' => $sample['purpose'],
-                        'created_at' => $registered,
-                    ]);
+                if ($n % 5 !== 0) {
+                    continue;
                 }
 
-                if ($n % 2 === 0) {
-                    $distId = DB::table('dcs_document_distribution')->insertGetId([
-                        'checklist_id' => 5,
-                        'version_id' => $versionId,
-                        'request_id' => $requestId,
-                        'doc_type_id' => $sample['doc_type_id'],
-                        'doc_distribution_date_actual' => $registered->copy()->addDays(1)->toDateString(),
-                        'doc_distribution_time_actual' => '14:00:00',
-                        'doc_distribution_date_file' => $registered->copy()->addDays(1)->toDateString(),
-                        'doc_distribution_time_file' => '13:45:00',
-                        'time_spent' => 15,
-                        'remarks' => 'Distributed to concerned offices.',
-                        'created_by' => $createdBy,
-                        'created_at' => $registered,
-                        'updated_at' => $now,
-                    ]);
-
-                    DB::table('dcs_distribution_offices')->insert([
-                        'distribution_id' => $distId,
-                        'office_id' => $sourceOffice,
-                        'copies' => 2,
-                    ]);
-                }
-
-                if ($n % 4 === 0) {
-                    $retId = DB::table('dcs_document_retrieval')->insertGetId([
-                        'checklist_id' => 4,
-                        'version_id' => $versionId,
-                        'request_id' => $requestId,
-                        'doc_type_id' => $sample['doc_type_id'],
-                        'doc_retrieval_date_actual' => $registered->copy()->addDays(5)->toDateString(),
-                        'doc_retrieval_time_actual' => '11:00:00',
-                        'doc_retrieval_date_file' => $registered->copy()->addDays(5)->toDateString(),
-                        'doc_retrieval_time_file' => '10:50:00',
-                        'time_spent' => 10,
-                        'remarks' => 'Obsolete copies retrieved.',
-                        'created_by' => $createdBy,
-                        'created_at' => $registered,
-                        'updated_at' => $now,
-                    ]);
-
-                    DB::table('dcs_retrieval_offices')->insert([
-                        'retrieval_id' => $retId,
-                        'office_id' => $sourceOffice,
-                        'copies' => 1,
-                    ]);
-                }
-
-                if ($approvalStatus === 'applicable' && $approvalBodies !== []) {
-                    DB::table('dcs_approval_records')->insert([
-                        'version_id' => $versionId,
-                        'request_id' => $requestId,
-                        'doc_type_id' => $sample['doc_type_id'],
-                        'approval_body_id' => $approvalBodies[$n % count($approvalBodies)],
-                        'approval_date' => $registered->copy()->subDays(1)->toDateString(),
-                        'approval_no' => 'APR-2026-' . str_pad((string) $n, 3, '0', STR_PAD_LEFT),
-                    ]);
-                }
+                $this->insertSample($sample, $n, $ctx, true);
             }
         });
 
-        $this->command?->info('Inserted 50 sample documents (doc nos start with SAMPLE-).');
+        $this->command?->info('Inserted 50 new sample documents and 10 revised versions of those same doc nos (SAMPLE- prefix).');
+    }
+
+    private function insertSample(array $sample, int $n, array $ctx, bool $isRevised): void
+    {
+        [
+            'createdBy' => $createdBy,
+            'versionNew' => $versionNew,
+            'versionRevised' => $versionRevised,
+            'officeIds' => $officeIds,
+            'originators' => $originators,
+            'approvalBodies' => $approvalBodies,
+            'subTypesByParent' => $subTypesByParent,
+            'now' => $now,
+        ] = $ctx;
+
+        $versionId = $isRevised ? $versionRevised : $versionNew;
+        $reviseNo = $isRevised ? 1 : 0;
+        $seq = $isRevised ? $n + 100 : $n;
+        $approvalStatus = $n % 5 === 0 ? 'not_applicable' : 'applicable';
+        $subTypeId = $this->pickSubType($sample['doc_type_id'], $n, $subTypesByParent);
+        $originator = $originators[$n % count($originators)];
+        $sourceOffice = $officeIds[$n % count($officeIds)];
+        $registered = Carbon::parse('2026-01-06')->addDays($n * 3);
+        if ($isRevised) {
+            $registered = $registered->copy()->addMonths(3);
+        }
+        $received = $registered->copy()->subDays(2);
+        $effectivity = $registered->copy()->addDays(14);
+        $title = $isRevised ? $sample['title'] . ' (Rev 1)' : $sample['title'];
+        $purpose = $isRevised
+            ? 'Revision of existing document ' . $sample['doc_no'] . '. ' . $sample['purpose']
+            : $sample['purpose'];
+
+        $requestId = DB::table('dcs_document_requests')->insertGetId([
+            'version_id' => $versionId,
+            'doc_type_id' => $sample['doc_type_id'],
+            'sub_type_id' => $subTypeId,
+            'approval_status' => $approvalStatus,
+            'created_by' => $createdBy,
+            'created_at' => $registered,
+            'updated_at' => $now,
+        ]);
+
+        $masterlistId = DB::table('dcs_masterlist_registration')->insertGetId([
+            'checklist_id' => 3,
+            'version_id' => $versionId,
+            'request_id' => $requestId,
+            'doc_type_id' => $sample['doc_type_id'],
+            'doc_no' => $sample['doc_no'],
+            'doc_receipt_date' => $received->toDateString(),
+            'doc_receipt_time' => '09:00:00',
+            'doc_registered_date' => $registered->toDateString(),
+            'doc_registered_time' => '10:30:00',
+            'time_spent' => 90,
+            'doc_title' => $title,
+            'effectivity_date' => $effectivity->toDateString(),
+            'revise_no' => $reviseNo,
+            'no_pages' => 4 + ($n % 24),
+            'originator_name' => $originator,
+            'deadline' => $effectivity->copy()->addDays(30)->toDateString(),
+            'brief_purpose' => $purpose,
+            'created_by' => $createdBy,
+            'created_at' => $registered,
+            'updated_at' => $now,
+        ]);
+
+        DB::table('dcs_masterlist_source_offices')->insert([
+            'masterlist_id' => $masterlistId,
+            'office_id' => $sourceOffice,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        $drfId = DB::table('dcs_document_request_form')->insertGetId([
+            'checklist_id' => 1,
+            'version_id' => $versionId,
+            'request_id' => $requestId,
+            'doc_type_id' => $sample['doc_type_id'],
+            'drf_no' => 'DRF-2026-' . str_pad((string) $seq, 3, '0', STR_PAD_LEFT),
+            'drf_date' => $received->copy()->subDay()->toDateString(),
+            'drf_receipt_date' => $received->toDateString(),
+            'drf_receipt_time' => '08:45:00',
+            'doc_title' => $title,
+            'created_by' => $createdBy,
+            'created_at' => $registered,
+            'updated_at' => $now,
+        ]);
+
+        DB::table('dcs_drf_offices')->insert([
+            'document_request_form_id' => $drfId,
+            'office_id' => $sourceOffice,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        if ($isRevised) {
+            $dcnId = DB::table('dcs_document_change_notice')->insertGetId([
+                'checklist_id' => 2,
+                'version_id' => $versionId,
+                'request_id' => $requestId,
+                'doc_type_id' => $sample['doc_type_id'],
+                'dcn_no' => 'DCN-2026-' . str_pad((string) $n, 3, '0', STR_PAD_LEFT),
+                'dcn_date' => $received->toDateString(),
+                'dcn_receipt_date' => $received->toDateString(),
+                'dcn_receipt_time' => '09:15:00',
+                'office_id' => $sourceOffice,
+                'created_by' => $createdBy,
+                'created_at' => $registered,
+                'updated_at' => $now,
+            ]);
+
+            DB::table('dcs_doc_revision')->insert([
+                'dcn_id' => $dcnId,
+                'title' => $title,
+                'document_no' => $sample['doc_no'],
+                'effectivity_date' => $effectivity->toDateString(),
+                'revision_no' => $reviseNo,
+                'brief_purpose' => $purpose,
+                'created_at' => $registered,
+            ]);
+        }
+
+        if ($n % 2 === 0 || $isRevised) {
+            $distId = DB::table('dcs_document_distribution')->insertGetId([
+                'checklist_id' => 5,
+                'version_id' => $versionId,
+                'request_id' => $requestId,
+                'doc_type_id' => $sample['doc_type_id'],
+                'doc_distribution_date_actual' => $registered->copy()->addDays(1)->toDateString(),
+                'doc_distribution_time_actual' => '14:00:00',
+                'doc_distribution_date_file' => $registered->copy()->addDays(1)->toDateString(),
+                'doc_distribution_time_file' => '13:45:00',
+                'time_spent' => 15,
+                'remarks' => 'Distributed to concerned offices.',
+                'created_by' => $createdBy,
+                'created_at' => $registered,
+                'updated_at' => $now,
+            ]);
+
+            DB::table('dcs_distribution_offices')->insert([
+                'distribution_id' => $distId,
+                'office_id' => $sourceOffice,
+                'copies' => 2,
+            ]);
+        }
+
+        if ($n % 4 === 0 || $isRevised) {
+            $retId = DB::table('dcs_document_retrieval')->insertGetId([
+                'checklist_id' => 4,
+                'version_id' => $versionId,
+                'request_id' => $requestId,
+                'doc_type_id' => $sample['doc_type_id'],
+                'doc_retrieval_date_actual' => $registered->copy()->addDays(5)->toDateString(),
+                'doc_retrieval_time_actual' => '11:00:00',
+                'doc_retrieval_date_file' => $registered->copy()->addDays(5)->toDateString(),
+                'doc_retrieval_time_file' => '10:50:00',
+                'time_spent' => 10,
+                'remarks' => $isRevised ? 'Obsolete copies retrieved after revision.' : 'Obsolete copies retrieved.',
+                'created_by' => $createdBy,
+                'created_at' => $registered,
+                'updated_at' => $now,
+            ]);
+
+            DB::table('dcs_retrieval_offices')->insert([
+                'retrieval_id' => $retId,
+                'office_id' => $sourceOffice,
+                'copies' => 1,
+            ]);
+        }
+
+        if ($approvalStatus === 'applicable' && $approvalBodies !== []) {
+            DB::table('dcs_approval_records')->insert([
+                'version_id' => $versionId,
+                'request_id' => $requestId,
+                'doc_type_id' => $sample['doc_type_id'],
+                'approval_body_id' => $approvalBodies[$n % count($approvalBodies)],
+                'approval_date' => $registered->copy()->subDays(1)->toDateString(),
+                'approval_no' => 'APR-2026-' . str_pad((string) $seq, 3, '0', STR_PAD_LEFT),
+            ]);
+        }
     }
 
     private function purgeExistingSamples(): void

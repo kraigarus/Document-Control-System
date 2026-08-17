@@ -4,6 +4,7 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <meta name="csrf-token" content="{{ csrf_token() }}">
+        <x-dcs-meta :title="$title ?? null" />
         <link rel="icon" href="{{ asset('images/logo.png') }}" type="image/png">
 
         <title>{{ $title ?? config('app.name') }}</title>

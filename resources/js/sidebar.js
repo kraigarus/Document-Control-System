@@ -258,25 +258,16 @@ function initSideNav() {
 
         sideNav.classList.toggle("collapsed", collapsed);
         collapseBtn.setAttribute("aria-expanded", String(!collapsed));
-
-        updateMainContentPosition(collapsed);
+        document.querySelectorAll(".tooltip").forEach((tooltip) => {
+            tooltip.classList.remove("is-visible");
+            tooltip.style.opacity = "";
+            tooltip.style.visibility = "";
+        });
 
         setTimeout(() => {
             isAnimating = false;
         }, 350);
     };
-
-    function updateMainContentPosition(collapsed) {
-        const main = document.querySelector(".dashboard-main, main, .main-content, .content-wrapper");
-        if (!main) return;
-
-        if (isMobile()) {
-            // On mobile, sidebar is off-canvas — main goes full width
-            main.style.left = "0";
-        } else {
-            main.style.left = collapsed ? "var(--nav-collapsed)" : "var(--nav-width)";
-        }
-    }
 
     // Restore saved state (desktop only)
     const savedState = localStorage.getItem("sidebar-collapsed");
@@ -311,7 +302,6 @@ function initSideNav() {
             sideNav.classList.remove("mobile-open");
             backdrop.classList.remove("visible");
             document.body.style.overflow = "";
-            updateMainContentPosition(true);
         } else {
             // Entering desktop: ensure sidebar is visible, restore collapse state
             sideNav.classList.remove("mobile-open");
@@ -330,45 +320,43 @@ function initSideNav() {
     // Run on load
     handleBreakpointChange();
 
-    // ── Handle resize (debounced) ──
-    let resizeTimer;
-    window.addEventListener("resize", () => {
-        clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(() => {
-            updateMainContentPosition(
-                sideNav.classList.contains("collapsed") && !isMobile()
-            );
-        }, 100);
-    });
-
     // ── Close float on scroll ──
     document.addEventListener("scroll", () => {
         dropdownItems.forEach((el) => removeFloatingDropdown(el));
     }, true);
 
     // ── Tooltip Positioning ──
+    function hideTooltip(tooltip) {
+        if (!tooltip) return;
+        tooltip.classList.remove("is-visible");
+        tooltip.style.opacity = "";
+        tooltip.style.visibility = "";
+    }
+
+    function showCollapsedTooltip(item, tooltip) {
+        if (isMobile() || !sideNav.classList.contains("collapsed")) {
+            hideTooltip(tooltip);
+            return;
+        }
+
+        const navRect = sideNav.getBoundingClientRect();
+        const itemRect = item.getBoundingClientRect();
+
+        tooltip.style.left = (navRect.right + 10) + "px";
+        tooltip.style.top = (itemRect.top + itemRect.height / 2) + "px";
+        tooltip.style.transform = "translateY(-50%)";
+        tooltip.classList.add("is-visible");
+    }
+
     function initTooltips() {
         const navItems = document.querySelectorAll(".nav-item");
 
         navItems.forEach((item) => {
-            const tooltip = item.querySelector(".tooltip");
+            const tooltip = item.querySelector(":scope .tooltip");
             if (!tooltip) return;
 
-            item.addEventListener("mouseenter", () => {
-                if (isMobile()) return;
-                if (!sideNav.classList.contains("collapsed")) return;
-
-                const navRect = sideNav.getBoundingClientRect();
-                const itemRect = item.getBoundingClientRect();
-
-                tooltip.style.left = (navRect.right + 6) + "px";
-                tooltip.style.top = (itemRect.top + itemRect.height / 2) + "px";
-                tooltip.style.transform = "translateY(-50%)";
-            });
-
-            item.addEventListener("mouseleave", () => {
-                tooltip.style.opacity = "0";
-            });
+            item.addEventListener("mouseenter", () => showCollapsedTooltip(item, tooltip));
+            item.addEventListener("mouseleave", () => hideTooltip(tooltip));
         });
     }
 
