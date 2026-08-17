@@ -365,6 +365,79 @@ body {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
+    position: relative;
+}
+
+.reg-dist-header-actions {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.reg-template-select {
+    height: 30px;
+    border: 1px solid rgba(255,255,255,0.45);
+    background: rgba(255,255,255,0.12);
+    color: #fff;
+    border-radius: 6px;
+    font: inherit;
+    font-size: 0.72rem;
+    padding: 0 8px;
+    max-width: 180px;
+}
+.reg-template-select option { color: #0f172a; }
+.reg-generate-btn {
+    position: static;
+    right: auto;
+    top: auto;
+    transform: none;
+    border: 1px solid rgba(255,255,255,0.45);
+    background: rgba(255,255,255,0.12);
+    color: #fff;
+    font: inherit;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.reg-generate-btn:hover {
+    background: #fff;
+    color: var(--reg-accent);
+}
+
+.reg-cluster-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+.reg-cluster-chip {
+    border: 1px solid var(--reg-border);
+    background: #fff;
+    color: var(--reg-accent);
+    font: inherit;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 999px;
+    cursor: pointer;
+}
+.reg-cluster-chip:hover {
+    background: var(--reg-accent);
+    color: #fff;
+}
+#distBody tr.reg-office-added {
+    cursor: grab;
+}
+#distBody tr.reg-office-added.is-dragging {
+    opacity: 0.45;
 }
 
 .reg-card-header i {
@@ -1828,6 +1901,14 @@ select.reg-field-locked:disabled {
     font-weight: 500;
 }
 
+.syllabi-empty-hint td {
+    text-align: center;
+    padding: 20px 16px;
+    color: var(--reg-text-muted, #64748b);
+    font-size: 0.85rem;
+    background: #f8fafc;
+}
+
 /* Office added animation */
 .reg-office-added {
     animation: fadeSlideUp 0.25s ease;
@@ -1889,6 +1970,22 @@ select.reg-field-locked:disabled {
     background: var(--reg-accent-dark);
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(13, 42, 122, 0.25);
+}
+
+.reg-btn-generate {
+    background: #fff;
+    color: var(--reg-accent);
+    border: 1px solid var(--reg-accent);
+}
+
+.reg-btn-generate:hover:not(:disabled) {
+    background: var(--reg-accent);
+    color: #fff;
+}
+
+.reg-btn-generate:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
 }
 
 /* ══════════════════════════════════════════════

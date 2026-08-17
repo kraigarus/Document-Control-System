@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
@@ -27,6 +28,7 @@ new #[Layout('layouts.dcs')] class extends Component {
     public string $programId = '';
     public string $semesterId = '';
     public string $courseName = '';
+    public array $courseFacultyIds = [];
 
     public string $deleteTitle = '';
     public string $deleteMessage = '';
@@ -47,7 +49,7 @@ new #[Layout('layouts.dcs')] class extends Component {
         $this->reset([
             'versionName', 'docTypeName', 'officeName', 'officeCode', 'officeCluster', 'originatorName',
             'facultyName', 'collegeId', 'collegeName', 'programName', 'programCode',
-            'semesterName', 'schoolYear', 'programId', 'semesterId', 'courseName',
+            'semesterName', 'schoolYear', 'programId', 'semesterId', 'courseName', 'courseFacultyIds',
             'deleteTitle', 'deleteMessage',
         ]);
         $this->resetValidation();
@@ -159,12 +161,20 @@ new #[Layout('layouts.dcs')] class extends Component {
     public function openProgramCourse(?int $id = null): void
     {
         $this->resetFormFor('programCourse', $id);
+        $this->courseFacultyIds = [];
         if ($id) {
             $row = DB::table('dcs_program_courses')->where('id', $id)->first();
             abort_unless($row, 404);
             $this->programId = (string) $row->program_id;
             $this->semesterId = (string) $row->semester_id;
             $this->courseName = $row->course_name;
+            $this->courseFacultyIds = Schema::hasTable('dcs_program_course_faculties')
+                ? DB::table('dcs_program_course_faculties')
+                    ->where('program_course_id', $id)
+                    ->pluck('faculty_id')
+                    ->map(fn ($fid) => (string) $fid)
+                    ->all()
+                : [];
         }
     }
 
@@ -465,14 +475,46 @@ new #[Layout('layouts.dcs')] class extends Component {
             'course_name' => $this->courseName,
         ];
 
+        $facultyIds = collect($this->courseFacultyIds)
+            ->map(fn ($fid) => (int) $fid)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($facultyIds !== []) {
+            $valid = DB::table('dcs_faculties')->whereIn('id', $facultyIds)->pluck('id')->all();
+            $facultyIds = array_values(array_intersect($facultyIds, array_map('intval', $valid)));
+        }
+
         if ($this->editingId) {
-            DB::table('dcs_program_courses')->where('id', $this->editingId)->update($payload);
+            $courseId = (int) $this->editingId;
+            DB::table('dcs_program_courses')->where('id', $courseId)->update($payload);
+            $this->syncCourseFaculties($courseId, $facultyIds);
             $this->done('Course updated.');
             return;
         }
 
-        DB::table('dcs_program_courses')->insert($payload);
+        $courseId = DB::table('dcs_program_courses')->insertGetId($payload);
+        $this->syncCourseFaculties($courseId, $facultyIds);
         $this->done('Course added.');
+    }
+
+    private function syncCourseFaculties(int $courseId, array $facultyIds): void
+    {
+        if (! Schema::hasTable('dcs_program_course_faculties')) {
+            return;
+        }
+        DB::table('dcs_program_course_faculties')->where('program_course_id', $courseId)->delete();
+        $now = now();
+        foreach ($facultyIds as $facultyId) {
+            DB::table('dcs_program_course_faculties')->insert([
+                'program_course_id' => $courseId,
+                'faculty_id' => $facultyId,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
     }
 
     private function destroyVersionType(int $id): void
@@ -617,6 +659,29 @@ new #[Layout('layouts.dcs')] class extends Component {
             ->orderBy('c.college_name')->orderBy('p.program_name')
             ->get(['p.id', 'p.college_id', 'p.program_name', 'p.program_code', 'c.college_name']);
 
+        $programCourses = DB::table('dcs_program_courses as pc')
+            ->leftJoin('dcs_programs as p', 'p.id', '=', 'pc.program_id')
+            ->leftJoin('dcs_colleges as c', 'c.id', '=', 'p.college_id')
+            ->leftJoin('dcs_semesters as s', 's.id', '=', 'pc.semester_id')
+            ->orderBy('pc.program_id')->orderBy('pc.semester_id')->orderBy('pc.course_name')
+            ->get(['pc.id', 'pc.program_id', 'pc.semester_id', 'pc.course_name', 'p.program_name', 'c.college_name', 's.semester_name']);
+
+        $facultyNamesByCourse = collect();
+        if (Schema::hasTable('dcs_program_course_faculties')) {
+            $facultyNamesByCourse = DB::table('dcs_program_course_faculties as pcf')
+                ->join('dcs_faculties as f', 'f.id', '=', 'pcf.faculty_id')
+                ->orderBy('f.faculty_name')
+                ->get(['pcf.program_course_id', 'f.faculty_name'])
+                ->groupBy('program_course_id')
+                ->map(fn ($rows) => $rows->pluck('faculty_name')->join(', '));
+        }
+
+        $programCourses->each(function ($course) use ($facultyNamesByCourse) {
+            $course->faculty_names = $facultyNamesByCourse->get($course->id)
+                ?? $facultyNamesByCourse->get((string) $course->id)
+                ?? null;
+        });
+
         return [
             'docTypeParents' => $docTypeParents,
             'docTypeSubs' => $docTypeSubs,
@@ -631,12 +696,7 @@ new #[Layout('layouts.dcs')] class extends Component {
             'programsByCollege' => $programs->groupBy(fn ($row) => (string) $row->college_id),
             'semesters' => DB::table('dcs_semesters')->orderBy('id')->get(['id', 'semester_name']),
             'schoolYears' => DB::table('dcs_school_years')->orderBy('school_year')->get(['id', 'school_year']),
-            'programCourses' => DB::table('dcs_program_courses as pc')
-                ->leftJoin('dcs_programs as p', 'p.id', '=', 'pc.program_id')
-                ->leftJoin('dcs_colleges as c', 'c.id', '=', 'p.college_id')
-                ->leftJoin('dcs_semesters as s', 's.id', '=', 'pc.semester_id')
-                ->orderBy('pc.program_id')->orderBy('pc.semester_id')->orderBy('pc.course_name')
-                ->get(['pc.id', 'pc.program_id', 'pc.semester_id', 'pc.course_name', 'p.program_name', 'c.college_name', 's.semester_name']),
+            'programCourses' => $programCourses,
         ];
     }
 
@@ -695,8 +755,13 @@ new #[Layout('layouts.dcs')] class extends Component {
 
 <div
     x-data="{
-        tab: sessionStorage.getItem('settingsActiveTab') || 'doctypes',
+        tab: new URLSearchParams(window.location.search).get('tab') || sessionStorage.getItem('settingsActiveTab') || 'doctypes',
         modalOpen: false,
+        init() {
+            const allowed = ['versiontypes','doctypes','offices','originators','faculties','colleges','programs','semesters','schoolyears','coursenames'];
+            if (!allowed.includes(this.tab)) this.tab = 'doctypes';
+            sessionStorage.setItem('settingsActiveTab', this.tab);
+        },
         setTab(name) {
             this.tab = name;
             sessionStorage.setItem('settingsActiveTab', name);
@@ -1031,7 +1096,7 @@ new #[Layout('layouts.dcs')] class extends Component {
         </div>
         <div class="table-wrap">
             <table class="settings-table">
-                <thead><tr><th>College</th><th>Program</th><th>Semester</th><th>Course Name</th><th style="width:140px;">Actions</th></tr></thead>
+                <thead><tr><th>College</th><th>Program</th><th>Semester</th><th>Course Name</th><th>Faculty</th><th style="width:140px;">Actions</th></tr></thead>
                 <tbody>
                     @forelse($programCourses as $course)
                         <tr wire:key="pc-{{ $course->id }}" data-id="{{ $course->id }}">
@@ -1039,6 +1104,7 @@ new #[Layout('layouts.dcs')] class extends Component {
                             <td data-label="Program">{{ $course->program_name ?? '—' }}</td>
                             <td data-label="Semester">{{ $course->semester_name ?? '—' }}</td>
                             <td data-label="Course Name">{{ $course->course_name }}</td>
+                            <td data-label="Faculty">{{ $course->faculty_names ?: '—' }}</td>
                             <td>
                                 <div class="row-actions">
                                     <button type="button" class="icon-btn" title="Edit" wire:click="openProgramCourse({{ $course->id }})"><i class="fa-solid fa-pen"></i></button>
@@ -1047,7 +1113,7 @@ new #[Layout('layouts.dcs')] class extends Component {
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="5" class="empty-cell">No courses yet.</td></tr>
+                        <tr><td colspan="6" class="empty-cell">No courses yet.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -1188,7 +1254,7 @@ new #[Layout('layouts.dcs')] class extends Component {
                 @elseif($modalKind === 'programCourse')
                     <div class="st-field">
                         <label class="st-label">Program</label>
-                        <select class="st-input @error('programId') error @enderror" wire:model="programId">
+                        <select class="st-input @error('programId') error @enderror" wire:model.live="programId">
                             <option value="">Select program</option>
                             @foreach($programs as $prog)
                                 <option value="{{ $prog->id }}">{{ $prog->college_name }} — {{ $prog->program_name }}</option>
@@ -1211,6 +1277,27 @@ new #[Layout('layouts.dcs')] class extends Component {
                         <input type="text" class="st-input @error('courseName') error @enderror" wire:model="courseName">
                         @error('courseName') <div class="field-error">{{ $message }}</div> @enderror
                     </div>
+                    <div class="st-field">
+                        <label class="st-label">Faculty <span class="st-optional">optional</span></label>
+                        @php
+                            $programCollegeId = optional($programs->firstWhere('id', (int) $programId))->college_id;
+                            $facultyChoices = $faculties->when($programCollegeId, fn ($col) => $col->where('college_id', $programCollegeId)->values());
+                        @endphp
+                        @if(!$programId)
+                            <p class="st-faculty-hint">Select a program to list faculty from that college.</p>
+                        @elseif($facultyChoices->isEmpty())
+                            <p class="st-faculty-hint">No faculty in this college yet. Add them in the Faculty tab.</p>
+                        @else
+                            <div class="st-faculty-picks">
+                                @foreach($facultyChoices as $fac)
+                                    <label class="st-faculty-pick">
+                                        <input type="checkbox" value="{{ $fac->id }}" wire:model="courseFacultyIds">
+                                        <span>{{ $fac->faculty_name }}</span>
+                                    </label>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
                 @endif
 
                 <div class="st-actions-row">
@@ -1224,8 +1311,12 @@ new #[Layout('layouts.dcs')] class extends Component {
     </div>
 </div>
 
-@if($toastMessage)
-    <div id="settingsToast" class="settings-toast show {{ $toastType }}">{{ $toastMessage }}</div>
+@php
+    $flashMessage = $toastMessage ?: session('success') ?: session('error');
+    $flashType = $toastMessage ? $toastType : (session('error') ? 'error' : 'success');
+@endphp
+@if($flashMessage)
+    <div id="settingsToast" class="settings-toast show {{ $flashType }}">{{ $flashMessage }}</div>
 @endif
 </div>
 

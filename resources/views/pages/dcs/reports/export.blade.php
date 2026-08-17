@@ -108,6 +108,21 @@
         .ft-l { text-align: left; }
         .ft-c { text-align: center; }
         .ft-r { text-align: right; }
+        .letterhead-bg {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: fill;
+            z-index: 0;
+            pointer-events: none;
+        }
+        body.has-letterhead .print-container {
+            position: relative;
+            z-index: 1;
+            padding: 210px 36px 110px;
+        }
+        body.has-letterhead .rpt-footer { display: none; }
 
         /* ── DOMPDF ── */
         @page { margin: 18mm 15mm 22mm 15mm; }
@@ -125,7 +140,11 @@
         }
     </style>
 </head>
-<body>
+<body class="{{ !empty($letterheadUrl) ? 'has-letterhead' : '' }}">
+
+    @if(!empty($letterheadUrl))
+        <img src="{{ $letterheadUrl }}" alt="" class="letterhead-bg">
+    @endif
 
     <div class="print-toolbar{{ empty($embed) ? '' : ' rpt-embed-hidden' }}" id="toolbar">
         <button class="btn-pdf" type="button" id="btnPdf"><i class="fa-solid fa-file-pdf"></i> Save as PDF</button>
@@ -136,6 +155,7 @@
     <div class="print-container">
 
         {{-- HEADER --}}
+        @if(empty($letterheadUrl))
         @php
             $logoPath = public_path('images/logo.png');
             $logoSrc = file_exists($logoPath) ? ('data:image/png;base64,' . base64_encode(file_get_contents($logoPath))) : '';
@@ -150,6 +170,7 @@
         </tr></table>
 
         <div class="hdr-line"><span>{{ $letterNumber ?? 'CSPC-QA-F001' }}</span></div>
+        @endif
 
         {{-- TITLE --}}
         <div class="rpt-title"><h2>{{ $title ?? 'Document Masterlist' }}</h2></div>
@@ -235,7 +256,7 @@
     </div>
 
     {{-- FOOTER --}}
-    @if(empty($isPdf))
+    @if(empty($isPdf) && empty($letterheadUrl))
     <div class="rpt-footer" id="rptFooter">
         <div class="rpt-footer-line"></div>
         <div class="rpt-footer-inner">

@@ -664,6 +664,7 @@ new #[Layout('layouts.dcs')] #[Title('CSPC - Document Control System')] class ex
                 <div class="reg-split-right">
                     <div class="reg-field">
                         <label>Select office(s) for distribution</label>
+                        <div class="reg-cluster-chips" id="distClusterChips"></div>
                         <div class="reg-search">
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <circle cx="11" cy="11" r="8"/>
@@ -714,6 +715,9 @@ new #[Layout('layouts.dcs')] #[Title('CSPC - Document Control System')] class ex
                 </a>
             </div>
             <div class="reg-actions-right">
+                <button type="button" id="btnGenerateDistribution" class="reg-btn reg-btn-generate" onclick="generateDistributionTemplate()" disabled title="Save the document first">
+                    <i class="fa-solid fa-file-lines"></i> Generate
+                </button>
                 <button type="button" id="btnSaveDocument" class="reg-btn reg-btn-save" onclick="confirmSave()">
                     <i class="fa-solid fa-floppy-disk"></i> Save Document
                 </button>
@@ -722,7 +726,7 @@ new #[Layout('layouts.dcs')] #[Title('CSPC - Document Control System')] class ex
 
     </form>
 
-    <!-- ═══ CONFIRMATION MODAL ═══ -->
+    <template x-teleport="body">
     <div class="reg-modal-overlay" id="confirmModal" :class="{ 'is-open': reviewOpen }" :aria-hidden="reviewOpen ? 'false' : 'true'" @click.self="closeReview()">
     <div class="reg-modal">
         <div class="reg-modal-header">
@@ -745,6 +749,7 @@ new #[Layout('layouts.dcs')] #[Title('CSPC - Document Control System')] class ex
         </div>
     </div>
 </div>
+    </template>
 </main>
 
 <script>
@@ -760,7 +765,8 @@ document.addEventListener('alpine:init', () => {
         },
         closeReview() {
             this.reviewOpen = false;
-            document.body.style.overflow = '';
+            const el = document.getElementById('dcsRegisterRoot');
+            if (el) el.style.overflow = '';
         },
         addSyllabiRow() {
             if (typeof window.addSyllabiRow === 'function') window.addSyllabiRow();
@@ -792,7 +798,8 @@ function isSyllabiLikeSubType(subTypeId) {
 
 
 const ALLOWED_EXTENSIONS = ['pdf', 'docx'];
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_FILE_SIZE = 200 * 1024 * 1024;
+const OCR_MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 // ══════════════════════════════════════════════
 // SHARED HELPERS
@@ -814,7 +821,7 @@ function checkFile(file) {
 function fileTypeErrorMessage(check, file) {
     return check.reason === 'type'
         ? '"' + check.ext + '" is not allowed. Only .pdf and .docx files are accepted.'
-        : '"' + file.name + '" is ' + check.sizeMB + 'MB. Maximum file size is 10MB.';
+        : '"' + file.name + '" is ' + check.sizeMB + 'MB. Maximum file size is 200MB.';
 }
 
 /** Set a widget's icon to the pdf/docx glyph for the given extension. */
@@ -893,12 +900,13 @@ function seedOfficeRow(tbodyId, totalId, officeId, officeName, copies) {
 
     const tr = document.createElement("tr");
     tr.className = "reg-office-added";
+    if (!isRetrieval) tr.draggable = true;
     tr.innerHTML = `
         <td>
             <input type="hidden" name="${officeNameAttr}" value="${officeId}">
             <div class="reg-office-name">
                 <div class="reg-office-icon"><i class="fa-solid fa-building"></i></div>
-                <span class="reg-office-text">${officeName}</span>
+                <span class="reg-office-text">${escapeHtml(officeName)}</span>
             </div>
         </td>
         <td style="text-align: center;">
@@ -937,6 +945,8 @@ document.addEventListener("DOMContentLoaded", async function () {
         allDocTypes = Array.isArray(docTypes) ? docTypes : [];
         allOriginators = Array.isArray(originators) ? originators : [];
         allFaculties = [];
+        renderDistClusterChips();
+        bindDistBodyDrag();
 
         const versionSelect = document.getElementById("versionType");
         versionTypes.forEach(v => versionSelect.add(new Option(v.version_name, v.version_id)));
@@ -997,9 +1007,8 @@ document.addEventListener("DOMContentLoaded", async function () {
     const drfTitle = document.getElementById('drfTitle');
     const mlTitle = document.getElementById('masterlistDocTitle');
     if (drfTitle && mlTitle) {
-        drfTitle.addEventListener('input', () => {
-            mlTitle.value = drfTitle.value;
-        });
+        drfTitle.addEventListener('input', () => { mlTitle.value = drfTitle.value; });
+        mlTitle.addEventListener('input', () => { drfTitle.value = mlTitle.value; });
     }
 
     createSourceUnitWidget({
@@ -1213,7 +1222,7 @@ function applyRevisedModeLookupResult(data, hintEl, revField) {
         }
 
         if (hintEl) {
-            hintEl.innerHTML = '<i class="fa-solid fa-circle-check"></i> ' + data.message;
+            hintEl.innerHTML = '<i class="fa-solid fa-circle-check"></i> ' + escapeHtml(data.message || '');
             hintEl.style.color = '#16a34a';
             hintEl.dataset.valid = 'true';
         }
@@ -1230,7 +1239,7 @@ function applyRevisedModeLookupResult(data, hintEl, revField) {
         if (hintEl) {
             const icon = data.wrong_type ? 'fa-triangle-exclamation' : 'fa-circle-exclamation';
             const color = data.wrong_type ? '#d97706' : '#dc2626';
-            hintEl.innerHTML = '<i class="fa-solid ' + icon + '"></i> ' + data.message +
+            hintEl.innerHTML = '<i class="fa-solid ' + icon + '"></i> ' + escapeHtml(data.message || '') +
                 '<br><span style="font-weight:400;font-size:11px;">You cannot save until you enter a valid document number.</span>';
             hintEl.style.color = color;
             hintEl.dataset.valid = data.wrong_type ? 'wrong_type' : 'not_found';
@@ -1246,7 +1255,7 @@ function applyNewModeLookupResult(data, hintEl, revField) {
         if (hintEl) {
             hintEl.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' +
                 'This document number is already registered under <strong>' +
-                (data.existing_type_name || 'this document type') +
+                (escapeHtml(data.existing_type_name || 'this document type')) +
                 '</strong>. Use <strong>Revised Registration</strong> to create a new revision.' +
                 '<br><span style="font-weight:400;font-size:11px;">You cannot save until you enter a unique document number.</span>';
             hintEl.style.color = '#dc2626';
@@ -1256,7 +1265,7 @@ function applyNewModeLookupResult(data, hintEl, revField) {
         docNoDuplicate = false;
         setSaveEnabled(true);
         if (hintEl) {
-            hintEl.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> ' + data.message +
+            hintEl.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> ' + escapeHtml(data.message || '') +
                 '<br><span style="font-weight:400;font-size:11px;">This number is registered under a different document type. You may continue.</span>';
             hintEl.style.color = '#d97706';
             hintEl.dataset.valid = 'different_type';
@@ -1955,7 +1964,7 @@ window.handleRelatedDocSearch = function (input) {
                 return;
             }
             dropdown.innerHTML = relatedDocsCache
-                .map(d => `<div onmousedown="pickRelatedDoc(${d.masterlist_id})">${d.label}</div>`)
+                .map(d => `<div onmousedown="pickRelatedDoc(${Number(d.masterlist_id)})">${escapeHtml(d.label || d.doc_title || '')}</div>`)
                 .join('');
             dropdown.style.display = 'block';
         } catch (e) { console.error('Related doc search failed:', e); }
@@ -2010,8 +2019,8 @@ function renderRelatedDocsChips() {
     container.innerHTML = relatedDocsSelected.map(d => `
         <div class="reg-reldocs-chip">
             <input type="hidden" name="relatedDocumentIds[]" value="${d.masterlist_id}">
-            <span class="reg-reldocs-chip-title">${d.doc_title}</span>
-            <span class="reg-reldocs-chip-no">${d.doc_no || ''}</span>
+            <span class="reg-reldocs-chip-title">${escapeHtml(d.doc_title || '')}</span>
+            <span class="reg-reldocs-chip-no">${escapeHtml(d.doc_no || '')}</span>
             <button type="button" onclick="removeRelatedDoc(${d.masterlist_id}, event)"><i class="fa-solid fa-xmark"></i></button>
         </div>`).join('');
 }
@@ -2153,7 +2162,7 @@ function processUploadAreaFile(input, container, icon, label, originalText) {
 
     addRemoveBtn(container, input, icon, label, originalText);
 
-    if (input.id === 'drfFile' && check.ext === 'pdf') {
+    if (input.id === 'drfFile' && check.ext === 'pdf' && file.size <= OCR_MAX_FILE_SIZE) {
         triggerScanExtraction(input, file);
     }
 }
@@ -2198,6 +2207,10 @@ function autofillDrfFields(fields) {
         if (value && el && !el.value) {
             el.value = value;
             el.classList.add('reg-autofilled');
+            if (elId === 'drfTitle') {
+                const ml = document.getElementById('masterlistDocTitle');
+                if (ml) ml.value = value;
+            }
         }
     });
 }
@@ -2209,7 +2222,7 @@ function showUploadFieldError(container, message) {
     if (parent) {
         const err = document.createElement('div');
         err.className = 'reg-file-error';
-        err.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' + message;
+        err.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' + escapeHtml(message);
         parent.appendChild(err);
     }
 
@@ -2756,6 +2769,78 @@ window.calcDistributionTimeSpent = function () {
     calcTimeDiff("distributionFormDate", "distributionFormTime", "distributionDate", "distributionTime", "distributionTimeSpentDisplay", "distributionTimeSpent");
 };
 
+window.generateDistributionTemplate = function () {
+    const btn = document.getElementById('btnGenerateDistribution');
+    if (btn?.disabled) {
+        alert('Save the document first before generating the distribution template.');
+        return;
+    }
+    const offices = [];
+    document.querySelectorAll('#distBody .reg-office-text').forEach((el) => {
+        const name = el.textContent.trim();
+        if (name) offices.push(name);
+    });
+    if (offices.length === 0) {
+        alert('Add at least one receiving office before generating the distribution template.');
+        return;
+    }
+    const params = new URLSearchParams();
+    params.set('date', document.getElementById('distributionDate')?.value || '');
+    params.set('template_id', '0');
+    offices.forEach((name) => params.append('offices[]', name));
+    window.open('{{ route('dcs.reports.distributionTemplate') }}?' + params.toString(), '_blank', 'noopener');
+};
+
+function renderDistClusterChips() {
+    const wrap = document.getElementById('distClusterChips');
+    if (!wrap) return;
+    const clusters = (window.__registerCatalog || {}).clusters || [];
+    wrap.innerHTML = clusters.map((c) => (
+        '<button type="button" class="reg-cluster-chip" data-cluster="' + escapeHtml(c.cluster_code) + '">' +
+        'Select all ' + escapeHtml(c.cluster_name) + '</button>'
+    )).join('');
+    wrap.querySelectorAll('.reg-cluster-chip').forEach((btn) => {
+        btn.addEventListener('click', () => addOfficesByCluster(btn.getAttribute('data-cluster')));
+    });
+}
+
+function addOfficesByCluster(clusterCode) {
+    allOffices.filter((o) => String(o.cluster) === String(clusterCode)).forEach((o) => {
+        addOffice(o.office_id, o.office_name, 'distBody', 'totalDistCopies', 'distResults');
+    });
+}
+
+function bindDistBodyDrag() {
+    const tbody = document.getElementById('distBody');
+    if (!tbody || tbody.dataset.dragBound) return;
+    tbody.dataset.dragBound = 'true';
+    let dragEl = null;
+    tbody.addEventListener('mousedown', (e) => {
+        const tr = e.target.closest('tr.reg-office-added');
+        if (!tr) return;
+        tr.draggable = !e.target.closest('input, button');
+    });
+    tbody.addEventListener('dragstart', (e) => {
+        const tr = e.target.closest('tr.reg-office-added');
+        if (!tr) return;
+        dragEl = tr;
+        tr.classList.add('is-dragging');
+        e.dataTransfer.effectAllowed = 'move';
+    });
+    tbody.addEventListener('dragend', () => {
+        if (dragEl) dragEl.classList.remove('is-dragging');
+        dragEl = null;
+    });
+    tbody.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        const tr = e.target.closest('tr.reg-office-added');
+        if (!tr || !dragEl || tr === dragEl) return;
+        const rect = tr.getBoundingClientRect();
+        const after = (e.clientY - rect.top) > (rect.height / 2);
+        tr.parentNode.insertBefore(dragEl, after ? tr.nextSibling : tr);
+    });
+}
+
 window.calcMasterlistTimeSpent = function () {
     calcTimeDiff("masterlistReceiptDate", "masterlistReceiptTime", "masterlistRegisteredDate", "masterlistRegisteredTime", "masterlistTimeSpentDisplay", "masterlistTimeSpent");
 };
@@ -2780,7 +2865,7 @@ function markFieldError(fieldId, message) {
         if (parent && !parent.querySelector(".reg-field-error")) {
             const err = document.createElement("div");
             err.className = "reg-field-error";
-            err.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' + message;
+            err.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' + escapeHtml(message);
             parent.appendChild(err);
         }
     } else {
@@ -2789,7 +2874,7 @@ function markFieldError(fieldId, message) {
         if (syllabiSection && !syllabiSection.querySelector('.reg-field-error')) {
             const err = document.createElement("div");
             err.className = "reg-field-error";
-            err.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' + message;
+            err.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' + escapeHtml(message);
             syllabiSection.appendChild(err);
         }
     }
@@ -2803,7 +2888,7 @@ function markTableError(tableId, message) {
     if (parent && !parent.querySelector(".reg-field-error")) {
         const err = document.createElement("div");
         err.className = "reg-field-error";
-        err.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' + message;
+        err.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' + escapeHtml(message);
         parent.appendChild(err);
     }
 }
@@ -2818,7 +2903,7 @@ function markSearchError(inputId, message) {
     if (parent && !parent.querySelector(".reg-field-error")) {
         const err = document.createElement("div");
         err.className = "reg-field-error";
-        err.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' + message;
+        err.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' + escapeHtml(message);
         parent.appendChild(err);
     }
 }
@@ -2831,7 +2916,7 @@ function markChecklistError(message) {
     if (parent && !parent.querySelector(".reg-field-error")) {
         const err = document.createElement("div");
         err.className = "reg-field-error";
-        err.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' + message;
+        err.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' + escapeHtml(message);
         parent.appendChild(err);
     }
 }
@@ -3268,8 +3353,8 @@ window.confirmSave = function () {
     const missing = collectMissingFields();
     renderMissingFieldsWarning(reviewContent, missing);
 
-    document.body.style.overflow = "hidden";
     const root = document.getElementById("dcsRegisterRoot");
+    if (root) root.style.overflow = "hidden";
     if (root && window.Alpine) {
         Alpine.$data(root).reviewOpen = true;
     }
@@ -3509,7 +3594,7 @@ window.closeConfirmModal = function () {
     if (root && window.Alpine) {
         Alpine.$data(root).reviewOpen = false;
     }
-    document.body.style.overflow = "";
+    if (root) root.style.overflow = "";
 };
 
 document.addEventListener("keydown", function (e) {
@@ -3687,14 +3772,17 @@ async function autoPopulateSyllabiCourses() {
 
     try {
         const courses = ((window.__registerCatalog || {}).coursesByProgramSemester || {})[programId + ':' + semesterId] || [];
-        if (!courses || courses.length === 0) return; // nothing on file — leave manual entry alone
-
         const tbody = document.getElementById('syllabiTableBody');
+        if (!tbody) return;
 
-        // Don't clobber rows the user already typed into by hand
         const hasManualData = [...tbody.querySelectorAll('.syllabi-merged-course')]
             .some(inp => inp.value.trim() !== '' && inp.dataset.autoFilled !== 'true');
         if (hasManualData) return;
+
+        if (!courses || courses.length === 0) {
+            showSyllabiEmptyCatalogHint();
+            return;
+        }
 
         tbody.querySelectorAll('tr[data-uid]').forEach(tr => removeSyllabiFacultyPicker(tr.dataset.uid));
         tbody.innerHTML = '';
@@ -3712,10 +3800,10 @@ async function autoPopulateSyllabiCourses() {
                 courseInput.dataset.autoFilled = 'true';
                 courseInput.title = 'Loaded from Settings → Course Names';
                 autosizeSyllabiCourse(courseInput);
-                // if the user edits it, treat it as manual from then on
                 courseInput.addEventListener('input', () => { courseInput.dataset.autoFilled = 'false'; });
             }
 
+            applyCatalogFacultiesToRow(newRow, c.faculties || []);
             cascadeDrfToNewRow(newRow);
             syncSyllabiMergedFields(groupId);
         });
@@ -3725,6 +3813,36 @@ async function autoPopulateSyllabiCourses() {
     } catch (err) {
         console.error('Failed to auto-populate syllabi courses:', err);
     }
+}
+
+function showSyllabiEmptyCatalogHint() {
+    const tbody = document.getElementById('syllabiTableBody');
+    if (!tbody) return;
+    tbody.querySelectorAll('tr[data-uid]').forEach(tr => removeSyllabiFacultyPicker(tr.dataset.uid));
+    tbody.innerHTML = '<tr class="syllabi-empty-hint"><td colspan="14">No courses in Settings for this program and semester. Add them under Settings → Course Names, or click Add Course.</td></tr>';
+    syllabiGroupCounter = 0;
+    if (typeof updateSyllabiTotals === 'function') updateSyllabiTotals();
+}
+
+function applyCatalogFacultiesToRow(row, faculties) {
+    if (!row || !Array.isArray(faculties) || faculties.length === 0) return;
+    const names = faculties.map(f => f.faculty_name || f.name).filter(Boolean);
+    if (!names.length) return;
+
+    if (names.length > 2) {
+        const copiesInput = row.querySelector('input[name="syllabiCopies[]"]');
+        if (copiesInput) {
+            copiesInput.value = String(names.length);
+            handleCopiesChange(copiesInput);
+        }
+        const rows = [...document.querySelectorAll('#syllabiTableBody tr[data-group="' + row.dataset.group + '"]')];
+        rows.forEach((r, i) => {
+            if (names[i]) addSyllabiFaculty(r.dataset.uid, names[i], false);
+        });
+        return;
+    }
+
+    names.forEach(name => addSyllabiFaculty(row.dataset.uid, name, false));
 }
 
 function clearSyllabiCourseRows() {
@@ -4448,6 +4566,7 @@ window.syncSyllabiMergedFields = function (groupId) {
 window.addSyllabiRow = function () {
     const tbody = document.getElementById("syllabiTableBody");
     if (!tbody) return;
+    tbody.querySelectorAll('tr.syllabi-empty-hint').forEach(tr => tr.remove());
     syllabiGroupCounter++;
     const newRow = buildSyllabiGroupFirstRow("g" + syllabiGroupCounter, 1);
     tbody.appendChild(newRow);
@@ -4516,7 +4635,7 @@ window.handleSearch = function (input, resultsId, bodyId, totalId) {
     }
 
     dropdown.innerHTML = filtered
-        .map(o => '<div onclick="addOffice(' + o.office_id + ", '" + o.office_name.replace(/'/g, "\\'") + "', '" + bodyId + "', '" + totalId + "', '" + resultsId + "')\">" + o.office_name + '</div>')
+        .map(o => '<div onclick="addOffice(' + Number(o.office_id) + ", '" + escapeHtml(o.office_name).replace(/'/g, '&#39;') + "', '" + bodyId + "', '" + totalId + "', '" + resultsId + "')\">" + escapeHtml(o.office_name) + '</div>')
         .join("");
     dropdown.style.display = "block";
 };
@@ -4548,12 +4667,13 @@ window.addOffice = function (officeId, officeName, bodyId, totalId, resultsId) {
 
     const tr = document.createElement("tr");
     tr.className = "reg-office-added";
+    if (!isRetrieval) tr.draggable = true;
     tr.innerHTML = `
         <td>
             <input type="hidden" name="${officeNameAttr}" value="${officeId}">
             <div class="reg-office-name">
                 <div class="reg-office-icon"><i class="fa-solid fa-building"></i></div>
-                <span class="reg-office-text">${officeName}</span>
+                <span class="reg-office-text">${escapeHtml(officeName)}</span>
             </div>
         </td>
         <td style="text-align: center;">

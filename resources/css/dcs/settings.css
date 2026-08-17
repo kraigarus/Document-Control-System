@@ -222,10 +222,9 @@ body {
     background: var(--set-border-light);
 }
 
-.settings-table td:last-child {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
+.settings-table thead th:last-child,
+.settings-table tbody td:last-child {
+    text-align: right;
 }
 
 .settings-table td:last-child .row-actions {
@@ -322,11 +321,10 @@ body {
    ROW ACTIONS
    ═══════════════════════════════════ */
 .row-actions {
-    display: flex;
+    display: inline-flex;
     gap: 4px;
     flex-shrink: 0;
-    margin-left: auto;
-    
+    margin-left: 0;
 }
 
 .icon-btn {
@@ -624,6 +622,44 @@ body {
 }
 
 .st-input::placeholder { color: #cbd5e1; }
+
+.st-optional {
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 500;
+    color: #94a3b8;
+}
+
+.st-faculty-hint {
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--set-text-muted);
+}
+
+.st-faculty-picks {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 180px;
+    overflow-y: auto;
+    padding: 8px 10px;
+    border: 1.5px solid var(--set-border);
+    border-radius: 10px;
+    background: var(--set-surface);
+}
+
+.st-faculty-pick {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.88rem;
+    color: var(--set-text);
+    cursor: pointer;
+}
+
+.st-faculty-pick input {
+    accent-color: var(--set-accent);
+}
 
 /* Kill yellow autofill */
 .st-input:-webkit-autofill,

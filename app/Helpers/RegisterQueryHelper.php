@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -281,6 +282,8 @@ class RegisterQueryHelper
 
         $query = DB::table('dcs_masterlist_registration as ml')
             ->join('dcs_document_requests as dr', 'dr.id', '=', 'ml.request_id')
+            ->leftJoin('dcs_doc_types as dt', 'dt.id', '=', 'dr.doc_type_id')
+            ->leftJoin('dcs_doc_types as st', 'st.id', '=', 'dr.sub_type_id')
             ->whereIn('ml.request_id', $visibleIds)
             ->whereNotNull('ml.doc_no')
             ->where('ml.doc_no', '!=', '');
@@ -307,7 +310,7 @@ class RegisterQueryHelper
             $query->where('ml.request_id', '!=', $request->exclude_request_id);
         }
 
-        return $query->orderBy('ml.doc_no')
+        $rows = $query->orderBy('ml.doc_no')
             ->orderBy('ml.doc_title')
             ->limit(15)
             ->get([
@@ -319,26 +322,296 @@ class RegisterQueryHelper
                 'ml.effectivity_date',
                 'ml.brief_purpose',
                 'ml.scanned_masterlist',
-            ])
-            ->map(function ($m) {
-                $docNo = $m->doc_no ?: 'No number';
-                $title = $m->doc_title ?: 'Untitled';
+                'dt.doc_type_name as type_name',
+                'st.doc_type_name as sub_type_name',
+            ]);
 
-                return [
-                    'masterlist_id' => $m->id,
-                    'request_id' => $m->request_id,
-                    'doc_no' => $m->doc_no,
-                    'doc_title' => $m->doc_title,
-                    'revise_no' => $m->revise_no,
-                    'effectivity_date' => $m->effectivity_date ? Carbon::parse($m->effectivity_date)->format('Y-m-d') : null,
-                    'brief_purpose' => $m->brief_purpose,
-                    'scanned_copy_url' => $m->scanned_masterlist ? Storage::disk('public')->url($m->scanned_masterlist) : null,
-                    'scanned_copy_path' => $m->scanned_masterlist,
-                    'label' => $docNo . ' — ' . $title . ' (Rev ' . (int) $m->revise_no . ')',
-                ];
-            })
+        if ($rows->isEmpty()) {
+            return [];
+        }
+
+        $requestIds = $rows->pluck('request_id')->all();
+        $drfIds = DB::table('dcs_document_request_form')->whereIn('request_id', $requestIds)->pluck('request_id')->flip();
+        $dcnIds = DB::table('dcs_document_change_notice')->whereIn('request_id', $requestIds)->pluck('request_id')->flip();
+        $distIds = DB::table('dcs_document_distribution')->whereIn('request_id', $requestIds)->pluck('request_id')->flip();
+        $retIds = DB::table('dcs_document_retrieval')->whereIn('request_id', $requestIds)->pluck('request_id')->flip();
+
+        return $rows->map(function ($m) use ($drfIds, $dcnIds, $distIds, $retIds) {
+            $docNo = $m->doc_no ?: 'No number';
+            $title = $m->doc_title ?: 'Untitled';
+
+            return [
+                'masterlist_id' => $m->id,
+                'request_id' => $m->request_id,
+                'doc_no' => $m->doc_no,
+                'doc_title' => $m->doc_title,
+                'type_name' => $m->type_name,
+                'sub_type_name' => $m->sub_type_name,
+                'revise_no' => $m->revise_no,
+                'effectivity_date' => $m->effectivity_date ? Carbon::parse($m->effectivity_date)->format('Y-m-d') : null,
+                'brief_purpose' => $m->brief_purpose,
+                'scanned_copy_url' => $m->scanned_masterlist ? Storage::disk('public')->url($m->scanned_masterlist) : null,
+                'scanned_copy_path' => $m->scanned_masterlist,
+                'label' => $docNo . ' — ' . $title . ' (Rev ' . (int) $m->revise_no . ')',
+                'checklists' => [
+                    'drf' => isset($drfIds[$m->request_id]),
+                    'dcn' => isset($dcnIds[$m->request_id]),
+                    'masterlist' => true,
+                    'distribution' => isset($distIds[$m->request_id]),
+                    'retrieval' => isset($retIds[$m->request_id]),
+                ],
+            ];
+        })
             ->values()
             ->all();
+    }
+
+    public static function documentChecklistPreview(int $requestId, string $type): array
+    {
+        $allowed = ['drf', 'dcn', 'masterlist', 'distribution', 'retrieval'];
+        if (!in_array($type, $allowed, true)) {
+            abort(404);
+        }
+
+        $visibleIds = self::visibleRequestIds();
+        if (!in_array($requestId, $visibleIds, true)) {
+            abort(404);
+        }
+
+        $preview = match ($type) {
+            'drf' => self::previewDrf($requestId),
+            'dcn' => self::previewDcn($requestId),
+            'masterlist' => self::previewMasterlist($requestId),
+            'distribution' => self::previewDistribution($requestId),
+            'retrieval' => self::previewRetrieval($requestId),
+        };
+
+        $preview['fields'] = array_merge(self::previewTypeFields($requestId), $preview['fields'] ?? []);
+
+        return $preview;
+    }
+
+    private static function previewTypeFields(int $requestId): array
+    {
+        $row = DB::table('dcs_document_requests as dr')
+            ->leftJoin('dcs_doc_types as dt', 'dt.id', '=', 'dr.doc_type_id')
+            ->leftJoin('dcs_doc_types as st', 'st.id', '=', 'dr.sub_type_id')
+            ->where('dr.id', $requestId)
+            ->first(['dt.doc_type_name as type_name', 'st.doc_type_name as sub_type_name']);
+
+        $fields = [];
+        if (!empty($row?->type_name)) {
+            $fields[] = self::previewField('Document Type', $row->type_name);
+        }
+        if (!empty($row?->sub_type_name)) {
+            $fields[] = self::previewField('Sub Type', $row->sub_type_name);
+        }
+
+        return $fields;
+    }
+
+    private static function previewField(string $label, mixed $value): array
+    {
+        if ($value === null || $value === '') {
+            return ['label' => $label, 'value' => '—'];
+        }
+
+        return ['label' => $label, 'value' => (string) $value];
+    }
+
+    private static function previewDrf(int $requestId): array
+    {
+        $drf = DB::table('dcs_document_request_form')->where('request_id', $requestId)->first();
+        if (!$drf) {
+            abort(404);
+        }
+
+        $offices = DB::table('dcs_drf_offices as d')
+            ->leftJoin('office as o', 'o.id', '=', 'd.office_id')
+            ->where('d.document_request_form_id', $drf->id)
+            ->pluck('o.office_name')
+            ->filter()
+            ->values()
+            ->all();
+
+        return [
+            'title' => 'Document Request Form',
+            'type' => 'drf',
+            'doc_no' => null,
+            'doc_title' => $drf->doc_title,
+            'fields' => [
+                self::previewField('DRF No.', $drf->drf_no),
+                self::previewField('DRF Date', self::formatDate($drf->drf_date)),
+                self::previewField('Receipt Date', self::formatDate($drf->drf_receipt_date)),
+                self::previewField('Receipt Time', self::formatTime($drf->drf_receipt_time)),
+                self::previewField('Document Title', $drf->doc_title),
+            ],
+            'sections' => $offices !== []
+                ? [['heading' => 'Source Offices', 'items' => $offices]]
+                : [],
+        ];
+    }
+
+    private static function previewDcn(int $requestId): array
+    {
+        $dcn = DB::table('dcs_document_change_notice')->where('request_id', $requestId)->first();
+        if (!$dcn) {
+            abort(404);
+        }
+
+        $offices = DB::table('dcs_dcn_offices as d')
+            ->leftJoin('office as o', 'o.id', '=', 'd.office_id')
+            ->where('d.dcn_id', $dcn->id)
+            ->pluck('o.office_name')
+            ->filter()
+            ->values()
+            ->all();
+
+        if ($offices === [] && $dcn->office_id) {
+            $officeName = DB::table('office')->where('id', $dcn->office_id)->value('office_name');
+            if ($officeName) {
+                $offices = [$officeName];
+            }
+        }
+
+        $revisions = DB::table('dcs_doc_revision')
+            ->where('dcn_id', $dcn->id)
+            ->orderBy('id')
+            ->get()
+            ->map(fn ($rev) => [
+                'title' => $rev->title ?: '—',
+                'document_no' => $rev->document_no ?: '—',
+                'revision_no' => $rev->revision_no !== null ? (string) $rev->revision_no : '—',
+                'effectivity_date' => self::formatDate($rev->effectivity_date) ?: '—',
+                'brief_purpose' => $rev->brief_purpose ?: '—',
+            ])
+            ->all();
+
+        return [
+            'title' => 'Document Change Notice',
+            'type' => 'dcn',
+            'doc_no' => $dcn->dcn_no,
+            'doc_title' => null,
+            'fields' => [
+                self::previewField('DCN No.', $dcn->dcn_no),
+                self::previewField('DCN Date', self::formatDate($dcn->dcn_date)),
+                self::previewField('Receipt Date', self::formatDate($dcn->dcn_receipt_date)),
+                self::previewField('Receipt Time', self::formatTime($dcn->dcn_receipt_time)),
+            ],
+            'sections' => array_values(array_filter([
+                $offices !== [] ? ['heading' => 'Offices', 'items' => $offices] : null,
+                $revisions !== [] ? ['heading' => 'Revisions', 'revisions' => $revisions] : null,
+            ])),
+        ];
+    }
+
+    private static function previewMasterlist(int $requestId): array
+    {
+        $ml = DB::table('dcs_masterlist_registration')->where('request_id', $requestId)->first();
+        if (!$ml) {
+            abort(404);
+        }
+
+        $offices = DB::table('dcs_masterlist_source_offices as s')
+            ->leftJoin('office as o', 'o.id', '=', 's.office_id')
+            ->where('s.masterlist_id', $ml->id)
+            ->pluck('o.office_name')
+            ->filter()
+            ->values()
+            ->all();
+
+        return [
+            'title' => 'Masterlist Registration',
+            'type' => 'masterlist',
+            'doc_no' => $ml->doc_no,
+            'doc_title' => $ml->doc_title,
+            'fields' => [
+                self::previewField('Document No.', $ml->doc_no),
+                self::previewField('Document Title', $ml->doc_title),
+                self::previewField('Revision No.', $ml->revise_no),
+                self::previewField('Receipt Date', self::formatDate($ml->doc_receipt_date)),
+                self::previewField('Receipt Time', self::formatTime($ml->doc_receipt_time)),
+                self::previewField('Registered Date', self::formatDate($ml->doc_registered_date)),
+                self::previewField('Registered Time', self::formatTime($ml->doc_registered_time)),
+                self::previewField('Effectivity Date', self::formatDate($ml->effectivity_date)),
+                self::previewField('No. of Pages', $ml->no_pages),
+                self::previewField('Originator', $ml->originator_name),
+                self::previewField('Deadline', self::formatDate($ml->deadline)),
+                self::previewField('Time Spent (mins)', $ml->time_spent),
+                self::previewField('Brief Purpose', $ml->brief_purpose),
+            ],
+            'sections' => $offices !== []
+                ? [['heading' => 'Source Offices', 'items' => $offices]]
+                : [],
+        ];
+    }
+
+    private static function previewDistribution(int $requestId): array
+    {
+        $dist = DB::table('dcs_document_distribution')->where('request_id', $requestId)->first();
+        if (!$dist) {
+            abort(404);
+        }
+
+        $offices = DB::table('dcs_distribution_offices as d')
+            ->leftJoin('office as o', 'o.id', '=', 'd.office_id')
+            ->where('d.distribution_id', $dist->id)
+            ->get(['o.office_name', 'd.copies'])
+            ->map(fn ($row) => ($row->office_name ?: 'Unknown') . ' (' . (int) $row->copies . ' ' . ((int) $row->copies === 1 ? 'copy' : 'copies') . ')')
+            ->values()
+            ->all();
+
+        return [
+            'title' => 'Document Distribution',
+            'type' => 'distribution',
+            'doc_no' => null,
+            'doc_title' => null,
+            'fields' => [
+                self::previewField('Distribution Date (Actual)', self::formatDate($dist->doc_distribution_date_actual)),
+                self::previewField('Distribution Time (Actual)', self::formatTime($dist->doc_distribution_time_actual)),
+                self::previewField('Distribution Date (File)', self::formatDate($dist->doc_distribution_date_file)),
+                self::previewField('Distribution Time (File)', self::formatTime($dist->doc_distribution_time_file)),
+                self::previewField('Time Spent (mins)', $dist->time_spent),
+                self::previewField('Remarks', $dist->remarks),
+            ],
+            'sections' => $offices !== []
+                ? [['heading' => 'Distribution Offices', 'items' => $offices]]
+                : [],
+        ];
+    }
+
+    private static function previewRetrieval(int $requestId): array
+    {
+        $ret = DB::table('dcs_document_retrieval')->where('request_id', $requestId)->first();
+        if (!$ret) {
+            abort(404);
+        }
+
+        $offices = DB::table('dcs_retrieval_offices as r')
+            ->leftJoin('office as o', 'o.id', '=', 'r.office_id')
+            ->where('r.retrieval_id', $ret->id)
+            ->get(['o.office_name', 'r.copies'])
+            ->map(fn ($row) => ($row->office_name ?: 'Unknown') . ' (' . (int) $row->copies . ' ' . ((int) $row->copies === 1 ? 'copy' : 'copies') . ')')
+            ->values()
+            ->all();
+
+        return [
+            'title' => 'Document Retrieval',
+            'type' => 'retrieval',
+            'doc_no' => null,
+            'doc_title' => null,
+            'fields' => [
+                self::previewField('Retrieval Date (Actual)', self::formatDate($ret->doc_retrieval_date_actual)),
+                self::previewField('Retrieval Time (Actual)', self::formatTime($ret->doc_retrieval_time_actual)),
+                self::previewField('Retrieval Date (File)', self::formatDate($ret->doc_retrieval_date_file)),
+                self::previewField('Retrieval Time (File)', self::formatTime($ret->doc_retrieval_time_file)),
+                self::previewField('Time Spent (mins)', $ret->time_spent),
+                self::previewField('Remarks', $ret->remarks),
+            ],
+            'sections' => $offices !== []
+                ? [['heading' => 'Retrieval Offices', 'items' => $offices]]
+                : [],
+        ];
     }
 
     public static function checkDocNo(Request $request)
@@ -346,6 +619,7 @@ class RegisterQueryHelper
         $docNo = $request->input('doc_no');
         $docTypeId = (int) $request->input('doc_type_id');
         $subTypeId = $request->input('sub_type_id');
+        $excludeRequestId = (int) $request->input('exclude_request_id', 0);
 
         if (!$docNo) {
             return ['exists' => false, 'message' => 'No document number provided.'];
@@ -358,7 +632,25 @@ class RegisterQueryHelper
         );
 
         if ($result['found']) {
-            $latest = $result['latest'];
+            $matches = $result['matches'];
+            if ($excludeRequestId > 0) {
+                $matches = $matches->filter(fn ($row) => (int) $row->id !== $excludeRequestId)->values();
+            }
+            if ($matches->isEmpty()) {
+                return [
+                    'exists' => false,
+                    'is_self' => true,
+                    'message' => 'This is the current document number.',
+                    'next_rev' => null,
+                ];
+            }
+            $result['matches'] = $matches;
+            $latest = DB::table('dcs_masterlist_registration')
+                ->whereIn('request_id', $matches->pluck('id'))
+                ->where('doc_no', $docNo)
+                ->orderByDesc('revise_no')
+                ->first();
+            $result['latest'] = $latest;
             if ($latest) {
                 $latestRev = (int) $latest->revise_no;
                 $registrations = DB::table('dcs_masterlist_registration')
@@ -375,6 +667,8 @@ class RegisterQueryHelper
                     $latestDistributionOffices = DB::table('dcs_distribution_offices as d')
                         ->leftJoin('office as o', 'o.id', '=', 'd.office_id')
                         ->where('d.distribution_id', $latestDistribution->id)
+                        ->orderBy('d.sort_order')
+                        ->orderBy('d.id')
                         ->get([
                             'd.office_id',
                             'o.office_name',
@@ -521,6 +815,8 @@ class RegisterQueryHelper
             ? DB::table('dcs_distribution_offices as d')
                 ->leftJoin('office as o', 'o.id', '=', 'd.office_id')
                 ->where('d.distribution_id', $distribution->id)
+                ->orderBy('d.sort_order')
+                ->orderBy('d.id')
                 ->get(['d.office_id', 'd.copies', 'o.office_name'])
             : collect();
 
@@ -703,6 +999,8 @@ class RegisterQueryHelper
             ? DB::table('dcs_distribution_offices as dof')
                 ->leftJoin('office as o', 'o.id', '=', 'dof.office_id')
                 ->whereIn('dof.distribution_id', $distIds)
+                ->orderBy('dof.sort_order')
+                ->orderBy('dof.id')
                 ->get(['dof.distribution_id', 'dof.office_id', 'o.office_name'])
                 ->groupBy('distribution_id')
                 ->map(fn ($rows) => $rows->map(function ($row) {
@@ -860,11 +1158,24 @@ class RegisterQueryHelper
             ];
         }
 
+        $facultiesByCourse = collect();
+        if (Schema::hasTable('dcs_program_course_faculties')) {
+            $facultiesByCourse = DB::table('dcs_program_course_faculties as pcf')
+                ->join('dcs_faculties as f', 'f.id', '=', 'pcf.faculty_id')
+                ->orderBy('f.faculty_name')
+                ->get(['pcf.program_course_id', 'f.id', 'f.faculty_name'])
+                ->groupBy('program_course_id');
+        }
+
         $coursesByProgramSemester = [];
         foreach (DB::table('dcs_program_courses')->orderBy('course_name')->get(['id', 'program_id', 'semester_id', 'course_name']) as $c) {
             $coursesByProgramSemester[$c->program_id . ':' . $c->semester_id][] = [
                 'id' => $c->id,
                 'course_name' => $c->course_name,
+                'faculties' => collect($facultiesByCourse->get($c->id) ?? $facultiesByCourse->get((string) $c->id) ?? [])->map(fn ($f) => [
+                    'id' => $f->id,
+                    'faculty_name' => $f->faculty_name,
+                ])->values()->all(),
             ];
         }
 
@@ -872,10 +1183,22 @@ class RegisterQueryHelper
             'offices' => DB::table('office')
                 ->where('is_active', true)
                 ->orderBy('office_name')
-                ->get(['id', 'office_name'])
+                ->get(['id', 'office_name', 'cluster'])
                 ->map(fn ($o) => [
                     'office_id' => $o->id,
                     'office_name' => $o->office_name,
+                    'cluster' => $o->cluster,
+                ])
+                ->values()
+                ->all(),
+            'clusters' => DB::table('cluster')
+                ->where('is_active', true)
+                ->orderBy('cluster_name')
+                ->get(['id', 'cluster_name', 'cluster_code'])
+                ->map(fn ($c) => [
+                    'cluster_id' => $c->id,
+                    'cluster_name' => $c->cluster_name,
+                    'cluster_code' => $c->cluster_code,
                 ])
                 ->values()
                 ->all(),
