@@ -406,14 +406,45 @@ new #[Layout('layouts.dcs')] #[Title('CSPC - Document Control System')] class ex
     categories: {{ json_encode($categoryState) }},
     expandedRevs: {},
     openCourses: {},
-    toggle(g) { this.open[g] = !this.open[g] },
+    init() {
+        try {
+            const saved = JSON.parse(sessionStorage.getItem('dcs-db-expand') || '{}');
+            if (saved.categories && typeof saved.categories === 'object') {
+                this.categories = Object.assign({}, this.categories, saved.categories);
+            }
+            if (saved.expandedRevs && typeof saved.expandedRevs === 'object') {
+                this.expandedRevs = saved.expandedRevs;
+            }
+            if (saved.openCourses && typeof saved.openCourses === 'object') {
+                this.openCourses = saved.openCourses;
+            }
+            if (saved.open && typeof saved.open === 'object') {
+                this.open = Object.assign({}, this.open, saved.open);
+            }
+        } catch (e) {}
+    },
+    persistExpand() {
+        try {
+            sessionStorage.setItem('dcs-db-expand', JSON.stringify({
+                categories: this.categories,
+                expandedRevs: this.expandedRevs,
+                openCourses: this.openCourses,
+                open: this.open,
+            }));
+        } catch (e) {}
+    },
+    get allCollapsed() {
+        return Object.values(this.open).every(v => !v);
+    },
+    toggle(g) { this.open[g] = !this.open[g]; this.persistExpand(); },
     collapseAll() {
         const next = Object.values(this.open).some(Boolean);
         Object.keys(this.open).forEach(k => this.open[k] = !next);
+        this.persistExpand();
     },
-    toggleCategory(slug) { this.categories[slug] = !this.categories[slug] },
-    toggleRev(id) { this.expandedRevs[id] = !this.expandedRevs[id] },
-    toggleCourses(id) { this.openCourses[id] = !this.openCourses[id] },
+    toggleCategory(slug) { this.categories[slug] = !this.categories[slug]; this.persistExpand(); },
+    toggleRev(id) { this.expandedRevs[id] = !this.expandedRevs[id]; this.persistExpand(); },
+    toggleCourses(id) { this.openCourses[id] = !this.openCourses[id]; this.persistExpand(); },
     slug(name) { return String(name || 'uncategorized').toLowerCase().replace(/[^a-z0-9]+/g, '-') }
 }">
 
@@ -524,13 +555,16 @@ new #[Layout('layouts.dcs')] #[Title('CSPC - Document Control System')] class ex
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
                 <input type="text" wire:model.live.debounce.400ms="search" placeholder="Search documents..." autocomplete="off">
             </div>
-            <button class="db-collapse-btn" type="button" @click="collapseAll()" title="Collapse all columns">
-                <span class="btn-label">Collapse</span>
+            <button class="db-collapse-btn" type="button" :class="{ 'is-collapsed': allCollapsed }" @click="collapseAll()" :title="allCollapsed ? 'Expand all columns' : 'Collapse all columns'">
+                <i class="fa-solid" :class="allCollapsed ? 'fa-expand' : 'fa-compress'"></i>
+                <span class="btn-label" x-text="allCollapsed ? 'Expand' : 'Collapse'"></span>
             </button>
             <button class="db-filter-btn" type="button" @click="filterOpen = true">
+                <i class="fa-solid fa-filter"></i>
                 <span class="btn-label">Filter</span>
             </button>
             <button class="db-export-btn" type="button" wire:click="export">
+                <i class="fa-solid fa-download"></i>
                 <span class="btn-label">Export</span>
             </button>
         </div>
@@ -634,7 +668,7 @@ new #[Layout('layouts.dcs')] #[Title('CSPC - Document Control System')] class ex
                             <tr class="db-category-row">
                                 <td colspan="46">
                                     <span class="db-category-toggle" :class="{ expanded: categories['{{ $catSlug }}'] }" x-on:click="toggleCategory('{{ $catSlug }}')">
-                                        <span class="db-category-chevron" x-text="categories['{{ $catSlug }}'] ? '▲' : '▼'"></span>
+                                        <span class="db-category-chevron" x-text="categories['{{ $catSlug }}'] ? '▼' : '▶'"></span>
                                         {{ strtoupper($catName) }}
                                     </span>
                                 </td>
@@ -645,7 +679,7 @@ new #[Layout('layouts.dcs')] #[Title('CSPC - Document Control System')] class ex
                         <tr class="db-parent-row" x-show="categories['{{ $catSlug }}']">
                             <td>
                                 @if(!empty($group['has_revisions']))
-                                    <span class="db-expand-btn" :class="{ expanded: expandedRevs['{{ $revKey }}'] }" x-on:click.stop="toggleRev('{{ $revKey }}')" title="Show older revisions">▶</span>
+                                    <span class="db-expand-btn" :class="{ expanded: expandedRevs['{{ $revKey }}'] }" x-on:click.stop="toggleRev('{{ $revKey }}')" title="Show older revisions" x-text="expandedRevs['{{ $revKey }}'] ? '▼' : '▶'"></span>
                                 @endif
                                 {{ $itemNo }}
                             </td>

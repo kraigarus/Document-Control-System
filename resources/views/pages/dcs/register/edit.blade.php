@@ -13,7 +13,7 @@ new #[Layout('layouts.dcs')] #[Title('CSPC - Document Control System')] class ex
         $payload = RegisterQueryHelper::editPayload((int) $id);
         if (!empty($payload['blocked'])) {
             session()->flash('error', $payload['error']);
-            $this->redirectRoute('register.update');
+            $this->redirectRoute('dcs.register.update');
             return;
         }
         $this->requestId = (int) $id;
@@ -446,6 +446,7 @@ window.__registerCatalog = @json($catalog);
                         <div class="reg-field">
                             <label>Document No.</label>
                             <input type="text" id="masterlistDocNo" name="masterlistDocNo" placeholder="CSPC-INT.DOC-137" value="{{ $masterlist->doc_no ?? '' }}">
+                            <span id="docNoHint" style="display:block;margin-top:4px;font-size:12px;"></span>
                         </div>
                         <div class="reg-field">
                             <label>Deadline of Submission</label>
@@ -758,6 +759,7 @@ window.__registerCatalog = @json($catalog);
                     <div class="reg-split-right">
                         <div class="reg-field">
                             <label>Select office(s) for distribution</label>
+                            <div class="reg-cluster-chips" id="distClusterChips"></div>
                             <div class="reg-search">
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <circle cx="11" cy="11" r="8"/>
@@ -781,7 +783,7 @@ window.__registerCatalog = @json($catalog);
                                 <tbody id="distBody">
                                     @forelse($distributionOffices as $distOff)
                                     
-                                    <tr class="reg-office-added">
+                                    <tr class="reg-office-added" draggable="true">
                                         <td>
                                             <input type="hidden" name="distOffice[]" value="{{ $distOff->office_id }}">
                                             <div class="reg-office-name">
@@ -829,6 +831,9 @@ window.__registerCatalog = @json($catalog);
                     </a>
                 </div>
                 <div class="reg-actions-right">
+                    <button type="button" id="btnGenerateDistribution" class="reg-btn reg-btn-generate" onclick="generateDistributionTemplate()">
+                        <i class="fa-solid fa-file-lines"></i> Generate
+                    </button>
                     <button type="button" class="reg-btn reg-btn-save" onclick="confirmSave()">
                         <i class="fa-solid fa-floppy-disk"></i> Update Document
                     </button>
@@ -836,7 +841,7 @@ window.__registerCatalog = @json($catalog);
             </div>
         </form>
 
-    <!-- ═══ CONFIRM MODAL ═══ -->
+    <template x-teleport="body">
     <div class="reg-modal-overlay" id="confirmModal" :class="{ 'is-open': reviewOpen }" :aria-hidden="reviewOpen ? 'false' : 'true'" @click.self="closeReview()">
         <div class="reg-modal">
             <div class="reg-modal-header">
@@ -859,6 +864,7 @@ window.__registerCatalog = @json($catalog);
             </div>
         </div>
     </div>
+    </template>
     </div>
 
 
@@ -869,7 +875,11 @@ document.addEventListener('alpine:init', () => {
         syllabiStep: 1,
         reviewOpen: false,
         setSyllabiStep(step) { this.syllabiStep = step; window.syllabiCurrentStep = step; },
-        closeReview() { this.reviewOpen = false; document.body.style.overflow = ''; },
+        closeReview() {
+            this.reviewOpen = false;
+            const el = document.getElementById('dcsEditRoot');
+            if (el) el.style.overflow = '';
+        },
         addSyllabiRow() { if (typeof window.addSyllabiRow === 'function') window.addSyllabiRow(); },
     }));
 });
@@ -898,7 +908,8 @@ function isSyllabiLikeSubType(subTypeId) {
 }
 
 const ALLOWED_EXTENSIONS = ['pdf', 'docx'];
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_FILE_SIZE = 200 * 1024 * 1024;
+const OCR_MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 const CFG = window.APP_CONFIG || {};
 const CURRENT_VERSION_ID = CFG.CURRENT_VERSION_ID || null;
@@ -926,7 +937,7 @@ function checkFile(file) {
 function fileTypeErrorMessage(check, file) {
     return check.reason === 'type'
         ? '"' + check.ext + '" is not allowed. Only .pdf and .docx files are accepted.'
-        : '"' + file.name + '" is ' + check.sizeMB + 'MB. Maximum file size is 10MB.';
+        : '"' + file.name + '" is ' + check.sizeMB + 'MB. Maximum file size is 200MB.';
 }
 
 function setFileIcon(icon, ext) {
@@ -988,6 +999,7 @@ function seedOfficeRow(tbodyId, totalId, officeId, officeName, copies) {
     if (existing) return;
     const tr = document.createElement("tr");
     tr.className = "reg-office-added";
+    if (!isRetrieval) tr.draggable = true;
     tr.innerHTML = `
         <td><input type="hidden" name="${officeNameAttr}" value="${officeId}"><div class="reg-office-name"><div class="reg-office-icon"><i class="fa-solid fa-building"></i></div><span class="reg-office-text">${escapeHtml(officeName)}</span></div></td>
         <td style="text-align:center;"><input type="number" name="${copiesNameAttr}" value="${copies}" min="1" oninput="updateTotal('${totalId}', '${tbodyId}')"></td>
@@ -1150,7 +1162,11 @@ document.addEventListener("DOMContentLoaded", async function () {
         const mlTitle = document.getElementById('masterlistDocTitle');
         if (drfTitle && mlTitle) {
             drfTitle.addEventListener('input', () => { mlTitle.value = drfTitle.value; });
+            mlTitle.addEventListener('input', () => { drfTitle.value = mlTitle.value; });
         }
+
+        renderDistClusterChips();
+        bindDistBodyDrag();
 
         // ── Wire initial DCN revision row search ──
         document.querySelectorAll('#revisionTableBody tr').forEach(tr => bindRevisionRowSearch(tr));
@@ -1575,7 +1591,7 @@ async function runDocNoLookup(docNo, hintEl, revField) {
             if (hintEl) {
                 hintEl.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> ' +
                     'This document number is already registered under <strong>' +
-                    (data.existing_type_name || 'this document type') +
+                    escapeHtml(data.existing_type_name || 'this document type') +
                     '</strong>. Please use a unique document number.' +
                     '<br><span style="font-weight:400;font-size:11px;">You cannot save until you enter a unique document number.</span>';
                 hintEl.style.color = '#dc2626';
@@ -1584,7 +1600,7 @@ async function runDocNoLookup(docNo, hintEl, revField) {
         } else if (data.wrong_type) {
             docNoDuplicate = false;
             if (hintEl) {
-                hintEl.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> ' + data.message +
+                hintEl.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> ' + escapeHtml(data.message || '') +
                     '<br><span style="font-weight:400;font-size:11px;">This number is registered under a different document type. You may continue.</span>';
                 hintEl.style.color = '#d97706';
                 hintEl.dataset.valid = 'different_type';
@@ -1592,7 +1608,7 @@ async function runDocNoLookup(docNo, hintEl, revField) {
         } else {
             docNoDuplicate = false;
             if (hintEl) {
-                hintEl.innerHTML = '<i class="fa-solid fa-circle-check"></i> Document number is available.';
+                hintEl.innerHTML = '<i class="fa-solid fa-circle-check"></i> ' + escapeHtml(data.is_self ? (data.message || 'This is the current document number.') : 'Document number is available.');
                 hintEl.style.color = '#16a34a';
                 hintEl.dataset.valid = 'available';
             }
@@ -2378,7 +2394,7 @@ function processUploadAreaFile(input, container, icon, label, originalText) {
     label.style.fontWeight = '600';
     addRemoveBtn(container, input, icon, label, originalText);
 
-    if (input.id === 'drfFile' && check.ext === 'pdf') {
+    if (input.id === 'drfFile' && check.ext === 'pdf' && file.size <= OCR_MAX_FILE_SIZE) {
         triggerScanExtraction(input, file);
     }
 }
@@ -2419,6 +2435,10 @@ function autofillDrfFields(fields) {
         if (value && el && !el.value) {
             el.value = value;
             el.classList.add('reg-autofilled');
+            if (elId === 'drfTitle') {
+                const ml = document.getElementById('masterlistDocTitle');
+                if (ml) ml.value = value;
+            }
         }
     });
 }
@@ -2685,11 +2705,16 @@ async function autoPopulateSyllabiCourses() {
     const semesterId = document.getElementById('syllabiSemester').value;
     try {
         const courses = ((window.__registerCatalog || {}).coursesByProgramSemester || {})[programId + ':' + semesterId] || [];
-        if (!courses || courses.length === 0) return;
         const tbody = document.getElementById('syllabiTableBody');
+        if (!tbody) return;
         const hasManualData = [...tbody.querySelectorAll('.syllabi-merged-course, textarea.syllabi-merged-course')]
             .some(inp => inp.value.trim() !== '' && inp.dataset.autoFilled !== 'true');
         if (hasManualData) return;
+
+        if (!courses || courses.length === 0) {
+            showSyllabiEmptyCatalogHint();
+            return;
+        }
 
         tbody.querySelectorAll('tr[data-uid]').forEach(tr => removeSyllabiFacultyPicker(tr.dataset.uid));
         tbody.innerHTML = '';
@@ -2708,6 +2733,7 @@ async function autoPopulateSyllabiCourses() {
                 autosizeSyllabiCourse(courseInput);
                 courseInput.addEventListener('input', () => { courseInput.dataset.autoFilled = 'false'; });
             }
+            applyCatalogFacultiesToRow(newRow, c.faculties || []);
             cascadeDrfToNewRow(newRow);
             syncSyllabiMergedFields(groupId);
         });
@@ -2716,6 +2742,36 @@ async function autoPopulateSyllabiCourses() {
     } catch (err) {
         console.error('Failed to auto-populate syllabi courses:', err);
     }
+}
+
+function showSyllabiEmptyCatalogHint() {
+    const tbody = document.getElementById('syllabiTableBody');
+    if (!tbody) return;
+    tbody.querySelectorAll('tr[data-uid]').forEach(tr => removeSyllabiFacultyPicker(tr.dataset.uid));
+    tbody.innerHTML = '<tr class="syllabi-empty-hint"><td colspan="14">No courses in Settings for this program and semester. Add them under Settings → Course Names, or click Add Course.</td></tr>';
+    syllabiGroupCounter = 0;
+    if (typeof updateSyllabiTotals === 'function') updateSyllabiTotals();
+}
+
+function applyCatalogFacultiesToRow(row, faculties) {
+    if (!row || !Array.isArray(faculties) || faculties.length === 0) return;
+    const names = faculties.map(f => f.faculty_name || f.name).filter(Boolean);
+    if (!names.length) return;
+
+    if (names.length > 2) {
+        const copiesInput = row.querySelector('input[name="syllabiCopies[]"]');
+        if (copiesInput) {
+            copiesInput.value = String(names.length);
+            handleCopiesChange(copiesInput);
+        }
+        const rows = [...document.querySelectorAll('#syllabiTableBody tr[data-group="' + row.dataset.group + '"]')];
+        rows.forEach((r, i) => {
+            if (names[i]) addSyllabiFaculty(r.dataset.uid, names[i], false);
+        });
+        return;
+    }
+
+    names.forEach(name => addSyllabiFaculty(row.dataset.uid, name, false));
 }
 
 function clearSyllabiCourseRows() {
@@ -3575,6 +3631,7 @@ window.syncSyllabiMergedFields = function (groupId) {
 window.addSyllabiRow = function () {
     const tbody = document.getElementById("syllabiTableBody");
     if (!tbody) return;
+    tbody.querySelectorAll('tr.syllabi-empty-hint').forEach(tr => tr.remove());
     syllabiGroupCounter++;
     const newRow = buildSyllabiGroupFirstRow("g" + syllabiGroupCounter, 1);
     tbody.appendChild(newRow);
@@ -3692,6 +3749,78 @@ window.calcMasterlistTimeSpent = () => calcTimeDiff("masterlistReceiptDate", "ma
 window.calcRetrievalTimeSpent = () => calcTimeDiff("retrievalFormDate", "retrievalFormTime", "retrievalDate", "retrievalTime", "retrievalTimeSpentDisplay", "retrievalTimeSpent");
 window.calcDistributionTimeSpent = () => calcTimeDiff("distributionFormDate", "distributionFormTime", "distributionDate", "distributionTime", "distributionTimeSpentDisplay", "distributionTimeSpent");
 
+window.generateDistributionTemplate = function () {
+    const btn = document.getElementById('btnGenerateDistribution');
+    if (btn?.disabled) {
+        alert('Save the document first before generating the distribution template.');
+        return;
+    }
+    const offices = [];
+    document.querySelectorAll('#distBody .reg-office-text').forEach((el) => {
+        const name = el.textContent.trim();
+        if (name) offices.push(name);
+    });
+    if (offices.length === 0) {
+        alert('Add at least one receiving office before generating the distribution template.');
+        return;
+    }
+    const params = new URLSearchParams();
+    params.set('date', document.getElementById('distributionDate')?.value || '');
+    params.set('template_id', '0');
+    offices.forEach((name) => params.append('offices[]', name));
+    window.open('{{ route('dcs.reports.distributionTemplate') }}?' + params.toString(), '_blank', 'noopener');
+};
+
+function renderDistClusterChips() {
+    const wrap = document.getElementById('distClusterChips');
+    if (!wrap) return;
+    const clusters = (window.__registerCatalog || {}).clusters || [];
+    wrap.innerHTML = clusters.map((c) => (
+        '<button type="button" class="reg-cluster-chip" data-cluster="' + escapeHtml(c.cluster_code) + '">' +
+        'Select all ' + escapeHtml(c.cluster_name) + '</button>'
+    )).join('');
+    wrap.querySelectorAll('.reg-cluster-chip').forEach((btn) => {
+        btn.addEventListener('click', () => addOfficesByCluster(btn.getAttribute('data-cluster')));
+    });
+}
+
+function addOfficesByCluster(clusterCode) {
+    allOffices.filter((o) => String(o.cluster) === String(clusterCode)).forEach((o) => {
+        addOffice(o.office_id, o.office_name, 'distBody', 'distTotal', 'distResults');
+    });
+}
+
+function bindDistBodyDrag() {
+    const tbody = document.getElementById('distBody');
+    if (!tbody || tbody.dataset.dragBound) return;
+    tbody.dataset.dragBound = 'true';
+    let dragEl = null;
+    tbody.addEventListener('mousedown', (e) => {
+        const tr = e.target.closest('tr.reg-office-added');
+        if (!tr) return;
+        tr.draggable = !e.target.closest('input, button');
+    });
+    tbody.addEventListener('dragstart', (e) => {
+        const tr = e.target.closest('tr.reg-office-added');
+        if (!tr) return;
+        dragEl = tr;
+        tr.classList.add('is-dragging');
+        e.dataTransfer.effectAllowed = 'move';
+    });
+    tbody.addEventListener('dragend', () => {
+        if (dragEl) dragEl.classList.remove('is-dragging');
+        dragEl = null;
+    });
+    tbody.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        const tr = e.target.closest('tr.reg-office-added');
+        if (!tr || !dragEl || tr === dragEl) return;
+        const rect = tr.getBoundingClientRect();
+        const after = (e.clientY - rect.top) > (rect.height / 2);
+        tr.parentNode.insertBefore(dragEl, after ? tr.nextSibling : tr);
+    });
+}
+
 // ══════════════════════════════════════════════
 // VALIDATION
 // ══════════════════════════════════════════════
@@ -3792,19 +3921,15 @@ function validateTimeSpentFields(errors) {
         }
     }
     if (sectionVisible("section-4")) {
-        if (document.getElementById("retrievalTimeSpentDisplay").value === "Invalid") {
+        const ret = document.getElementById("retrievalTimeSpentDisplay");
+        if (ret && ret.value === "Invalid") {
             errors.push({ field: "retrievalDate", message: "Retrieval: Retrieval Date must be after Form Date." });
-        }
-        if (document.querySelectorAll("#retrievalBody input[type='hidden']").length === 0) {
-            errors.push({ field: "retrievalSearch", message: "At least one office required for Retrieval.", type: "search" });
         }
     }
     if (sectionVisible("section-5")) {
-        if (document.getElementById("distributionTimeSpentDisplay").value === "Invalid") {
+        const dist = document.getElementById("distributionTimeSpentDisplay");
+        if (dist && dist.value === "Invalid") {
             errors.push({ field: "distributionDate", message: "Distribution: Distribution Date must be after Form Date." });
-        }
-        if (document.querySelectorAll("#distBody input[type='hidden']").length === 0) {
-            errors.push({ field: "distSearch", message: "At least one office required for Distribution.", type: "search" });
         }
     }
 }
@@ -4136,8 +4261,8 @@ window.confirmSave = function () {
     const missing = collectMissingFields();
     renderMissingFieldsWarning(reviewContent, missing);
 
-    document.body.style.overflow = "hidden";
     const root = document.getElementById("dcsEditRoot");
+    if (root) root.style.overflow = "hidden";
     if (root && window.Alpine) Alpine.$data(root).reviewOpen = true;
 };
 
@@ -4291,7 +4416,7 @@ function buildDistributionReview(reviewContent) {
 window.closeConfirmModal = function () {
     const root = document.getElementById("dcsEditRoot");
     if (root && window.Alpine) Alpine.$data(root).reviewOpen = false;
-    document.body.style.overflow = "";
+    if (root) root.style.overflow = "";
 };
 
 document.getElementById("confirmModal")?.addEventListener("click", function (e) {
@@ -4341,7 +4466,7 @@ window.handleSearch = function (input, resultsId, bodyId, totalId) {
     const filtered = filterOffices(input.value);
     if (input.value.trim().length < 1 || filtered.length === 0) { dropdown.style.display = "none"; return; }
     dropdown.innerHTML = filtered.map(o =>
-        '<div onclick="addOffice(' + o.office_id + ", '" + o.office_name.replace(/'/g, "\\'") + "', '" + bodyId + "', '" + totalId + "', '" + resultsId + "')\">" + escapeHtml(o.office_name) + '</div>'
+        '<div onclick="addOffice(' + Number(o.office_id) + ", '" + escapeHtml(o.office_name).replace(/'/g, '&#39;') + "', '" + bodyId + "', '" + totalId + "', '" + resultsId + "')\">" + escapeHtml(o.office_name) + '</div>'
     ).join("");
     dropdown.style.display = "block";
 };
@@ -4363,7 +4488,9 @@ window.addOffice = function (officeId, officeName, bodyId, totalId, resultsId) {
     }
 
     const safeDisplay = escapeHtml(officeName);
-    const tr = document.createElement("tr"); tr.className = "reg-office-added";
+    const tr = document.createElement("tr");
+    tr.className = "reg-office-added";
+    if (!isRetrieval) tr.draggable = true;
     tr.innerHTML = `<td><input type="hidden" name="${officeNameAttr}" value="${officeId}"><div class="reg-office-name"><div class="reg-office-icon"><i class="fa-solid fa-building"></i></div><span class="reg-office-text">${safeDisplay}</span></div></td><td style="text-align:center;"><input type="number" name="${copiesNameAttr}" value="1" min="1" oninput="updateTotal('${totalId}', '${bodyId}')"></td><td><button type="button" class="btn-remove" onclick="removeOffice(this, '${totalId}', '${bodyId}')"><i class="fa-solid fa-xmark"></i></button></td>`;
     tbody.appendChild(tr);
     updateTotal(totalId, bodyId);

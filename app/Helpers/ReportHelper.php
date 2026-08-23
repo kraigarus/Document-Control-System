@@ -1254,6 +1254,7 @@ class ReportHelper
             'selectedSubTypeNames' => $selectedSubTypeNames,
             'activeSub'          => $sub,
             'activeCategory'     => $category,
+            'letterheadUrl'      => ReportTemplateHelper::letterheadDataUrl((int) $request->get('template_id', 0)),
             'republic'           => 'Republic of the Philippines',
             'institutionName'    => 'Camarines Sur Polytechnic Colleges',
             'institutionAddress' => 'Nabua, Camarines Sur',
