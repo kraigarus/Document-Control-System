@@ -13,9 +13,94 @@ use Illuminate\Support\Facades\Storage;
  */
 class RegisterPersistHelper
 {
+    public const SCAN_MAX_KB = 204800;
+
+    public static function scanFileRules(): array
+    {
+        $rule = 'nullable|file|mimes:pdf,docx|max:' . self::SCAN_MAX_KB;
+
+        return [
+            'drfFile' => $rule,
+            'dcnFile' => $rule,
+            'uploadScannedCopy' => $rule,
+            'scannedRet' => $rule,
+            'scanneddist' => $rule,
+            'scannedCopy.*' => $rule,
+            'syllabiScannedDrf.*' => $rule,
+        ];
+    }
+
+    public static function blankStringsToNull(Request $request): void
+    {
+        $clean = [];
+        foreach ($request->all() as $key => $value) {
+            if (is_string($value) && trim($value) === '') {
+                $clean[$key] = null;
+            } elseif (is_array($value)) {
+                $clean[$key] = array_map(
+                    fn ($v) => is_string($v) && trim($v) === '' ? null : $v,
+                    $value
+                );
+            }
+        }
+        if ($clean !== []) {
+            $request->merge($clean);
+        }
+    }
+
+    public static function syncedDocTitle(Request $request): ?string
+    {
+        $drf = trim((string) $request->input('drfTitle', ''));
+        if ($drf !== '') {
+            return $drf;
+        }
+        $ml = trim((string) $request->input('masterlistDocTitle', ''));
+
+        return $ml !== '' ? $ml : null;
+    }
+
+    public static function validateCheckedSections(Request $request): ?RedirectResponse
+    {
+        $checked = array_map('intval', $request->input('checklists', []));
+        if ($checked === []) {
+            return back()->withInput()->with('error', 'Select at least one checklist section.');
+        }
+
+        return null;
+    }
+
+    public static function isKnownPublicScanPath(string $path, array $extraAllowed = []): bool
+    {
+        $path = ltrim(str_replace(['../', '..\\'], '', $path), '/');
+        if ($path === '' || str_contains($path, '..') || !str_starts_with($path, 'scans/')) {
+            return false;
+        }
+        if ($extraAllowed === [] || !in_array($path, $extraAllowed, true)) {
+            return false;
+        }
+
+        return Storage::disk('public')->exists($path);
+    }
+
+    public static function saveDistributionOffices(int $distributionId, Request $request): void
+    {
+        foreach ($request->input('distOffice', []) as $i => $officeId) {
+            $id = (int) $officeId;
+            if ($id <= 0) {
+                continue;
+            }
+            DB::table('dcs_distribution_offices')->insert([
+                'distribution_id' => $distributionId,
+                'office_id' => $id,
+                'copies' => $request->input('distCopies')[$i] ?? 1,
+                'sort_order' => $i,
+            ]);
+        }
+    }
 
     public static function persist(Request $request): RedirectResponse
     {
+        self::blankStringsToNull($request);
         $mode = $request->input('registration_mode', 'new');
 
         if ($mode === 'revised') {
@@ -27,34 +112,31 @@ class RegisterPersistHelper
             $docTypeId = $request->input('doc_type_id');
             $subTypeId = $request->input('sub_type_id');
 
-            if (!$docNo) {
-                return back()->withInput()
-                    ->with('error', 'Document No. is required for revised registration.');
-            }
+            if ($docNo) {
+                $result = self::findMatchingRegistrationRows($docNo, (int) $docTypeId, $subTypeId ? (int) $subTypeId : null);
 
-            $result = self::findMatchingRegistrationRows($docNo, (int) $docTypeId, $subTypeId ? (int) $subTypeId : null);
+                if (!$result['found']) {
+                    if (($result['reason'] ?? '') === 'not_registered') {
+                        return back()->withInput()
+                            ->with('error', 'Document "' . $docNo . '" is not registered. You must register it as a New Document first before revising it.');
+                    }
 
-            if (!$result['found']) {
-                if (($result['reason'] ?? '') === 'not_registered') {
                     return back()->withInput()
-                        ->with('error', 'Document "' . $docNo . '" is not registered. You must register it as a New Document first before revising it.');
+                        ->with('error', self::mismatchErrorMessageFromRow($docNo, $result));
                 }
 
-                return back()->withInput()
-                    ->with('error', self::mismatchErrorMessageFromRow($docNo, $result));
-            }
+                $requestedRev = (int) $request->input('masterlistRevisionNo');
+                $matchingIds = $result['matches']->pluck('id');
+                $duplicateExists = DB::table('dcs_masterlist_registration')
+                    ->whereIn('request_id', $matchingIds)
+                    ->where('doc_no', $docNo)
+                    ->where('revise_no', $requestedRev)
+                    ->exists();
 
-            $requestedRev = (int) $request->input('masterlistRevisionNo');
-            $matchingIds = $result['matches']->pluck('id');
-            $duplicateExists = DB::table('dcs_masterlist_registration')
-                ->whereIn('request_id', $matchingIds)
-                ->where('doc_no', $docNo)
-                ->where('revise_no', $requestedRev)
-                ->exists();
-
-            if ($duplicateExists) {
-                return back()->withInput()
-                    ->with('error', 'Revision ' . $requestedRev . ' for document "' . $docNo . '" already exists. Please use a different revision number.');
+                if ($duplicateExists) {
+                    return back()->withInput()
+                        ->with('error', 'Revision ' . $requestedRev . ' for document "' . $docNo . '" already exists. Please use a different revision number.');
+                }
             }
         }
 
@@ -67,21 +149,19 @@ class RegisterPersistHelper
             ]);
         }
 
-        $request->validate([
+        $request->validate(array_merge([
             'doc_type_id' => 'required|integer|exists:dcs_doc_types,id',
             'version_id' => 'required|integer|exists:dcs_version_type,id',
             'approval_status' => 'required|in:applicable,not_applicable',
-            'drfFile' => 'nullable|file|mimes:pdf,docx|max:10240',
-            'dcnFile' => 'nullable|file|mimes:pdf,docx|max:10240',
-            'uploadScannedCopy' => 'nullable|file|mimes:pdf,docx|max:10240',
-            'scannedRet' => 'nullable|file|mimes:pdf,docx|max:10240',
-            'scanneddist' => 'nullable|file|mimes:pdf,docx|max:10240',
-        ]);
+        ], self::scanFileRules()));
 
         $subType = self::dcsDocType($request->sub_type_id);
         $isSyllabi = self::isSyllabiLikeSubTypeRow($subType);
 
         if ($redirect = self::validateSyllabiLikeRequestRows($request)) {
+            return $redirect;
+        }
+        if ($redirect = self::validateCheckedSections($request)) {
             return $redirect;
         }
 
@@ -124,7 +204,7 @@ class RegisterPersistHelper
             $versionId = $request->version_id;
             $checkedChecklists = array_map('intval', $request->input('checklists', []));
 
-            if (in_array(1, $checkedChecklists, true) && $request->filled('drfNo')) {
+            if (in_array(1, $checkedChecklists, true)) {
                 $drfFile = null;
                 if ($request->hasFile('drfFile')) {
                     $drfFile = $request->file('drfFile')->store('scans/drf', 'public');
@@ -142,7 +222,7 @@ class RegisterPersistHelper
                     'drf_date' => $request->drfDate,
                     'drf_receipt_date' => $request->drfReceiptDate,
                     'drf_receipt_time' => $request->drfTime,
-                    'doc_title' => $request->drfTitle,
+                    'doc_title' => self::syncedDocTitle($request) ?: $request->drfTitle,
                     'scanned_drf' => $drfFile,
                     'created_by' => $userId,
                     'created_at' => $now,
@@ -163,7 +243,7 @@ class RegisterPersistHelper
                 }
             }
 
-            if (in_array(2, $checkedChecklists, true) && $request->filled('dcnNumber')) {
+            if (in_array(2, $checkedChecklists, true)) {
                 $dcnFile = null;
                 if ($request->hasFile('dcnFile')) {
                     $dcnFile = $request->file('dcnFile')->store('scans/dcn', 'public');
@@ -216,7 +296,7 @@ class RegisterPersistHelper
                 }
             }
 
-            if (in_array(3, $checkedChecklists, true) && !$isSyllabi && $request->filled('masterlistDocNo')) {
+            if (in_array(3, $checkedChecklists, true) && !$isSyllabi) {
                 $masterlistFile = null;
                 if ($request->hasFile('uploadScannedCopy')) {
                     $masterlistFile = $request->file('uploadScannedCopy')->store('scans/masterlist', 'public');
@@ -239,7 +319,7 @@ class RegisterPersistHelper
                     'doc_registered_date' => $request->masterlistRegisteredDate,
                     'doc_registered_time' => $request->masterlistRegisteredTime,
                     'time_spent' => $masterlistTimeSpent,
-                    'doc_title' => $request->masterlistDocTitle,
+                    'doc_title' => self::syncedDocTitle($request) ?: $request->masterlistDocTitle,
                     'effectivity_date' => $request->masterlistEffectivityDate,
                     'revise_no' => $request->masterlistRevisionNo,
                     'no_pages' => $request->masterlistNoOfPages,
@@ -322,7 +402,7 @@ class RegisterPersistHelper
                 self::saveSyllabiRowsFromRequest($requestId, $versionId, $docTypeId, $request, $uploadedFiles);
             }
 
-            if (in_array(4, $checkedChecklists, true) && $request->filled('retrievalDate')) {
+            if (in_array(4, $checkedChecklists, true)) {
                 $retrievalFile = null;
                 if ($request->hasFile('scannedRet')) {
                     $retrievalFile = $request->file('scannedRet')->store('scans/retrieval', 'public');
@@ -366,7 +446,7 @@ class RegisterPersistHelper
                 }
             }
 
-            if (in_array(5, $checkedChecklists, true) && $request->filled('distributionDate')) {
+            if (in_array(5, $checkedChecklists, true)) {
                 $distFile = null;
                 if ($request->hasFile('scanneddist')) {
                     $distFile = $request->file('scanneddist')->store('scans/distribution', 'public');
@@ -396,17 +476,7 @@ class RegisterPersistHelper
                 ]);
 
                 if ($request->has('distOffice')) {
-                    foreach ($request->distOffice as $i => $officeId) {
-                        $id = (int) $officeId;
-                        if ($id <= 0) {
-                            continue;
-                        }
-                        DB::table('dcs_distribution_offices')->insert([
-                            'distribution_id' => $distributionId,
-                            'office_id' => $id,
-                            'copies' => $request->distCopies[$i] ?? 1,
-                        ]);
-                    }
+                    self::saveDistributionOffices($distributionId, $request);
                 }
             }
 
@@ -430,7 +500,7 @@ class RegisterPersistHelper
                 }
             }
 
-            return redirect()->route('dcs.register.create')
+            return redirect()->route('dcs.register.edit', $requestId)
                 ->with('success', 'Document registered successfully!');
         } catch (\Throwable $e) {
             DB::rollBack();
@@ -549,12 +619,8 @@ class RegisterPersistHelper
         $subType = self::dcsDocType($request->sub_type_id);
         $isSyllabi = self::isSyllabiLikeSubTypeRow($subType);
 
-        if (!$isSyllabi) {
+        if (!$isSyllabi || !$request->has('syllabiCourseName')) {
             return null;
-        }
-
-        if (!$request->has('syllabiCourseName')) {
-            return back()->withInput()->with('error', 'At least one course is required.');
         }
 
         $courseNames = $request->syllabiCourseName;
@@ -572,10 +638,6 @@ class RegisterPersistHelper
                 continue;
             }
 
-            if (empty($request->syllabiNoPages[$i]) || $request->syllabiNoPages[$i] <= 0) {
-                return back()->withInput()->with('error', "Syllabi \"{$courseLabel}\": No. of Pages must be greater than 0.");
-            }
-
             for ($c = 0; $c < $copies; $c++) {
                 $rowIdx = $i + $c;
                 if ($rowIdx >= $total) {
@@ -583,21 +645,6 @@ class RegisterPersistHelper
                 }
                 $copyNum = $c + 1;
                 $rowLabel = "Syllabi \"{$courseLabel}\" (Copy {$copyNum})";
-
-                $drfAvailArr = $request->syllabiDrfAvailability ?? [];
-                $isDrfAvailable = ($drfAvailArr[$rowIdx] ?? 'not available') === 'available';
-
-                if ($isDrfAvailable) {
-                    if (empty($request->syllabiDrfNo[$rowIdx])) {
-                        return back()->withInput()->with('error', "{$rowLabel}: DRF No. is required.");
-                    }
-                    if (empty($request->syllabiDrfDate[$rowIdx])) {
-                        return back()->withInput()->with('error', "{$rowLabel}: DRF Date is required.");
-                    }
-                    if (empty($request->syllabiDrfReceived[$rowIdx])) {
-                        return back()->withInput()->with('error', "{$rowLabel}: DRF Received Date is required.");
-                    }
-                }
 
                 if ($copies > 1) {
                     $facultyCount = count(array_filter(array_map('trim', explode(',', $request->syllabiFaculty[$rowIdx] ?? ''))));
@@ -613,8 +660,8 @@ class RegisterPersistHelper
                     if (!in_array($ext, ['pdf', 'docx'])) {
                         return back()->withInput()->with('error', "{$rowLabel}: Scanned DRF — only .pdf and .docx files are accepted.");
                     }
-                    if ($file->getSize() > 10 * 1024 * 1024) {
-                        return back()->withInput()->with('error', "{$rowLabel}: Scanned DRF — file size must not exceed 10MB.");
+                    if ($file->getSize() > self::SCAN_MAX_KB * 1024) {
+                        return back()->withInput()->with('error', "{$rowLabel}: Scanned DRF — file size must not exceed 200MB.");
                     }
                 }
             }
@@ -622,28 +669,21 @@ class RegisterPersistHelper
             $i += $copies;
         }
 
-        $namedCourses = collect($courseNames)
-            ->filter(fn ($name) => trim((string) $name) !== '')
-            ->count();
-        if ($namedCourses === 0) {
-            return back()->withInput()->with('error', 'At least one course is required.');
-        }
-
         $request->validate([
-            'college_id' => 'required|integer|exists:dcs_colleges,id',
-            'program_id' => 'required|integer|exists:dcs_programs,id',
-            'semester_id' => 'required|integer|exists:dcs_semesters,id',
-            'school_year_id' => 'required|integer|exists:dcs_school_years,id',
-            'syllabiDocNo' => 'required|string',
-            'syllabiDocTitle' => 'required|string',
-            'syllabiEffectivityDate' => 'required|date',
-            'syllabiDeadline' => 'required|date',
+            'college_id' => 'nullable|integer|exists:dcs_colleges,id',
+            'program_id' => 'nullable|integer|exists:dcs_programs,id',
+            'semester_id' => 'nullable|integer|exists:dcs_semesters,id',
+            'school_year_id' => 'nullable|integer|exists:dcs_school_years,id',
+            'syllabiDocNo' => 'nullable|string',
+            'syllabiDocTitle' => 'nullable|string',
+            'syllabiEffectivityDate' => 'nullable|date',
+            'syllabiDeadline' => 'nullable|date',
         ]);
 
         return null;
     }
 
-    public static function resolveRevisionScannedCopyPath(Request $request, int $i, array &$uploadedFiles): ?string
+    public static function resolveRevisionScannedCopyPath(Request $request, int $i, array &$uploadedFiles, array $allowedPaths = []): ?string
     {
         if ($request->hasFile('scannedCopy') && isset($request->file('scannedCopy')[$i])) {
             $path = $request->file('scannedCopy')[$i]->store('scans/revisions', 'public');
@@ -658,7 +698,7 @@ class RegisterPersistHelper
         }
 
         $source = ltrim(str_replace(['../', '..\\'], '', $source), '/');
-        if ($source === '' || str_contains($source, '..') || !Storage::disk('public')->exists($source)) {
+        if (!self::isKnownPublicScanPath($source, $allowedPaths)) {
             return null;
         }
 
@@ -736,7 +776,8 @@ class RegisterPersistHelper
         int $versionId,
         int $docTypeId,
         Request $request,
-        array &$uploadedFiles
+        array &$uploadedFiles,
+        array $allowedExistingPaths = []
     ): void {
         if (!$request->has('syllabiCourseName')) {
             return;
@@ -819,7 +860,10 @@ class RegisterPersistHelper
                     "Syllabi \"{$courseName}\" copy " . ($c + 1) . ': Scanned DRF'
                 );
                 if (!$scannedDrf && !empty($existingScanned[$rowIdx])) {
-                    $scannedDrf = $existingScanned[$rowIdx];
+                    $candidate = ltrim((string) $existingScanned[$rowIdx], '/');
+                    if ($allowedExistingPaths !== [] && self::isKnownPublicScanPath($candidate, $allowedExistingPaths)) {
+                        $scannedDrf = $candidate;
+                    }
                 }
                 if ($scannedDrf && $request->hasFile('syllabiScannedDrf') && isset($request->file('syllabiScannedDrf')[$rowIdx])) {
                     $uploadedFiles[] = $scannedDrf;
@@ -876,14 +920,6 @@ class RegisterPersistHelper
         }
 
         $file = $request->file($inputName)[$index];
-        $ext = strtolower($file->getClientOriginalExtension());
-
-        if (!in_array($ext, ['pdf', 'docx'])) {
-            throw new \Exception("{$label}: only .pdf and .docx files are accepted.");
-        }
-        if ($file->getSize() > 10 * 1024 * 1024) {
-            throw new \Exception("{$label}: file size must not exceed 10MB.");
-        }
 
         return $file->store($directory, 'public');
     }

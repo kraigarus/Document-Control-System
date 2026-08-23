@@ -1,10 +1,12 @@
 <?php
 
+use App\Helpers\CalendarHelper;
 use App\Helpers\RegisterPersistHelper;
 use App\Helpers\RegisterQueryHelper;
 use App\Services\RegisterScanService;
 use App\Helpers\RegisterUpdateHelper;
 use App\Helpers\ReportHelper;
+use App\Helpers\ReportTemplateHelper;
 use App\Services\StampService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -77,6 +79,17 @@ Route::middleware(['auth', 'active', 'can.access.dcs'])->group(function () {
         Volt::route('/dashboard', 'pages.dcs.index')->name('dashboard');
 
         Route::get('/api/documents/search', fn (Request $request) => RegisterQueryHelper::searchDocuments($request));
+        Route::get('/api/documents/{id}/checklist/{type}', function (int $id, string $type) {
+            return response()->json(RegisterQueryHelper::documentChecklistPreview($id, $type));
+        })->whereIn('type', ['drf', 'dcn', 'masterlist', 'distribution', 'retrieval']);
+        Route::get('/api/calendar/categories', fn () => CalendarHelper::categories());
+        Route::post('/api/calendar/categories', fn (Request $request) => CalendarHelper::storeCategory($request));
+        Route::delete('/api/calendar/categories/{id}', fn (int $id) => CalendarHelper::destroyCategory($id));
+        Route::get('/api/calendar/events', fn () => CalendarHelper::events());
+        Route::post('/api/calendar/events', fn (Request $request) => CalendarHelper::storeEvent($request));
+        Route::put('/api/calendar/events/{id}', fn (Request $request, int $id) => CalendarHelper::updateEvent($request, $id));
+        Route::delete('/api/calendar/events/{id}', fn (int $id) => CalendarHelper::destroyEvent($id));
+
         Route::get('/register/check-docno', fn (Request $request) => response()->json(RegisterQueryHelper::checkDocNo($request)))
             ->name('register.checkDocNo');
         Route::post('/register/extract-scan', fn (Request $request) => response()->json(RegisterScanService::extract($request)))
@@ -101,6 +114,11 @@ Route::middleware(['auth', 'active', 'can.access.dcs'])->group(function () {
         Volt::route('/reports/opcr', 'pages.dcs.reports.show')->name('reports.opcr');
         Volt::route('/reports/others', 'pages.dcs.reports.show')->name('reports.others');
         Route::get('/reports/export', fn (Request $request) => app(ReportHelper::class)->export($request))->name('reports.export');
+        Route::get('/reports/distribution-template', fn (Request $request) => ReportTemplateHelper::render($request))->name('reports.distributionTemplate');
+        Route::post('/reports/distribution-template', fn (Request $request) => ReportTemplateHelper::render($request))->name('reports.distributionTemplate.store');
+        Route::get('/api/report-templates', fn () => response()->json(ReportTemplateHelper::list()));
+        Route::post('/api/report-templates', fn (Request $request) => ReportTemplateHelper::store($request));
+        Route::delete('/api/report-templates/{id}', fn (int $id) => ReportTemplateHelper::destroy($id));
 
         Volt::route('/stamping', 'pages.dcs.stamping.index')->name('stamping.index');
         Route::post('/stamp/apply', fn (Request $request) => app(StampService::class)->apply($request))->name('stamp.apply');

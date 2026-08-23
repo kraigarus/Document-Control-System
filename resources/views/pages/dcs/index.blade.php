@@ -45,7 +45,7 @@ new #[Layout('layouts.dcs')] #[Title('CSPC - Document Control System')] class ex
     }
 }; ?>
 
-<main class="dashboard-main" x-data="dcsDashboardCalendar()">
+<main class="dashboard-main">
     <div class="dashboard-header">
         <div class="welcome-text">
             <p class="header-greeting">Welcome back, {{ auth()->user()?->name ?: 'User' }}</p>
@@ -115,9 +115,177 @@ new #[Layout('layouts.dcs')] #[Title('CSPC - Document Control System')] class ex
                     </a>
                 </div>
             </section>
+
+            <section class="dash-search-section" x-data="dcsDashboardSearch()" @keydown.escape.window="checklistModal ? closeChecklistModal() : close()">
+                <div class="section-header">
+                    <h2>Search Documents</h2>
+                    <span class="section-subtitle">Find by document no. or title</span>
+                </div>
+
+                <div class="dash-search-card" :class="{ 'has-results': open && query.trim().length > 0 }">
+                    <div class="dash-search-bar">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input
+                            type="text"
+                            class="dash-search-input"
+                            x-model="query"
+                            @input="search()"
+                            placeholder="Search by document no. or title..."
+                            autocomplete="off"
+                        >
+                        <button type="button" class="dash-search-clear" x-show="query.length > 0" x-cloak @click="clear()">
+                            Clear
+                        </button>
+                    </div>
+
+                    <div class="dash-search-results" x-show="open && query.trim().length > 0" x-cloak>
+                        <div class="dash-search-results-head">
+                            <span x-show="loading">Searching...</span>
+                            <span x-show="!loading && results.length > 0" x-text="results.length + (results.length === 1 ? ' document found' : ' documents found')"></span>
+                            <span x-show="!loading && results.length === 0">No matching documents</span>
+                        </div>
+
+                        <template x-if="loading">
+                            <div class="dash-search-state">
+                                <i class="fa-solid fa-spinner fa-spin"></i>
+                                <span>Searching masterlist records...</span>
+                            </div>
+                        </template>
+
+                        <template x-if="!loading && results.length === 0">
+                            <div class="dash-search-state">
+                                <i class="fa-regular fa-folder-open"></i>
+                                <span>No documents matched your search.</span>
+                            </div>
+                        </template>
+
+                        <template x-if="!loading && results.length > 0">
+                            <div class="dash-search-list">
+                                <template x-for="doc in results" :key="doc.masterlist_id">
+                                    <article class="dash-search-item">
+                                        <div class="dash-search-item-top">
+                                            <div class="dash-search-item-main">
+                                                <code class="dash-search-docno" x-text="doc.doc_no || 'No number'"></code>
+                                                <h3 class="dash-search-title" x-text="doc.doc_title || 'Untitled'"></h3>
+                                                <div class="dash-search-meta" x-show="doc.type_name || doc.sub_type_name">
+                                                    <span class="dash-search-meta-item" x-show="doc.type_name">
+                                                        <span class="dash-search-meta-label">Type</span>
+                                                        <span x-text="doc.type_name"></span>
+                                                    </span>
+                                                    <span class="dash-search-meta-item" x-show="doc.sub_type_name">
+                                                        <span class="dash-search-meta-label">Sub type</span>
+                                                        <span x-text="doc.sub_type_name"></span>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <span class="dash-search-rev" x-text="'Rev ' + (doc.revise_no ?? 0)"></span>
+                                        </div>
+                                        <div class="dash-search-checklists">
+                                            <span class="dash-search-checklists-label">Checklists</span>
+                                            <div class="dash-search-checklists-row">
+                                                <template x-for="cl in checklistButtons(doc)" :key="cl.key">
+                                                    <button
+                                                        type="button"
+                                                        class="dash-cl-btn"
+                                                        :class="{ 'is-active': activeChecklistKey === cl.key && activeRequestId === doc.request_id }"
+                                                        @click.stop="openChecklist(doc, cl.key)"
+                                                        x-text="cl.label"
+                                                    ></button>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </article>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <template x-teleport="body">
+                    <div
+                        class="dash-cl-overlay"
+                        x-show="checklistModal"
+                        x-cloak
+                        @click.self="closeChecklistModal()"
+                        style="display:none;"
+                        :style="checklistModal ? 'display:flex' : 'display:none'"
+                    >
+                        <div class="dash-cl-modal" @click.stop role="dialog" aria-modal="true">
+                            <div class="dash-cl-modal-head">
+                                <div class="dash-cl-modal-head-text">
+                                    <p class="dash-cl-modal-kicker">Checklist Preview</p>
+                                    <h3 x-text="checklistPreview?.title || 'Checklist'"></h3>
+                                    <p class="dash-cl-modal-doc" x-show="checklistDocLabel" x-text="checklistDocLabel"></p>
+                                </div>
+                                <button type="button" class="dash-cl-modal-close" @click="closeChecklistModal()" aria-label="Close">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
+                            </div>
+
+                            <div class="dash-cl-modal-body">
+                                <template x-if="checklistLoading">
+                                    <div class="dash-cl-loading">
+                                        <i class="fa-solid fa-spinner fa-spin"></i>
+                                        <span>Loading checklist data...</span>
+                                    </div>
+                                </template>
+
+                                <template x-if="!checklistLoading && checklistPreview">
+                                    <div class="dash-cl-body">
+                                        <table class="dash-cl-table">
+                                            <tbody>
+                                                <template x-for="field in checklistPreview.fields" :key="field.label">
+                                                    <tr>
+                                                        <th x-text="field.label"></th>
+                                                        <td x-text="field.value"></td>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                        </table>
+
+                                        <template x-for="(section, idx) in (checklistPreview.sections || [])" :key="idx">
+                                            <div class="dash-cl-section">
+                                                <h4 x-text="section.heading"></h4>
+                                                <template x-if="section.items">
+                                                    <ul class="dash-cl-list">
+                                                        <template x-for="item in section.items" :key="item">
+                                                            <li x-text="item"></li>
+                                                        </template>
+                                                    </ul>
+                                                </template>
+                                                <template x-if="section.revisions">
+                                                    <div class="dash-cl-revisions">
+                                                        <template x-for="(rev, revIdx) in section.revisions" :key="revIdx">
+                                                            <div class="dash-cl-rev-card">
+                                                                <div class="dash-cl-rev-title">
+                                                                    <strong x-text="rev.document_no"></strong>
+                                                                    <span x-text="rev.title"></span>
+                                                                </div>
+                                                                <div class="dash-cl-rev-meta">
+                                                                    <span x-text="'Rev ' + rev.revision_no"></span>
+                                                                    <span x-text="rev.effectivity_date"></span>
+                                                                </div>
+                                                                <p x-show="rev.brief_purpose && rev.brief_purpose !== '—'" x-text="rev.brief_purpose"></p>
+                                                            </div>
+                                                        </template>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </template>
+                            </div>
+
+                            <div class="dash-cl-modal-foot">
+                                <button type="button" class="dash-cl-close-btn" @click="closeChecklistModal()">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </section>
         </div>
 
-        <div class="side-column">
+        <div class="side-column" wire:ignore x-data="dcsDashboardCalendar()">
             <div class="widget calendar-widget white-card">
                 <div class="calendar-header">
                     <h3 x-text="title"></h3>
@@ -132,11 +300,14 @@ new #[Layout('layouts.dcs')] #[Title('CSPC - Document Control System')] class ex
                 <div class="calendar-grid">
                     <template x-for="cell in cells" :key="cell.iso + cell.outside">
                         <div class="cal-cell" :class="{ 'out-month': cell.outside }" x-on:click="openDay(cell.iso)">
-                            <div class="day-num" :class="{ today: cell.today, holiday: cell.holiday }" x-text="cell.day"></div>
+                            <div class="day-num"
+                                :class="{ today: cell.today && !cell.colors.length, holiday: cell.holiday && !cell.colors.length }"
+                                :style="cell.colors.length ? ('background-color:' + cell.colors[0] + ';color:#fff;font-weight:700') : ''"
+                                x-text="cell.day"></div>
                             <div class="day-markers">
                                 <span class="day-marker holiday" x-show="cell.holiday"></span>
-                                <template x-for="color in cell.colors" :key="color">
-                                    <span class="day-marker event" :style="'background-color:' + color"></span>
+                                <template x-for="(color, idx) in cell.colors" :key="color">
+                                    <span class="day-marker event" x-show="idx > 0" :style="'background-color:' + color"></span>
                                 </template>
                             </div>
                         </div>
@@ -163,19 +334,18 @@ new #[Layout('layouts.dcs')] #[Title('CSPC - Document Control System')] class ex
                     </template>
                     <template x-for="ev in upcoming" :key="ev.id">
                         <div class="upcoming-item" x-on:click="openDay(ev.date)">
-                            <div class="upcoming-event-dot" :class="{ 'today-accent': ev.when === 'today' }"></div>
+                            <div class="upcoming-event-dot" :style="'background-color:' + (ev.color || '#0d2a7a')"></div>
                             <div class="upcoming-info">
                                 <div class="title" x-text="ev.title"></div>
-                                <div class="time" x-text="formatTime(ev.startTime) + ' — ' + formatTime(ev.endTime)"></div>
+                                <div class="time" x-text="(ev.category_name ? ev.category_name + ' · ' : '') + formatTime(ev.startTime) + ' — ' + formatTime(ev.endTime)"></div>
                             </div>
                         </div>
                     </template>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <div class="overlay" x-show="modal !== null" x-cloak x-on:click.self="modal = null" style="display:none;" :style="modal ? 'display:flex' : 'display:none'">
+            <template x-teleport="body">
+    <div class="overlay" x-show="modal !== null" x-cloak x-on:click.self="modal = null">
         <div class="modal" x-on:click.stop>
             <template x-if="modal === 'day'">
                 <div class="ev-modal">
@@ -207,6 +377,10 @@ new #[Layout('layouts.dcs')] #[Title('CSPC - Document Control System')] class ex
                                         <i class="fa-regular fa-clock"></i>
                                         <span x-text="formatTime(ev.startTime) + ' — ' + formatTime(ev.endTime)"></span>
                                     </div>
+                                    <div class="ev-card-time" x-show="ev.category_name">
+                                        <i class="fa-solid fa-tag"></i>
+                                        <span x-text="ev.category_name"></span>
+                                    </div>
                                 </div>
                             </div>
                         </template>
@@ -228,10 +402,31 @@ new #[Layout('layouts.dcs')] #[Title('CSPC - Document Control System')] class ex
                     </div>
                     <h3 class="ev-modal-title" x-text="editingId ? 'Edit Event' : 'New Event'"></h3>
                     <p class="ev-modal-desc" x-text="displayDate(form.date)"></p>
-                    <form @submit.prevent="saveForm">
+                    <form action="#" method="post" @submit.prevent="saveForm">
                         <div class="ev-field">
                             <label class="ev-label">Title</label>
                             <input class="ev-input" x-model="form.title" required autocomplete="off">
+                        </div>
+                        <div class="ev-field">
+                            <label class="ev-label">Category</label>
+                            <div class="ev-cat-select-row">
+                                <select class="ev-input" x-model="form.category_id" required>
+                                    <option value="">Select category</option>
+                                    <template x-for="cat in categories" :key="cat.id">
+                                        <option :value="cat.id" x-text="cat.name"></option>
+                                    </template>
+                                </select>
+                                <button type="button" class="ev-cat-icon-btn" title="Add category" :class="{ 'is-open': addingCategory }" @click="toggleAddCategory()">
+                                    <i class="fa-solid fa-plus"></i>
+                                </button>
+                                <button type="button" class="ev-cat-icon-btn ev-cat-row-del" title="Delete selected category" x-show="form.category_id" @click="removeSelectedCategory()">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </div>
+                            <div class="ev-cat-add" x-show="addingCategory" x-cloak>
+                                <input class="ev-input" x-ref="newCatInput" x-model="newCategory" placeholder="Category name" autocomplete="off" @keydown.enter.prevent="addCategory">
+                                <button type="button" class="ev-btn ev-btn-ghost" @click="addCategory">Add</button>
+                            </div>
                         </div>
                         <div class="ev-field">
                             <label class="ev-label">Date</label>
@@ -263,22 +458,140 @@ new #[Layout('layouts.dcs')] #[Title('CSPC - Document Control System')] class ex
             </template>
         </div>
     </div>
+            </template>
+        </div>
+    </div>
 </main>
 
 <script>
 document.addEventListener('alpine:init', () => {
+    Alpine.data('dcsDashboardSearch', () => ({
+        query: '',
+        results: [],
+        loading: false,
+        open: false,
+        timer: null,
+        checklistModal: false,
+        checklistLoading: false,
+        checklistPreview: null,
+        checklistDocLabel: '',
+        activeChecklistKey: '',
+        activeRequestId: null,
+        checklistOptions: [
+            { key: 'drf', label: 'DRF' },
+            { key: 'dcn', label: 'DCN' },
+            { key: 'masterlist', label: 'Masterlist' },
+            { key: 'distribution', label: 'Distribution' },
+            { key: 'retrieval', label: 'Retrieval' },
+        ],
+        search() {
+            clearTimeout(this.timer);
+            const q = this.query.trim();
+            if (q.length < 1) {
+                this.results = [];
+                this.open = false;
+                this.loading = false;
+                return;
+            }
+
+            this.loading = true;
+            this.open = true;
+            this.timer = setTimeout(async () => {
+                try {
+                    const res = await fetch('/dcs/api/documents/search?q=' + encodeURIComponent(q));
+                    this.results = res.ok ? await res.json() : [];
+                } catch (e) {
+                    this.results = [];
+                } finally {
+                    this.loading = false;
+                }
+            }, 300);
+        },
+        clear() {
+            this.query = '';
+            this.results = [];
+            this.open = false;
+            this.loading = false;
+            this.closeChecklistModal();
+        },
+        close() {
+            this.open = false;
+        },
+        checklistButtons(doc) {
+            if (!doc?.checklists) return [];
+            return this.checklistOptions.filter((cl) => doc.checklists[cl.key]);
+        },
+        async openChecklist(doc, type) {
+            this.activeChecklistKey = type;
+            this.activeRequestId = doc.request_id;
+            this.checklistModal = true;
+            this.checklistLoading = true;
+            this.checklistPreview = null;
+            this.checklistDocLabel = (doc.doc_no || 'No number') + ' — ' + (doc.doc_title || 'Untitled') + ' (Rev ' + (doc.revise_no ?? 0) + ')';
+            document.body.classList.add('dash-cl-open');
+
+            try {
+                const res = await fetch('/dcs/api/documents/' + doc.request_id + '/checklist/' + type);
+                if (!res.ok) throw new Error('not found');
+                this.checklistPreview = await res.json();
+            } catch (e) {
+                this.checklistPreview = {
+                    title: 'Checklist unavailable',
+                    fields: [{ label: 'Message', value: 'Could not load this checklist.' }],
+                    sections: [],
+                };
+            } finally {
+                this.checklistLoading = false;
+            }
+        },
+        closeChecklistModal() {
+            this.checklistModal = false;
+            this.checklistLoading = false;
+            this.checklistPreview = null;
+            this.checklistDocLabel = '';
+            this.activeChecklistKey = '';
+            this.activeRequestId = null;
+            document.body.classList.remove('dash-cl-open');
+        },
+    }));
+
     Alpine.data('dcsDashboardCalendar', () => ({
         months: ['January','February','March','April','May','June','July','August','September','October','November','December'],
         holidays: @json($holidays),
         year: new Date().getFullYear(),
         month: new Date().getMonth(),
         events: [],
+        categories: [],
         modal: null,
         activeIso: '',
         editingId: null,
-        form: { title: '', date: '', startTime: '09:00', endTime: '10:00', description: '' },
-        init() {
-            this.events = JSON.parse(localStorage.getItem('calendarEvents') || '[]');
+        saving: false,
+        addingCategory: false,
+        newCategory: '',
+        form: { title: '', category_id: '', date: '', startTime: '09:00', endTime: '10:00', description: '' },
+        csrf() {
+            return document.querySelector('meta[name="csrf-token"]')?.content || '';
+        },
+        headers(json) {
+            const h = { 'X-CSRF-TOKEN': this.csrf(), 'Accept': 'application/json' };
+            if (json) h['Content-Type'] = 'application/json';
+            return h;
+        },
+        async init() {
+            await this.loadAll();
+        },
+        async loadAll() {
+            try {
+                const [cats, evs] = await Promise.all([
+                    fetch('/dcs/api/calendar/categories', { headers: this.headers() }).then(r => r.json()),
+                    fetch('/dcs/api/calendar/events', { headers: this.headers() }).then(r => r.json()),
+                ]);
+                this.categories = Array.isArray(cats) ? cats : [];
+                this.events = Array.isArray(evs) ? evs : [];
+            } catch (e) {
+                this.categories = [];
+                this.events = [];
+            }
         },
         get title() { return this.months[this.month] + ' ' + this.year; },
         pad(n) { return String(n).padStart(2, '0'); },
@@ -287,17 +600,16 @@ document.addEventListener('alpine:init', () => {
             return `${t.getFullYear()}-${this.pad(t.getMonth() + 1)}-${this.pad(t.getDate())}`;
         },
         toIso(y, m, d) { return `${y}-${this.pad(m + 1)}-${this.pad(d)}`; },
-        occursOn(ev, iso) { return ev.date === iso; },
+        occursOn(ev, iso) { return String(ev.date || '').slice(0, 10) === iso; },
         holidayName(iso) { return this.holidays[iso] || ''; },
         formatTime(time24) {
             if (!time24) return '';
-            const [h, m] = time24.split(':').map(Number);
+            const [h, m] = String(time24).split(':').map(Number);
             return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
         },
         displayDate(iso) {
             return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
         },
-        persist() { localStorage.setItem('calendarEvents', JSON.stringify(this.events)); },
         changeMonth(dir) {
             this.month += dir;
             if (this.month > 11) { this.month = 0; this.year += 1; }
@@ -326,39 +638,142 @@ document.addEventListener('alpine:init', () => {
             const n = new Date(); n.setDate(n.getDate() + 1);
             const tom = this.toIso(n.getFullYear(), n.getMonth(), n.getDate());
             return this.events
-                .filter(ev => ev.date === t || ev.date === tom)
+                .filter(ev => ev.date === t || String(ev.date || '').slice(0, 10) === t || String(ev.date || '').slice(0, 10) === tom)
                 .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''))
-                .map(ev => ({ ...ev, when: ev.date === t ? 'today' : 'tomorrow' }));
+                .map(ev => ({ ...ev, when: String(ev.date).slice(0, 10) === t ? 'today' : 'tomorrow' }));
         },
         openDay(iso) { this.activeIso = iso; this.modal = 'day'; },
         openAdd(iso) {
             this.editingId = null;
-            this.form = { title: '', date: iso || this.todayIso(), startTime: '09:00', endTime: '10:00', description: '' };
+            this.form = {
+                title: '',
+                category_id: this.categories[0]?.id || '',
+                date: iso || this.todayIso(),
+                startTime: '09:00',
+                endTime: '10:00',
+                description: '',
+            };
             this.modal = 'form';
         },
         openEdit(id) {
             const ev = this.events.find(e => e.id === id);
             if (!ev) return;
             this.editingId = id;
-            this.form = { title: ev.title, date: ev.date, startTime: ev.startTime, endTime: ev.endTime, description: ev.description || '' };
+            this.form = {
+                title: ev.title,
+                category_id: ev.category_id,
+                date: String(ev.date).slice(0, 10),
+                startTime: ev.startTime,
+                endTime: ev.endTime,
+                description: ev.description || '',
+            };
             this.modal = 'form';
         },
-        saveForm() {
-            if (this.form.endTime < this.form.startTime) { alert('End time cannot be earlier than start time.'); return; }
-            if (this.editingId) {
-                const idx = this.events.findIndex(e => e.id === this.editingId);
-                if (idx !== -1) this.events[idx] = { ...this.events[idx], ...this.form };
+        toggleAddCategory() {
+            this.addingCategory = !this.addingCategory;
+            if (this.addingCategory) {
+                this.$nextTick(() => this.$refs.newCatInput?.focus());
             } else {
-                const id = this.events.reduce((m, e) => Math.max(m, e.id || 0), 0) + 1;
-                this.events.push({ id, ...this.form, color: '#0d2a7a' });
+                this.newCategory = '';
             }
-            this.persist();
-            this.openDay(this.form.date);
         },
-        removeEvent(id) {
+        async addCategory() {
+            const name = (this.newCategory || '').trim();
+            if (!name) return;
+            try {
+                const res = await fetch('/dcs/api/calendar/categories', {
+                    method: 'POST',
+                    headers: this.headers(true),
+                    body: JSON.stringify({ name }),
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    alert(data.message || data.errors?.name?.[0] || 'Could not add category.');
+                    return;
+                }
+                this.categories.push(data);
+                this.form.category_id = data.id;
+                this.newCategory = '';
+                this.addingCategory = false;
+            } catch (e) {
+                alert('Could not add category.');
+            }
+        },
+        async removeSelectedCategory() {
+            const cat = this.categories.find(c => String(c.id) === String(this.form.category_id));
+            if (cat) await this.removeCategory(cat);
+        },
+        async removeCategory(cat) {
+            if (!cat) return;
+            if (!confirm('Delete the "' + cat.name + '" category?')) return;
+            try {
+                const res = await fetch('/dcs/api/calendar/categories/' + cat.id, {
+                    method: 'DELETE',
+                    headers: this.headers(),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    alert(data.message || 'Could not delete category.');
+                    return;
+                }
+                this.categories = this.categories.filter(c => c.id !== cat.id);
+                if (String(this.form.category_id) === String(cat.id)) {
+                    this.form.category_id = this.categories[0]?.id || '';
+                }
+            } catch (e) {
+                alert('Could not delete category.');
+            }
+        },
+        async saveForm() {
+            if (this.form.endTime < this.form.startTime) { alert('End time cannot be earlier than start time.'); return; }
+            if (!this.form.category_id) { alert('Please select a category.'); return; }
+            this.saving = true;
+            const payload = {
+                title: this.form.title,
+                category_id: Number(this.form.category_id),
+                date: this.form.date,
+                start_time: this.form.startTime,
+                end_time: this.form.endTime,
+                description: this.form.description,
+            };
+            try {
+                const url = this.editingId
+                    ? '/dcs/api/calendar/events/' + this.editingId
+                    : '/dcs/api/calendar/events';
+                const res = await fetch(url, {
+                    method: this.editingId ? 'PUT' : 'POST',
+                    headers: this.headers(true),
+                    body: JSON.stringify(payload),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    const firstError = data.errors ? Object.values(data.errors).flat()[0] : null;
+                    alert(firstError || data.message || 'Could not save event.');
+                    return;
+                }
+                await this.loadAll();
+                this.openDay(this.form.date);
+            } catch (e) {
+                alert('Could not save event.');
+            } finally {
+                this.saving = false;
+            }
+        },
+        async removeEvent(id) {
             if (!confirm('Delete this event?')) return;
-            this.events = this.events.filter(e => e.id !== id);
-            this.persist();
+            try {
+                const res = await fetch('/dcs/api/calendar/events/' + id, {
+                    method: 'DELETE',
+                    headers: this.headers(),
+                });
+                if (!res.ok) {
+                    alert('Could not delete event.');
+                    return;
+                }
+                this.events = this.events.filter(e => e.id !== id);
+            } catch (e) {
+                alert('Could not delete event.');
+            }
         },
     }));
 });

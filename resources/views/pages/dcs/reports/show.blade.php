@@ -2,6 +2,7 @@
 
 use App\Helpers\RegisterQueryHelper;
 use App\Helpers\ReportHelper;
+use App\Helpers\ReportTemplateHelper;
 use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -22,6 +23,8 @@ new #[Layout('layouts.dcs')] #[Title('CSPC - Document Control System')] class ex
     public bool $exportOpen = false;
     public string $error = '';
     public array $result = [];
+    public string $templateId = '0';
+    public string $templateStatus = '';
 
     public function mount(): void
     {
@@ -56,6 +59,7 @@ new #[Layout('layouts.dcs')] #[Title('CSPC - Document Control System')] class ex
             'allDocTypes' => $allDocTypes,
             'childTypes' => $childTypes,
             'isOpcr' => $this->category === 'opcr',
+            'templates' => ReportTemplateHelper::list(),
             'pageTitle' => match ($this->category) {
                 'monitoring' => 'Monitoring Reports',
                 'opcr' => 'OPCR Targets',
@@ -161,6 +165,7 @@ new #[Layout('layouts.dcs')] #[Title('CSPC - Document Control System')] class ex
             'source_unit' => $this->sourceUnit,
             'revision_status' => $this->revisionStatus,
             'rev_no' => $this->revNo,
+            'template_id' => $this->templateId !== '0' ? $this->templateId : null,
         ];
         if ($this->period === 'custom') {
             $input['date_from'] = $this->dateFrom;
@@ -177,6 +182,16 @@ new #[Layout('layouts.dcs')] #[Title('CSPC - Document Control System')] class ex
         }
 
         return array_filter($input, fn ($v) => $v !== '' && $v !== null);
+    }
+
+    public function selectTemplate(string $id): void
+    {
+        $this->templateId = $id;
+    }
+
+    public function importTemplate(): void
+    {
+        // Handled client-side; this method re-renders the template gallery.
     }
 }; ?>
 
@@ -310,14 +325,60 @@ new #[Layout('layouts.dcs')] #[Title('CSPC - Document Control System')] class ex
                             <i class="fa-solid fa-chevron-down rpt-chevron"></i>
                         </button>
                         <div class="rpt-export-menu" :class="{ open: open }">
-                            <a href="{{ $this->exportUrl('pdf') }}" target="_blank" rel="noopener"><i class="fa-solid fa-file-pdf"></i> Download as PDF</a>
-                            <a href="{{ $this->exportUrl('csv') }}"><i class="fa-solid fa-file-excel"></i> Download as Excel (.csv)</a>
+                            <a class="rpt-export-item" data-format="pdf" href="{{ $this->exportUrl('pdf') }}" target="_blank" rel="noopener">
+                                <i class="fa-solid fa-file-pdf"></i>
+                                <span>Download as PDF</span>
+                            </a>
+                            <a class="rpt-export-item" data-format="xlsx" href="{{ $this->exportUrl('csv') }}">
+                                <i class="fa-solid fa-file-excel"></i>
+                                <span>Download as Excel (.csv)</span>
+                            </a>
                             <div class="rpt-export-sep"></div>
-                            <a href="{{ $this->exportUrl('print') }}" target="_blank" rel="noopener"><i class="fa-solid fa-print"></i> Print Report</a>
+                            <a class="rpt-export-item" data-format="print" href="{{ $this->exportUrl('print') }}" target="_blank" rel="noopener">
+                                <i class="fa-solid fa-print"></i>
+                                <span>Print Report</span>
+                            </a>
                         </div>
                     </div>
                 </div>
             </div>
+
+            <section class="rpt-template-picker" x-data="dcsReportTemplates()">
+                <div class="rpt-template-picker-head">
+                    <div>
+                        <strong>Letterhead template</strong>
+                        <span>Choose a template to apply to this report. Imported PDFs show page 1 as the preview.</span>
+                    </div>
+                    <label class="rpt-btn rpt-btn-outline rpt-template-upload">
+                        <i class="fa-solid fa-file-import"></i> Import PDF
+                        <input type="file" accept="application/pdf" @change="upload($event)" hidden>
+                    </label>
+                </div>
+                <p class="rpt-template-status" x-show="status" x-text="status"></p>
+                <div class="rpt-tpl-grid">
+                    <button type="button" class="rpt-tpl-card {{ $templateId === '0' ? 'is-active' : '' }}" wire:click="selectTemplate('0')">
+                        <div class="rpt-tpl-preview rpt-tpl-preview--builtin">
+                            <span>CSPC</span>
+                            Built-in header
+                        </div>
+                        <span class="rpt-tpl-name">Built-in DCS</span>
+                    </button>
+                    @forelse($templates as $tpl)
+                        <div class="rpt-tpl-card {{ (string) $templateId === (string) $tpl['id'] ? 'is-active' : '' }}" wire:click="selectTemplate('{{ $tpl['id'] }}')" role="button" tabindex="0">
+                            <button type="button" class="rpt-tpl-delete" title="Delete template" @click.stop.prevent="remove({{ (int) $tpl['id'] }})">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                            @if(!empty($tpl['preview_url']))
+                                <img class="rpt-tpl-preview" src="{{ $tpl['preview_url'] }}" alt="{{ $tpl['name'] }}">
+                            @else
+                                <div class="rpt-tpl-preview rpt-tpl-preview--builtin">No preview</div>
+                            @endif
+                            <span class="rpt-tpl-name">{{ $tpl['name'] }}</span>
+                        </div>
+                    @empty
+                    @endforelse
+                </div>
+            </section>
 
             <div class="rpt-preview-shell {{ $isOpcr ? 'rpt-preview-shell--table' : 'rpt-preview-shell--frame' }}">
                 @if($error)
@@ -368,9 +429,78 @@ new #[Layout('layouts.dcs')] #[Title('CSPC - Document Control System')] class ex
                         </table>
                     </div>
                 @else
-                    <iframe class="rpt-preview-frame" title="Report preview" src="{{ $this->previewUrl() }}"></iframe>
+                    <iframe class="rpt-preview-frame" title="Report preview" src="{{ $this->previewUrl() }}" wire:key="preview-{{ $templateId }}"></iframe>
                 @endif
             </div>
         </section>
+    @elseif($category !== 'others')
+        <div class="rpt-state rpt-state-pick">
+            <div class="rpt-state-icon"><i class="fa-solid fa-file-lines"></i></div>
+            <h4>Select a document type</h4>
+            <p>Choose Internal, External, Forms, or another type above. Then pick a letterhead template to generate the report.</p>
+        </div>
     @endif
 </main>
+
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.data('dcsReportTemplates', () => ({
+        status: '',
+        csrf() {
+            return document.querySelector('meta[name="csrf-token"]')?.content || '';
+        },
+        async upload(event) {
+            const file = event.target.files?.[0];
+            event.target.value = '';
+            if (!file) return;
+            this.status = 'Uploading template...';
+            const body = new FormData();
+            body.append('template', file);
+            body.append('name', file.name.replace(/\.pdf$/i, ''));
+            try {
+                const res = await fetch('/dcs/api/report-templates', {
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': this.csrf(), 'Accept': 'application/json' },
+                    body,
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    this.status = data.message || 'Upload failed.';
+                    return;
+                }
+                this.status = 'Template imported.';
+                if (this.$wire) {
+                    await this.$wire.selectTemplate(String(data.id));
+                    await this.$wire.$refresh();
+                }
+            } catch (e) {
+                this.status = 'Upload failed.';
+            }
+        },
+        async remove(id) {
+            if (!confirm('Delete this letterhead template?')) return;
+            this.status = 'Deleting template...';
+            try {
+                const res = await fetch('/dcs/api/report-templates/' + id, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRF-TOKEN': this.csrf(), 'Accept': 'application/json' },
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    this.status = data.message || 'Could not delete template.';
+                    return;
+                }
+                this.status = 'Template deleted.';
+                if (this.$wire) {
+                    if (String(this.$wire.templateId) === String(id)) {
+                        await this.$wire.selectTemplate('0');
+                    }
+                    await this.$wire.$refresh();
+                }
+            } catch (e) {
+                this.status = 'Could not delete template.';
+            }
+        },
+    }));
+});
+</script>

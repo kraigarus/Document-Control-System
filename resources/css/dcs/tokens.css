@@ -44,7 +44,7 @@
     --dcs-shadow-lg: 0 8px 32px rgba(15, 23, 42, 0.08);
     --dcs-page-pad: 28px 32px;
     --dcs-header-height: 70px;
-    --dcs-sidebar: 272px;
+    --dcs-sidebar: 300px;
     --dcs-sidebar-collapsed: 68px;
     --dcs-ease: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     --dcs-ease-fast: 0.18s ease;
